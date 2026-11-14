@@ -18,8 +18,9 @@ This README records implementation details only.
 
 - `GpsFilter` accepts or rejects GPS fixes and reports distance added.
 - `GpsFilterTest` contains unit tests; their execution has not been verified yet.
-- `RunClock` has been drafted to track elapsed and moving time.
-- The run file writer, foreground service, live snapshots, and recovery are still to come.
+- `RunClock` tracks elapsed and moving time across pauses.
+- `RunFileWriter` writes v1 JSONL files under `filesDir/runs/`.
+- The foreground service, live snapshots, and recovery UI are still to come.
 
 ## Implementation Notes
 
