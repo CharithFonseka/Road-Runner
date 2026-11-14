@@ -1,26 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- ── Permissions (SRS §3.3) ───────────────────────────────────────────
-         These are the ONLY permissions for the release build.
-         Adding new permissions requires a CCR (SRS §4.8, C9).
-         ────────────────────────────────────────────────────────────────── -->
-
-    <!-- GPS tracking -->
+    <!-- Permissions required for GPS tracking -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-
-    <!-- Foreground service (must declare type="location" for Android 14+) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-
-    <!-- Lock screen notification (required on Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- Keep CPU alive during a run only -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <!-- No INTERNET permission in release builds.
-         Flutter debug builds add it automatically for hot-reload; that is fine. -->
 
     <application
         android:label="Road Runner"
@@ -46,16 +32,11 @@
             </intent-filter>
         </activity>
 
-        <!-- Tracking foreground service (Charith).
-             NOT exported. type="location" required for Android 14+. -->
-        <!-- TODO (Charith): uncomment and fill in the service class name when ready.
         <service
             android:name=".tracking.TrackingService"
             android:exported="false"
             android:foregroundServiceType="location" />
-        -->
 
-        <!-- Don't delete the meta-data below. Used by the Flutter tool. -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
