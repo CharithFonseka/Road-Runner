@@ -18,7 +18,6 @@ import android.util.Log
 import java.util.UUID
 
 class TrackingService : Service() {
-    private var clock: RunClock? = null
     private var recorder: FusedGpsRecorder? = null
     private var stopping = false
 
@@ -32,6 +31,8 @@ class TrackingService : Service() {
         when (intent?.action) {
             ACTION_START -> startRun(startId)
             ACTION_STOP -> stopRun()
+            ACTION_PAUSE -> pauseRun()
+            ACTION_RESUME -> resumeRun()
             else -> stopSelf(startId)
         }
 
@@ -64,17 +65,16 @@ class TrackingService : Service() {
             }
 
             val runId = UUID.randomUUID()
-            clock = RunClock(SystemClock.elapsedRealtime())
 
             recorder = FusedGpsRecorder(
                 context = this,
                 runId = runId,
                 startedAtUtcMs = System.currentTimeMillis(),
+                startedAtMonotonicMs = SystemClock.elapsedRealtime(),
                 onFatalError = { error ->
                     Log.e(TAG, "Run stopped after GPS failure", error)
                     stopping = true
                     recorder = null
-                    clock = null
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 },
@@ -83,11 +83,49 @@ class TrackingService : Service() {
             Log.i(TAG, "Started run $runId")
         } catch (error: Exception) {
             Log.e(TAG, "Could not start tracking", error)
-            recorder?.stop(finish = false) { _, _ -> }
+            recorder?.stop(finish = false) { _, _, _ -> }
             recorder = null
-            clock = null
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf(startId)
+        }
+    }
+
+    private fun pauseRun() {
+        if (stopping) return
+
+        val activeRecorder = recorder ?: run {
+            stopSelf()
+            return
+        }
+
+        activeRecorder.pause { error ->
+            if (error != null) {
+                Log.e(TAG, "Could not pause run", error)
+            } else if (!stopping) {
+                updateNotification("Paused")
+            }
+        }
+    }
+
+    private fun resumeRun() {
+        if (stopping) return
+
+        val activeRecorder = recorder ?: run {
+            stopSelf()
+            return
+        }
+
+        if (!hasFineLocationPermission() || !isGpsEnabled()) {
+            Log.w(TAG, "Cannot resume without precise location and GPS")
+            return
+        }
+
+        activeRecorder.resume { error ->
+            if (error != null) {
+                Log.e(TAG, "Could not resume run", error)
+            } else if (!stopping) {
+                updateNotification("Tracking run")
+            }
         }
     }
 
@@ -95,26 +133,26 @@ class TrackingService : Service() {
         if (stopping) return
         stopping = true
 
-        clock?.stop(SystemClock.elapsedRealtime())
-
         val activeRecorder = recorder
         if (activeRecorder == null) {
             finishService()
             return
         }
 
-        activeRecorder.stop(finish = true) { error, distanceM ->
+        activeRecorder.stop(finish = true) { error, distanceM, runTime ->
             if (error != null) {
                 Log.e(TAG, "Could not finish run file", error)
             }
-            Log.i(TAG, "Stopped run at $distanceM meters")
+            Log.i(
+                TAG,
+                "Stopped at $distanceM meters, moving for ${runTime.movingMs} ms",
+            )
             finishService()
         }
     }
 
     private fun finishService() {
         recorder = null
-        clock = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -122,11 +160,10 @@ class TrackingService : Service() {
     override fun onDestroy() {
         if (!stopping) {
             stopping = true
-            recorder?.stop(finish = false) { _, _ -> }
+            recorder?.stop(finish = false) { _, _, _ -> }
         }
 
         recorder = null
-        clock = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
@@ -156,15 +193,23 @@ class TrackingService : Service() {
         manager.createNotificationChannel(channel)
     }
 
-    private fun buildStartingNotification(): Notification =
+    private fun buildStartingNotification(
+        status: String = "Preparing your run",
+    ): Notification =
         Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentTitle("Road Runner")
-            .setContentText("Preparing your run")
+            .setContentText(status)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .build()
+
+    private fun updateNotification(status: String) {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE)
+            as NotificationManager
+        manager.notify(NOTIFICATION_ID, buildStartingNotification(status))
+    }
 
     companion object {
         private const val TAG = "TrackingService"
@@ -172,6 +217,8 @@ class TrackingService : Service() {
         private const val NOTIFICATION_ID = 1001
         private const val ACTION_START = "com.roadrunner.app.tracking.START"
         private const val ACTION_STOP = "com.roadrunner.app.tracking.STOP"
+        private const val ACTION_PAUSE = "com.roadrunner.app.tracking.PAUSE"
+        private const val ACTION_RESUME = "com.roadrunner.app.tracking.RESUME"
 
         /**
          * Aadila's bridge should call this only from a visible Activity,
@@ -196,6 +243,20 @@ class TrackingService : Service() {
             activity.startService(
                 Intent(activity, TrackingService::class.java)
                     .setAction(ACTION_STOP)
+            )
+        }
+
+        fun pauseFromVisibleActivity(activity: Activity) {
+            activity.startService(
+                Intent(activity, TrackingService::class.java)
+                    .setAction(ACTION_PAUSE)
+            )
+        }
+
+        fun resumeFromVisibleActivity(activity: Activity) {
+            activity.startService(
+                Intent(activity, TrackingService::class.java)
+                    .setAction(ACTION_RESUME)
             )
         }
     }

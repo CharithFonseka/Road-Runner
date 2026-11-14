@@ -6,6 +6,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -15,13 +17,11 @@ import com.google.android.gms.location.Priority
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Owns GPS callbacks, filtering, and run-file writes on one worker thread.
- */
 class FusedGpsRecorder(
     context: Context,
     private val runId: UUID,
     private val startedAtUtcMs: Long,
+    startedAtMonotonicMs: Long,
     private val onFatalError: (Exception) -> Unit,
 ) {
     private val appContext = context.applicationContext
@@ -31,12 +31,34 @@ class FusedGpsRecorder(
     private val locationClient =
         LocationServices.getFusedLocationProviderClient(appContext)
     private val filter = GpsFilter()
+    private val clock = RunClock(startedAtMonotonicMs)
     private val stopping = AtomicBoolean(false)
 
-    // Access these only on the worker thread.
+    private val wakeLock =
+        (appContext.getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "com.roadrunner.app:tracking",
+            ).apply {
+                setReferenceCounted(false)
+            }
+
+    private val request = LocationRequest.Builder(
+        Priority.PRIORITY_HIGH_ACCURACY,
+        1_000L,
+    )
+        .setMinUpdateIntervalMillis(1_000L)
+        .setMaxUpdateAgeMillis(0L)
+        .setMaxUpdateDelayMillis(0L)
+        .build()
+
+    // These values are changed only on the worker thread.
     private var writer: RunFileWriter? = null
-    private var locationCallback: LocationCallback? = null
     private var distanceM = 0.0
+
+    // Registration completion may run on the main thread.
+    @Volatile
+    private var activeCallback: LocationCallback? = null
 
     fun start() {
         worker.post {
@@ -48,60 +70,75 @@ class FusedGpsRecorder(
                     runId = runId,
                     startedAtUtcMs = startedAtUtcMs,
                 )
-
-                val request = LocationRequest.Builder(
-                    Priority.PRIORITY_HIGH_ACCURACY,
-                    1_000L,
-                )
-                    .setMinUpdateIntervalMillis(1_000L)
-                    .setMaxUpdateAgeMillis(0L)
-                    .setMaxUpdateDelayMillis(0L)
-                    .build()
-
-                val callback = object : LocationCallback() {
-                    override fun onLocationResult(result: LocationResult) {
-                        if (stopping.get()) return
-
-                        try {
-                            for (location in result.locations) {
-                                record(location)
-                            }
-                        } catch (error: Exception) {
-                            fail(error)
-                        }
-                    }
-                }
-                locationCallback = callback
-
-                locationClient
-                    .requestLocationUpdates(
-                        request,
-                        callback,
-                        workerThread.looper,
-                    )
-                    .addOnSuccessListener {
-                        // Stop may have been requested before registration
-                        // finished. Remove that late registration too.
-                        if (stopping.get()) {
-                            locationClient.removeLocationUpdates(callback)
-                        }
-                    }
-                    .addOnFailureListener { error ->
-                        fail(error)
-                    }
+                acquireWakeLock()
+                requestUpdates()
             } catch (error: Exception) {
                 fail(error)
             }
         }
     }
 
+    fun pause(onPaused: (Exception?) -> Unit) {
+        worker.post {
+            if (stopping.get() || clock.state != RunClockState.RUNNING) {
+                mainHandler.post {
+                    onPaused(IllegalStateException("Run is not running"))
+                }
+                return@post
+            }
+
+            try {
+                val atUtcMs = System.currentTimeMillis()
+                val atMonotonicMs = SystemClock.elapsedRealtime()
+
+                removeUpdates()
+                writer?.appendState(RunFileState.PAUSED, atUtcMs)
+                clock.pause(atMonotonicMs)
+                releaseWakeLock()
+
+                mainHandler.post { onPaused(null) }
+            } catch (error: Exception) {
+                mainHandler.post { onPaused(error) }
+                fail(error)
+            }
+        }
+    }
+
+    fun resume(onResumed: (Exception?) -> Unit) {
+        worker.post {
+            if (stopping.get() || clock.state != RunClockState.PAUSED) {
+                mainHandler.post {
+                    onResumed(IllegalStateException("Run is not paused"))
+                }
+                return@post
+            }
+
+            try {
+                val atUtcMs = System.currentTimeMillis()
+                val atMonotonicMs = SystemClock.elapsedRealtime()
+
+                // The first accepted fix after this must add zero distance.
+                filter.markResumed()
+                writer?.appendState(RunFileState.RUNNING, atUtcMs)
+                clock.resume(atMonotonicMs)
+                acquireWakeLock()
+                requestUpdates()
+
+                mainHandler.post { onResumed(null) }
+            } catch (error: Exception) {
+                mainHandler.post { onResumed(error) }
+                fail(error)
+            }
+        }
+    }
+
     /**
-     * finish=true writes an end record. finish=false leaves a recoverable
-     * unfinished file. onStopped runs on the main thread.
+     * finish=true writes an end record. finish=false leaves an unfinished
+     * run file. The callback runs on the main thread.
      */
     fun stop(
         finish: Boolean,
-        onStopped: (Exception?, Double) -> Unit,
+        onStopped: (Exception?, Double, RunTime) -> Unit,
     ) {
         if (!stopping.compareAndSet(false, true)) return
 
@@ -109,9 +146,8 @@ class FusedGpsRecorder(
             var failure: Exception? = null
 
             try {
-                locationCallback?.let {
-                    locationClient.removeLocationUpdates(it)
-                }
+                removeUpdates()
+                clock.stop(SystemClock.elapsedRealtime())
 
                 if (finish) {
                     writer?.finish(System.currentTimeMillis())
@@ -122,20 +158,74 @@ class FusedGpsRecorder(
                 failure = error
                 runCatching { writer?.close() }
             } finally {
+                releaseWakeLock()
                 writer = null
-                locationCallback = null
                 workerThread.quitSafely()
 
                 val finalDistanceM = distanceM
+                val finalTime = clock.snapshot(SystemClock.elapsedRealtime())
                 mainHandler.post {
-                    onStopped(failure, finalDistanceM)
+                    onStopped(failure, finalDistanceM, finalTime)
                 }
             }
         }
     }
 
+    private fun requestUpdates() {
+        val callback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                if (stopping.get() || activeCallback !== this) return
+
+                try {
+                    for (location in result.locations) {
+                        record(location)
+                    }
+                } catch (error: Exception) {
+                    fail(error)
+                }
+            }
+        }
+        activeCallback = callback
+
+        locationClient
+            .requestLocationUpdates(request, callback, workerThread.looper)
+            .addOnSuccessListener {
+                // Pause or stop might have happened during registration.
+                if (stopping.get() || activeCallback !== callback) {
+                    locationClient.removeLocationUpdates(callback)
+                }
+            }
+            .addOnFailureListener { error ->
+                if (!stopping.get() && activeCallback === callback) {
+                    fail(error)
+                }
+            }
+    }
+
+    private fun removeUpdates() {
+        val callback = activeCallback
+        activeCallback = null
+        callback?.let { locationClient.removeLocationUpdates(it) }
+    }
+
+    private fun acquireWakeLock() {
+        if (!wakeLock.isHeld) {
+            // The prototype's required screen-off test is 60 minutes.
+            wakeLock.acquire(65L * 60L * 1_000L)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        runCatching {
+            if (wakeLock.isHeld) wakeLock.release()
+        }.onFailure { error ->
+            Log.e(TAG, "Could not release wake lock", error)
+        }
+    }
+
     private fun record(location: Location) {
-        // These values cannot be represented as a valid point in the v1 file.
+        if (clock.state != RunClockState.RUNNING) return
+
         if (
             location.time <= 0 ||
             !location.latitude.isFinite() ||
@@ -145,22 +235,18 @@ class FusedGpsRecorder(
             return
         }
 
-        // Missing accuracy becomes an invalid fix. The filter rejects it,
-        // while the run file still records the raw reading.
         val accuracyM =
             if (location.hasAccuracy() && location.accuracy.isFinite()) {
                 location.accuracy.toDouble()
             } else {
                 -1.0
             }
-
         val speedMps =
             if (location.hasSpeed() && location.speed.isFinite()) {
                 location.speed.toDouble()
             } else {
                 null
             }
-
         val altitudeM =
             if (location.hasAltitude() && location.altitude.isFinite()) {
                 location.altitude
@@ -185,7 +271,7 @@ class FusedGpsRecorder(
 
     private fun fail(error: Exception) {
         Log.e(TAG, "GPS recording failed", error)
-        stop(finish = false) { _, _ ->
+        stop(finish = false) { _, _, _ ->
             onFatalError(error)
         }
     }
