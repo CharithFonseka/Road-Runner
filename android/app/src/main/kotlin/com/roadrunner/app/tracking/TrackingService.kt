@@ -19,7 +19,8 @@ import java.util.UUID
 
 class TrackingService : Service() {
     private var clock: RunClock? = null
-    private var writer: RunFileWriter? = null
+    private var recorder: FusedGpsRecorder? = null
+    private var stopping = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -39,7 +40,7 @@ class TrackingService : Service() {
     }
 
     private fun startRun(startId: Int) {
-        if (writer != null) return
+        if (recorder != null || stopping) return
 
         try {
             check(hasFineLocationPermission()) {
@@ -63,56 +64,71 @@ class TrackingService : Service() {
             }
 
             val runId = UUID.randomUUID()
-            val newWriter = RunFileWriter(
-                appFilesDir = filesDir,
+            clock = RunClock(SystemClock.elapsedRealtime())
+
+            recorder = FusedGpsRecorder(
+                context = this,
                 runId = runId,
                 startedAtUtcMs = System.currentTimeMillis(),
-            )
+                onFatalError = { error ->
+                    Log.e(TAG, "Run stopped after GPS failure", error)
+                    stopping = true
+                    recorder = null
+                    clock = null
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                },
+            ).also { it.start() }
 
-            writer = newWriter
-            clock = RunClock(SystemClock.elapsedRealtime())
             Log.i(TAG, "Started run $runId")
         } catch (error: Exception) {
             Log.e(TAG, "Could not start tracking", error)
-            cleanUp()
+            recorder?.stop(finish = false) { _, _ -> }
+            recorder = null
+            clock = null
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf(startId)
         }
     }
 
     private fun stopRun() {
-        try {
-            val activeClock = clock
-            val activeWriter = writer
+        if (stopping) return
+        stopping = true
 
-            if (activeClock != null && activeWriter != null) {
-                activeClock.stop(SystemClock.elapsedRealtime())
-                activeWriter.finish(System.currentTimeMillis())
-            }
-        } catch (error: Exception) {
-            Log.e(TAG, "Could not finish run file", error)
-        } finally {
-            cleanUp()
-            stopSelf()
+        clock?.stop(SystemClock.elapsedRealtime())
+
+        val activeRecorder = recorder
+        if (activeRecorder == null) {
+            finishService()
+            return
         }
+
+        activeRecorder.stop(finish = true) { error, distanceM ->
+            if (error != null) {
+                Log.e(TAG, "Could not finish run file", error)
+            }
+            Log.i(TAG, "Stopped run at $distanceM meters")
+            finishService()
+        }
+    }
+
+    private fun finishService() {
+        recorder = null
+        clock = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {
-        // If Android kills the service, close without an end record.
-        // The unfinished file can be offered for recovery later.
-        cleanUp()
-        super.onDestroy()
-    }
-
-    private fun cleanUp() {
-        try {
-            writer?.close()
-        } catch (error: Exception) {
-            Log.e(TAG, "Could not close run file", error)
-        } finally {
-            writer = null
-            clock = null
-            stopForeground(STOP_FOREGROUND_REMOVE)
+        if (!stopping) {
+            stopping = true
+            recorder?.stop(finish = false) { _, _ -> }
         }
+
+        recorder = null
+        clock = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        super.onDestroy()
     }
 
     private fun hasFineLocationPermission(): Boolean =
