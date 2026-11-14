@@ -16,11 +16,9 @@ This README records implementation details only.
 
 ## Current Status
 
-- `GpsFilter` accepts or rejects GPS fixes and reports distance added.
-- `GpsFilterTest` contains unit tests; their execution has not been verified yet.
-- `RunClock` tracks elapsed and moving time across pauses.
-- `RunFileWriter` writes v1 JSONL files under `filesDir/runs/`.
-- The foreground service, live snapshots, and recovery UI are still to come.
+- The service records filtered GPS fixes, supports pause/resume, and emits live events.
+- `RunRecovery` finds and discards unfinished v1 run files.
+- Bridge integration, run import, and real-phone verification remain.
 
 ## Implementation Notes
 
