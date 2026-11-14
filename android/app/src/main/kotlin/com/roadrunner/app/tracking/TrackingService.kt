@@ -87,6 +87,16 @@ class TrackingService : Service() {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 },
+                onAutoPaused = { code ->
+                    if (!stopping) {
+                        Log.w(TAG, "Run paused because of $code")
+                        TrackingApi.publishState(
+                            TrackingRunState.PAUSED,
+                            activeRunId?.toString(),
+                        )
+                        updateNotification("Paused")
+                    }
+                },
             ).also { it.start() }
 
             TrackingApi.publishState(

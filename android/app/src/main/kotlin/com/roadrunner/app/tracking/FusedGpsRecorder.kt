@@ -16,6 +16,10 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.LocationManager
+import com.google.android.gms.location.LocationAvailability
 
 class FusedGpsRecorder(
     context: Context,
@@ -23,6 +27,7 @@ class FusedGpsRecorder(
     private val startedAtUtcMs: Long,
     startedAtMonotonicMs: Long,
     private val onFatalError: (Exception) -> Unit,
+    private val onAutoPaused: (TrackingErrorCode) -> Unit,
 ) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -60,8 +65,19 @@ class FusedGpsRecorder(
     private val snapshotTick = object : Runnable {
         override fun run() {
             if (stopping.get() || clock.state != RunClockState.RUNNING) return
-            publishSnapshot()
-            worker.postDelayed(this, 1_000L)
+
+            try {
+                val problem = environmentProblem()
+                if (problem != null) {
+                    pauseForProblem(problem)
+                    return
+                }
+
+                publishSnapshot()
+                worker.postDelayed(this, 1_000L)
+            } catch (error: Exception) {
+                fail(error)
+            }
         }
     }
 
@@ -99,21 +115,64 @@ class FusedGpsRecorder(
             }
 
             try {
-                val atUtcMs = System.currentTimeMillis()
-                val atMonotonicMs = SystemClock.elapsedRealtime()
-
-                removeUpdates()
-                writer?.appendState(RunFileState.PAUSED, atUtcMs)
-                clock.pause(atMonotonicMs)
-                worker.removeCallbacks(snapshotTick)
-                publishSnapshot()
-                releaseWakeLock()
-
+                pauseOnWorker()
                 mainHandler.post { onPaused(null) }
             } catch (error: Exception) {
                 mainHandler.post { onPaused(error) }
                 fail(error)
             }
+        }
+    }
+
+    private fun pauseOnWorker() {
+        val atUtcMs = System.currentTimeMillis()
+        val atMonotonicMs = SystemClock.elapsedRealtime()
+
+        removeUpdates()
+        writer?.appendState(RunFileState.PAUSED, atUtcMs)
+        clock.pause(atMonotonicMs)
+        worker.removeCallbacks(snapshotTick)
+        publishSnapshot()
+        releaseWakeLock()
+    }
+
+    private fun environmentProblem(): TrackingErrorCode? {
+        val hasFineLocation =
+            appContext.checkSelfPermission(
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasFineLocation) {
+            return TrackingErrorCode.PERMISSION_DENIED
+        }
+
+        val manager = appContext.getSystemService(Context.LOCATION_SERVICE)
+            as LocationManager
+        val gpsEnabled =
+            manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+
+        return trackingProblem(hasFineLocation, gpsEnabled)
+    }
+
+    private fun pauseForProblem(code: TrackingErrorCode) {
+        if (stopping.get() || clock.state != RunClockState.RUNNING) return
+
+        try {
+            pauseOnWorker()
+
+            val message = when (code) {
+                TrackingErrorCode.PERMISSION_DENIED ->
+                    "Precise location permission was removed"
+                TrackingErrorCode.LOCATION_OFF ->
+                    "Phone location was turned off"
+                TrackingErrorCode.SERVICE_FAILED ->
+                    "Tracking service failed"
+            }
+            TrackingApi.publishError(code, message)
+
+            mainHandler.post { onAutoPaused(code) }
+        } catch (error: Exception) {
+            fail(error)
         }
     }
 
@@ -137,6 +196,7 @@ class FusedGpsRecorder(
                 clock.resume(atMonotonicMs)
                 acquireWakeLock()
                 requestUpdates()
+                TrackingApi.publishGps(GpsQuality.SEARCHING)
                 worker.post(snapshotTick)
 
                 mainHandler.post { onResumed(null) }
@@ -190,15 +250,38 @@ class FusedGpsRecorder(
 
     private fun requestUpdates() {
         val callback = object : LocationCallback() {
+            override fun onLocationAvailability(
+                availability: LocationAvailability,
+            ) {
+                if (
+                    !stopping.get() &&
+                    activeCallback === this &&
+                    !availability.isLocationAvailable
+                ) {
+                    TrackingApi.publishGps(GpsQuality.SEARCHING)
+                }
+            }
+
             override fun onLocationResult(result: LocationResult) {
                 if (stopping.get() || activeCallback !== this) return
+
+                val problem = environmentProblem()
+                if (problem != null) {
+                    pauseForProblem(problem)
+                    return
+                }
 
                 try {
                     for (location in result.locations) {
                         record(location)
                     }
                 } catch (error: Exception) {
-                    fail(error)
+                    val problem = environmentProblem()
+                    if (problem != null) {
+                        pauseForProblem(problem)
+                    } else {
+                        fail(error)
+                    }
                 }
             }
         }
@@ -214,7 +297,12 @@ class FusedGpsRecorder(
             }
             .addOnFailureListener { error ->
                 if (!stopping.get() && activeCallback === callback) {
-                    fail(error)
+                    val problem = environmentProblem()
+                    if (problem != null) {
+                        worker.post { pauseForProblem(problem) }
+                    } else {
+                        fail(error)
+                    }
                 }
             }
     }
