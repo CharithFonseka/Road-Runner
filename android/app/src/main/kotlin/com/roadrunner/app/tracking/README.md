@@ -16,8 +16,15 @@ This README records implementation details only.
 
 ## Current Status
 
-Flutter starter project builds and its starter test passes.
-Tracking engine implementation has not started.
+- The service records filtered GPS fixes, supports pause/resume, and emits live events.
+- `RunRecovery` finds and discards unfinished v1 run files.
+- Bridge integration, run import, and real-phone verification remain.
+
+## Implementation Notes
+
+- Pass monotonic milliseconds from `SystemClock.elapsedRealtime()` to `RunClock`, not UTC time.
+- Call `GpsFilter.markResumed()` when a paused run resumes so the next accepted fix adds no distance.
+- GPS fix timestamps and future run-file timestamps use UTC milliseconds.
 
 ## Integration
 
@@ -27,8 +34,4 @@ Tracking engine implementation has not started.
 - Nadeesha: provide golden traces and expected statistics.
 - Tharushi: display tracking data through TrackingBridge.
 
-## Implementation Notes
-
-Add file descriptions, test commands and relevant behaviour
-here as the tracking engine is implemented.
 
