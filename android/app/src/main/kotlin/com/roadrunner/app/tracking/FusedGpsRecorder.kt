@@ -31,6 +31,7 @@ class FusedGpsRecorder(
     private val locationClient =
         LocationServices.getFusedLocationProviderClient(appContext)
     private val filter = GpsFilter()
+    private val speedSmoother = LiveSpeedSmoother()
     private val clock = RunClock(startedAtMonotonicMs)
     private val stopping = AtomicBoolean(false)
 
@@ -56,6 +57,14 @@ class FusedGpsRecorder(
     private var writer: RunFileWriter? = null
     private var distanceM = 0.0
 
+    private val snapshotTick = object : Runnable {
+        override fun run() {
+            if (stopping.get() || clock.state != RunClockState.RUNNING) return
+            publishSnapshot()
+            worker.postDelayed(this, 1_000L)
+        }
+    }
+
     // Registration completion may run on the main thread.
     @Volatile
     private var activeCallback: LocationCallback? = null
@@ -72,6 +81,8 @@ class FusedGpsRecorder(
                 )
                 acquireWakeLock()
                 requestUpdates()
+                TrackingApi.publishGps(GpsQuality.SEARCHING)
+                worker.post(snapshotTick)
             } catch (error: Exception) {
                 fail(error)
             }
@@ -94,6 +105,8 @@ class FusedGpsRecorder(
                 removeUpdates()
                 writer?.appendState(RunFileState.PAUSED, atUtcMs)
                 clock.pause(atMonotonicMs)
+                worker.removeCallbacks(snapshotTick)
+                publishSnapshot()
                 releaseWakeLock()
 
                 mainHandler.post { onPaused(null) }
@@ -119,10 +132,12 @@ class FusedGpsRecorder(
 
                 // The first accepted fix after this must add zero distance.
                 filter.markResumed()
+                speedSmoother.reset()
                 writer?.appendState(RunFileState.RUNNING, atUtcMs)
                 clock.resume(atMonotonicMs)
                 acquireWakeLock()
                 requestUpdates()
+                worker.post(snapshotTick)
 
                 mainHandler.post { onResumed(null) }
             } catch (error: Exception) {
@@ -147,7 +162,9 @@ class FusedGpsRecorder(
 
             try {
                 removeUpdates()
+                worker.removeCallbacks(snapshotTick)
                 clock.stop(SystemClock.elapsedRealtime())
+                publishSnapshot()
 
                 if (finish) {
                     writer?.finish(System.currentTimeMillis())
@@ -267,6 +284,46 @@ class FusedGpsRecorder(
         val decision = filter.evaluate(fix)
         writer?.appendPoint(fix, decision)
         distanceM += decision.addedDistanceM
+
+        TrackingApi.publishGps(
+            if (fix.accM >= 0.0 &&
+                fix.accM < FilterConfig.FIRST_FIX_MAX_ACCURACY_M
+            ) {
+                GpsQuality.GOOD
+            } else {
+                GpsQuality.WEAK
+            }
+        )
+
+        if (decision.accepted) {
+            speedSmoother.accepted(
+                addedDistanceM = decision.addedDistanceM,
+                fixUtcMs = fix.tUtcMs,
+                nowMonotonicMs = SystemClock.elapsedRealtime(),
+            )
+        }
+    }
+
+    private fun publishSnapshot() {
+        val nowMonotonicMs = SystemClock.elapsedRealtime()
+        val time = clock.snapshot(nowMonotonicMs)
+        val speedMps =
+            if (clock.state == RunClockState.RUNNING) {
+                speedSmoother.speedMps(nowMonotonicMs)
+            } else {
+                0.0
+            }
+
+        TrackingApi.publishSnapshot(
+            LiveSnapshot(
+                elapsedMs = time.elapsedMs,
+                movingMs = time.movingMs,
+                distanceM = distanceM,
+                speedMps = speedMps,
+                paceSecPerKm =
+                    LiveSpeedSmoother.paceSecPerKm(speedMps),
+            )
+        )
     }
 
     private fun fail(error: Exception) {

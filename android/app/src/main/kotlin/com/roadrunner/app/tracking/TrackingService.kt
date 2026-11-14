@@ -15,11 +15,13 @@ import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
+import java.io.File
 import java.util.UUID
 
 class TrackingService : Service() {
     private var recorder: FusedGpsRecorder? = null
     private var stopping = false
+    private var activeRunId: UUID? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -65,6 +67,7 @@ class TrackingService : Service() {
             }
 
             val runId = UUID.randomUUID()
+            activeRunId = runId
 
             recorder = FusedGpsRecorder(
                 context = this,
@@ -73,6 +76,12 @@ class TrackingService : Service() {
                 startedAtMonotonicMs = SystemClock.elapsedRealtime(),
                 onFatalError = { error ->
                     Log.e(TAG, "Run stopped after GPS failure", error)
+                    reportFailure(error)
+                    TrackingApi.publishState(
+                        TrackingRunState.STOPPED,
+                        activeRunId?.toString(),
+                        activeRunFilePath(),
+                    )
                     stopping = true
                     recorder = null
                     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -80,12 +89,20 @@ class TrackingService : Service() {
                 },
             ).also { it.start() }
 
+            TrackingApi.publishState(
+                TrackingRunState.RUNNING,
+                runId.toString(),
+            )
+
             Log.i(TAG, "Started run $runId")
         } catch (error: Exception) {
             Log.e(TAG, "Could not start tracking", error)
             recorder?.stop(finish = false) { _, _, _ -> }
             recorder = null
             stopForeground(STOP_FOREGROUND_REMOVE)
+            reportFailure(error)
+            TrackingApi.publishState(TrackingRunState.IDLE, null)
+            activeRunId = null
             stopSelf(startId)
         }
     }
@@ -102,6 +119,10 @@ class TrackingService : Service() {
             if (error != null) {
                 Log.e(TAG, "Could not pause run", error)
             } else if (!stopping) {
+                TrackingApi.publishState(
+                    TrackingRunState.PAUSED,
+                    activeRunId?.toString(),
+                )
                 updateNotification("Paused")
             }
         }
@@ -117,6 +138,14 @@ class TrackingService : Service() {
 
         if (!hasFineLocationPermission() || !isGpsEnabled()) {
             Log.w(TAG, "Cannot resume without precise location and GPS")
+            TrackingApi.publishError(
+                if (!hasFineLocationPermission()) {
+                    TrackingErrorCode.PERMISSION_DENIED
+                } else {
+                    TrackingErrorCode.LOCATION_OFF
+                },
+                "Precise location and GPS are required to resume",
+            )
             return
         }
 
@@ -124,6 +153,10 @@ class TrackingService : Service() {
             if (error != null) {
                 Log.e(TAG, "Could not resume run", error)
             } else if (!stopping) {
+                TrackingApi.publishState(
+                    TrackingRunState.RUNNING,
+                    activeRunId?.toString(),
+                )
                 updateNotification("Tracking run")
             }
         }
@@ -146,6 +179,12 @@ class TrackingService : Service() {
             Log.i(
                 TAG,
                 "Stopped at $distanceM meters, moving for ${runTime.movingMs} ms",
+            )
+            if (error != null) reportFailure(error)
+            TrackingApi.publishState(
+                TrackingRunState.STOPPED,
+                activeRunId?.toString(),
+                activeRunFilePath(),
             )
             finishService()
         }
@@ -209,6 +248,27 @@ class TrackingService : Service() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE)
             as NotificationManager
         manager.notify(NOTIFICATION_ID, buildStartingNotification(status))
+    }
+
+    private fun activeRunFilePath(): String? =
+        activeRunId?.let { id ->
+            File(File(filesDir, "runs"), "$id.jsonl").absolutePath
+        }
+
+    private fun reportFailure(error: Exception) {
+        val code = when {
+            !hasFineLocationPermission() ->
+                TrackingErrorCode.PERMISSION_DENIED
+            !isGpsEnabled() ->
+                TrackingErrorCode.LOCATION_OFF
+            else ->
+                TrackingErrorCode.SERVICE_FAILED
+        }
+
+        TrackingApi.publishError(
+            code,
+            error.message ?: "Tracking failed",
+        )
     }
 
     companion object {
