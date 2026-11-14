@@ -16,8 +16,16 @@ This README records implementation details only.
 
 ## Current Status
 
-Flutter starter project builds and its starter test passes.
-Tracking engine implementation has not started.
+- `GpsFilter` accepts or rejects GPS fixes and reports distance added.
+- `GpsFilterTest` contains unit tests; their execution has not been verified yet.
+- `RunClock` has been drafted to track elapsed and moving time.
+- The run file writer, foreground service, live snapshots, and recovery are still to come.
+
+## Implementation Notes
+
+- Pass monotonic milliseconds from `SystemClock.elapsedRealtime()` to `RunClock`, not UTC time.
+- Call `GpsFilter.markResumed()` when a paused run resumes so the next accepted fix adds no distance.
+- GPS fix timestamps and future run-file timestamps use UTC milliseconds.
 
 ## Integration
 
@@ -27,8 +35,4 @@ Tracking engine implementation has not started.
 - Nadeesha: provide golden traces and expected statistics.
 - Tharushi: display tracking data through TrackingBridge.
 
-## Implementation Notes
-
-Add file descriptions, test commands and relevant behaviour
-here as the tracking engine is implemented.
 
