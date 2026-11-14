@@ -31,7 +31,7 @@ class TrackingService : Service() {
         startId: Int,
     ): Int {
         when (intent?.action) {
-            ACTION_START -> startRun(startId)
+            ACTION_START -> startRun(startId, intent)
             ACTION_STOP -> stopRun()
             ACTION_PAUSE -> pauseRun()
             ACTION_RESUME -> resumeRun()
@@ -42,7 +42,7 @@ class TrackingService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun startRun(startId: Int) {
+    private fun startRun(startId: Int, intent: Intent?) {
         if (recorder != null || stopping) return
 
         try {
@@ -66,7 +66,11 @@ class TrackingService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
 
-            val runId = UUID.randomUUID()
+            val runId = UUID.fromString(
+                requireNotNull(intent?.getStringExtra(EXTRA_RUN_ID)) {
+                    "Missing run ID"
+                }
+            )
             activeRunId = runId
 
             recorder = FusedGpsRecorder(
@@ -103,6 +107,7 @@ class TrackingService : Service() {
                 TrackingRunState.RUNNING,
                 runId.toString(),
             )
+            pendingRunId = null
 
             Log.i(TAG, "Started run $runId")
         } catch (error: Exception) {
@@ -113,6 +118,7 @@ class TrackingService : Service() {
             reportFailure(error)
             TrackingApi.publishState(TrackingRunState.IDLE, null)
             activeRunId = null
+            pendingRunId = null
             stopSelf(startId)
         }
     }
@@ -202,6 +208,7 @@ class TrackingService : Service() {
 
     private fun finishService() {
         recorder = null
+        activeRunId = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -213,6 +220,7 @@ class TrackingService : Service() {
         }
 
         recorder = null
+        activeRunId = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
@@ -289,12 +297,18 @@ class TrackingService : Service() {
         private const val ACTION_STOP = "com.roadrunner.app.tracking.STOP"
         private const val ACTION_PAUSE = "com.roadrunner.app.tracking.PAUSE"
         private const val ACTION_RESUME = "com.roadrunner.app.tracking.RESUME"
+        private const val EXTRA_RUN_ID =
+            "com.roadrunner.app.tracking.RUN_ID"
+
+        @Volatile
+        private var pendingRunId: UUID? = null
 
         /**
-         * Aadila's bridge should call this only from a visible Activity,
-         * after the permission flow has granted precise location.
+         * Call from the visible Flutter Activity after precise-location
+         * permission is granted. Returns the ID used by the service.
          */
-        fun startFromVisibleActivity(activity: Activity) {
+        @Synchronized
+        fun startFromVisibleActivity(activity: Activity): String {
             check(
                 activity.checkSelfPermission(
                     Manifest.permission.ACCESS_FINE_LOCATION
@@ -303,10 +317,38 @@ class TrackingService : Service() {
                 "Precise location permission is required"
             }
 
-            activity.startForegroundService(
-                Intent(activity, TrackingService::class.java)
-                    .setAction(ACTION_START)
-            )
+            val locationManager =
+                activity.getSystemService(Context.LOCATION_SERVICE)
+                    as LocationManager
+            check(locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                "Phone location is turned off"
+            }
+
+            val current = TrackingApi.status.value
+            if (
+                current.state == TrackingRunState.RUNNING ||
+                current.state == TrackingRunState.PAUSED
+            ) {
+                return checkNotNull(current.runId)
+            }
+
+            pendingRunId?.let { return it.toString() }
+
+            val runId = UUID.randomUUID()
+            pendingRunId = runId
+
+            try {
+                activity.startForegroundService(
+                    Intent(activity, TrackingService::class.java)
+                        .setAction(ACTION_START)
+                        .putExtra(EXTRA_RUN_ID, runId.toString())
+                )
+            } catch (error: Exception) {
+                pendingRunId = null
+                throw error
+            }
+
+            return runId.toString()
         }
 
         fun stopFromVisibleActivity(activity: Activity) {
