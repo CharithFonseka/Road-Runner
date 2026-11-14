@@ -1,18 +1,19 @@
 # docs
 
-This folder contains project documentation, test logs, and decision records.
+This folder contains project documentation, QA logs, integration reports, demo prep, and decision records.
 
 ## Contents
 
 | Path | Purpose |
 |---|---|
-| `test-logs/` | Field test, battery test and integration build logs |
+| `test-logs/` | Device matrix, core test cases (`TC-01`–`TC-14`), integration reports, field & battery logs |
+| `demo-script.md` | Step-by-step prototype demo script for Monday 16 November 2026 |
 | `decisions.md` | One-line record of every team decision (see SRS §10) |
+| `ci-workflow.yml` | GitHub Actions CI workflow definition |
 
 ## Test log template
 
-See SRS §9.4 and §9.5 for the field and battery test protocols.  
-Use the template below when saving a log in `test-logs/`.
+See SRS §9.4 and §9.5 for the field and battery test protocols, or fill in [`test-logs/field-test-log.md`](test-logs/field-test-log.md) and [`test-logs/battery-test-log.md`](test-logs/battery-test-log.md) directly.
 
 ```
 Date:
