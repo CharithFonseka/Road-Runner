@@ -287,6 +287,15 @@ class FusedGpsRecorder(
         }
         activeCallback = callback
 
+        if (
+            appContext.checkSelfPermission(
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pauseForProblem(TrackingErrorCode.PERMISSION_DENIED)
+            return
+        }
+
         locationClient
             .requestLocationUpdates(request, callback, workerThread.looper)
             .addOnSuccessListener {
