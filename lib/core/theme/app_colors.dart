@@ -61,6 +61,36 @@ class AppColors {
   /// Error messages and error fills. White on it: 6.54:1. On [sand]: 5.22:1.
   static const Color error = Color(0xFFB3261E);
 
-  /// Text and icons on dark fills ([burntOrangeDeep], [tealDeep], [error]).
+  /// Text and icons on dark fills ([burntOrangeDeep], [tealDeep], [error],
+  /// [liveBlue]).
   static const Color white = Color(0xFFFFFFFF);
+
+  // ─── UI kit additions (approved Road Runner UI kit) ─────────────────────────
+  //
+  // Colour meaning: BLUE = live running information (Run screen timer, pace,
+  // speed, GPS "good", Live pill). TEAL ([tealDeep]) = saved running
+  // statistics (Home, History, Summary).
+
+  /// Live running information on the Run screen.
+  /// On [sand]: 5.26:1. On [sandLight]: 5.98:1. White on it: 6.58:1.
+  /// Its own 10% tint over [sandLight] (Live / GPS pill): 5.18:1.
+  static const Color liveBlue = Color(0xFF2E5AAE);
+
+  /// Fill of the small rounded square behind icons.
+  /// Icons in [burntOrangeDeep] on it: 4.19:1 (icons need 3:1).
+  /// Text on it (e.g. step numbers) must use [canyonBrownDeep]: 9.88:1 —
+  /// [burntOrangeDeep] text fails 4.5:1 here.
+  static const Color iconTile = Color(0xFFF6D2C2);
+
+  /// Top of the header sky gradient (fades through [skyMid] into [sand]).
+  /// Text on the sky must use [canyonBrown]: 5.56:1 here —
+  /// [canyonBrownMuted] is only 4.06:1 and fails.
+  static const Color skyTop = Color(0xFFA6C0FD);
+
+  /// Middle of the header sky gradient. [canyonBrown] on it: 6.41:1.
+  static const Color skyMid = Color(0xFFCCCCE5);
+
+  /// Hairline dividers inside cards and lists: [canyonBrown] at 12% opacity.
+  /// Decoration only — never a text colour.
+  static const Color divider = Color(0x1F5B3A29);
 }

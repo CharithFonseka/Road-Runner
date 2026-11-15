@@ -41,6 +41,12 @@ class AppTheme {
   /// Minimum size for every button (NFR-09: 48dp tap targets).
   static const Size _minButtonSize = Size.square(AppSpacing.minTouchTarget);
 
+  /// Large rounded buttons from the UI kit: 56dp tall, never under 48dp wide.
+  static const Size _minLargeButtonSize = Size(
+    AppSpacing.minTouchTarget,
+    AppSpacing.buttonHeight,
+  );
+
   static const EdgeInsets _buttonPadding = EdgeInsets.symmetric(
     horizontal: AppSpacing.large,
     vertical: AppSpacing.small,
@@ -68,12 +74,35 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 1,
         margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(
+            Radius.circular(AppSpacing.radiusCard),
+          ),
+        ),
       ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: AppColors.sandLight,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(
+            Radius.circular(AppSpacing.radiusLarge),
+          ),
+        ),
+        titleTextStyle: AppTextStyles.sectionHeading,
+        contentTextStyle: AppTextStyles.body,
+      ),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.divider,
+        thickness: 1,
+        space: 1,
+      ),
+      // Primary action (e.g. "Allow Location Access"): large pill.
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: _minButtonSize,
+          minimumSize: _minLargeButtonSize,
           padding: _buttonPadding,
           textStyle: AppTextStyles.button,
+          shape: const StadiumBorder(),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -83,11 +112,16 @@ class AppTheme {
           textStyle: AppTextStyles.button,
         ),
       ),
+      // Secondary action (e.g. "Not Now", "Cancel"): large outlined pill.
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: _minButtonSize,
+          minimumSize: _minLargeButtonSize,
           padding: _buttonPadding,
           textStyle: AppTextStyles.button,
+          shape: const StadiumBorder(),
+          foregroundColor: AppColors.canyonBrown,
+          backgroundColor: AppColors.sandLight,
+          side: const BorderSide(color: AppColors.burntOrangeDeep, width: 1.5),
         ),
       ),
       textButtonTheme: TextButtonThemeData(

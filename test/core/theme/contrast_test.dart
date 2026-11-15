@@ -143,6 +143,9 @@ void main() {
       'caption': AppTextStyles.caption,
       'statLarge': AppTextStyles.statLarge,
       'statMedium': AppTextStyles.statMedium,
+      'liveTimer': AppTextStyles.liveTimer,
+      'livePace': AppTextStyles.livePace,
+      'statValue': AppTextStyles.statValue,
     };
 
     for (final MapEntry<String, TextStyle> entry in styles.entries) {
@@ -155,6 +158,115 @@ void main() {
         );
       });
     }
+  });
+
+  group('UI kit: live blue (live running information)', () {
+    test('liveBlue text on sand and on cards', () {
+      expectReadable(AppColors.liveBlue, AppColors.sand, 'liveBlue/sand');
+      expectReadable(
+        AppColors.liveBlue,
+        AppColors.sandLight,
+        'liveBlue/sandLight',
+      );
+    });
+
+    test('liveBlue text on its own 10% tint (Live / GPS pill on a card)', () {
+      final Color pill = Color.alphaBlend(
+        AppColors.liveBlue.withValues(alpha: 0.10),
+        AppColors.sandLight,
+      );
+      expectReadable(AppColors.liveBlue, pill, 'liveBlue/liveBlue 10% pill');
+    });
+
+    test('white text on a liveBlue fill', () {
+      expectReadable(AppColors.white, AppColors.liveBlue, 'white/liveBlue');
+    });
+  });
+
+  group('UI kit: header sky gradient', () {
+    // Gradient stops: skyTop -> skyMid -> sand. Text must be readable at
+    // every stop, so check each one.
+    for (final MapEntry<String, Color> stop in {
+      'skyTop': AppColors.skyTop,
+      'skyMid': AppColors.skyMid,
+      'sand': AppColors.sand,
+    }.entries) {
+      test('canyonBrown text is readable on ${stop.key}', () {
+        expectReadable(
+          AppColors.canyonBrown,
+          stop.value,
+          'canyonBrown/${stop.key}',
+        );
+        expectReadable(
+          AppTextStyles.heading.color!,
+          stop.value,
+          'heading/${stop.key}',
+        );
+      });
+    }
+
+    // Records WHY sky text must use canyonBrown and not the muted caption
+    // colour: canyonBrownMuted on skyTop is only 4.06:1.
+    test('canyonBrownMuted fails on skyTop, so sky text uses canyonBrown', () {
+      expect(
+        contrastRatio(AppColors.canyonBrownMuted, AppColors.skyTop),
+        lessThan(kMinTextContrast),
+      );
+    });
+  });
+
+  group('UI kit: icon tiles and dividers', () {
+    test('text on an icon tile uses canyonBrownDeep', () {
+      expectReadable(
+        AppColors.canyonBrownDeep,
+        AppColors.iconTile,
+        'canyonBrownDeep/iconTile',
+      );
+    });
+
+    test('burntOrangeDeep icons on an icon tile meet 3:1 (non-text)', () {
+      expect(
+        contrastRatio(AppColors.burntOrangeDeep, AppColors.iconTile),
+        greaterThanOrEqualTo(3.0),
+      );
+    });
+
+    // Records WHY step numbers on tiles must not use burntOrangeDeep.
+    test('burntOrangeDeep fails as text on an icon tile', () {
+      expect(
+        contrastRatio(AppColors.burntOrangeDeep, AppColors.iconTile),
+        lessThan(kMinTextContrast),
+      );
+    });
+
+    test('divider is canyonBrown at 12% opacity (decoration only)', () {
+      expect(AppColors.divider.withValues(alpha: 1.0), AppColors.canyonBrown);
+      expect(AppColors.divider.a, closeTo(0.12, 0.005));
+    });
+  });
+
+  group('UI kit: component colours', () {
+    test('outlined button label is readable on its fill', () {
+      final ButtonStyle style = AppTheme.light().outlinedButtonTheme.style!;
+      final Color fg = style.foregroundColor!.resolve(<WidgetState>{})!;
+      final Color bg = style.backgroundColor!.resolve(<WidgetState>{})!;
+      expectReadable(fg, bg, 'outlinedButton foreground/background');
+      expectReadable(fg, AppColors.sand, 'outlinedButton foreground/sand');
+    });
+
+    test('dialog text is readable on the dialog background', () {
+      final DialogThemeData dialog = AppTheme.light().dialogTheme;
+      expectReadable(
+        dialog.titleTextStyle!.color!,
+        dialog.backgroundColor!,
+        'dialog title',
+      );
+      expectReadable(
+        dialog.contentTextStyle!.color!,
+        dialog.backgroundColor!,
+        'dialog content',
+      );
+    });
   });
 
   group('Why the deep variants exist', () {

@@ -38,6 +38,106 @@ void main() {
     });
   });
 
+  group('UI kit live and saved stat styles', () {
+    test('live styles are 32sp or larger and use tabular figures', () {
+      expect(AppTextStyles.liveTimer.fontSize, 62);
+      for (final TextStyle style in [
+        AppTextStyles.liveTimer,
+        AppTextStyles.livePace,
+      ]) {
+        expect(
+          style.fontSize,
+          greaterThanOrEqualTo(AppTextStyles.minStatFontSize),
+        );
+        expect(style.fontWeight, FontWeight.w700);
+        expect(style.color, AppColors.liveBlue);
+        expect(
+          style.fontFeatures,
+          contains(const FontFeature.tabularFigures()),
+        );
+      }
+    });
+
+    test('saved-run statValue is teal, 20sp bold', () {
+      expect(AppTextStyles.statValue.fontSize, 20);
+      expect(AppTextStyles.statValue.fontWeight, FontWeight.w700);
+      expect(AppTextStyles.statValue.color, AppColors.tealDeep);
+    });
+
+    test('existing statLarge / statMedium are kept unchanged', () {
+      expect(AppTextStyles.statLarge.fontSize, 48);
+      expect(AppTextStyles.statLarge.color, AppColors.tealDeep);
+      expect(AppTextStyles.statMedium.fontSize, 32);
+      expect(AppTextStyles.statMedium.color, AppColors.tealDeep);
+    });
+  });
+
+  group('UI kit component shapes', () {
+    final ThemeData theme = AppTheme.light();
+
+    test('cards have 20dp rounded corners', () {
+      final RoundedRectangleBorder shape =
+          theme.cardTheme.shape! as RoundedRectangleBorder;
+      expect(
+        shape.borderRadius,
+        const BorderRadius.all(Radius.circular(AppSpacing.radiusCard)),
+      );
+    });
+
+    test('dialogs have 28dp corners on the light card colour', () {
+      final RoundedRectangleBorder shape =
+          theme.dialogTheme.shape! as RoundedRectangleBorder;
+      expect(
+        shape.borderRadius,
+        const BorderRadius.all(Radius.circular(AppSpacing.radiusLarge)),
+      );
+      expect(theme.dialogTheme.backgroundColor, AppColors.sandLight);
+    });
+
+    test('filled and outlined buttons are pills', () {
+      expect(
+        theme.filledButtonTheme.style!.shape!.resolve(<WidgetState>{}),
+        isA<StadiumBorder>(),
+      );
+      expect(
+        theme.outlinedButtonTheme.style!.shape!.resolve(<WidgetState>{}),
+        isA<StadiumBorder>(),
+      );
+    });
+
+    test('outlined buttons have a burntOrangeDeep border', () {
+      final BorderSide side = theme.outlinedButtonTheme.style!.side!.resolve(
+        <WidgetState>{},
+      )!;
+      expect(side.color, AppColors.burntOrangeDeep);
+    });
+
+    testWidgets('filled and outlined buttons render 56dp tall', (tester) async {
+      final Widget filled = FilledButton(
+        onPressed: () {},
+        child: const Text('Go'),
+      );
+      final Widget outlined = OutlinedButton(
+        onPressed: () {},
+        child: const Text('Not Now'),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: Scaffold(body: Column(children: [filled, outlined])),
+        ),
+      );
+      expect(
+        tester.getSize(find.byWidget(filled)).height,
+        AppSpacing.buttonHeight,
+      );
+      expect(
+        tester.getSize(find.byWidget(outlined)).height,
+        AppSpacing.buttonHeight,
+      );
+    });
+  });
+
   group('Theme configuration', () {
     final ThemeData theme = AppTheme.light();
 
