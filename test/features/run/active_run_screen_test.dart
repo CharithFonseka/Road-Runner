@@ -75,7 +75,7 @@ double _valueFontSize(WidgetTester tester, Key key) {
 }
 
 const List<Key> _statKeys = [
-  ActiveRunScreen.elapsedValueKey,
+  ActiveRunScreen.movingTimeValueKey,
   ActiveRunScreen.paceValueKey,
   ActiveRunScreen.distanceValueKey,
   ActiveRunScreen.speedValueKey,
@@ -97,28 +97,28 @@ void main() {
       tester,
     ) async {
       await _pump(tester, bridge);
-      expect(find.text(AppStrings.statElapsedTime), findsOneWidget);
-      expect(find.text(AppStrings.statAveragePaceLong), findsOneWidget);
+      expect(find.text(AppStrings.statMovingTime), findsOneWidget);
+      expect(find.text(AppStrings.statCurrentPace), findsOneWidget);
       expect(find.text(AppStrings.statDistance), findsOneWidget);
       expect(find.text(AppStrings.statSpeed), findsOneWidget);
-      expect(_text(tester, ActiveRunScreen.elapsedValueKey), '--:--');
+      expect(_text(tester, ActiveRunScreen.movingTimeValueKey), '--:--');
       expect(_text(tester, ActiveRunScreen.paceValueKey), '--:-- /km');
       expect(_text(tester, ActiveRunScreen.distanceValueKey), '-.-- km');
       expect(_text(tester, ActiveRunScreen.speedValueKey), '--.- km/h');
-      expect(find.text(AppStrings.runStatusLive), findsOneWidget);
+      expect(find.text(AppStrings.runStatusRecording), findsOneWidget);
     });
 
     testWidgets('shows bridge values formatted for display', (tester) async {
       await _pump(tester, bridge);
       bridge.emitSnapshot(
-        elapsedMs: (18 * 60 + 42) * 1000,
-        movingMs: 1,
+        elapsedMs: (25 * 60) * 1000,
+        movingMs: (18 * 60 + 42) * 1000,
         distanceM: 3420,
         speedMps: 3.0,
         paceSecPerKm: 327,
       );
       await tester.pump();
-      expect(_text(tester, ActiveRunScreen.elapsedValueKey), '18:42');
+      expect(_text(tester, ActiveRunScreen.movingTimeValueKey), '18:42');
       expect(_text(tester, ActiveRunScreen.paceValueKey), '5:27 /km');
       expect(_text(tester, ActiveRunScreen.distanceValueKey), '3.42 km');
       expect(_text(tester, ActiveRunScreen.speedValueKey), '10.8 km/h');
@@ -126,7 +126,7 @@ void main() {
 
     testWidgets('unavailable pace shows --:--', (tester) async {
       await _pump(tester, bridge);
-      bridge.emitSnapshot(elapsedMs: 5000, distanceM: 20);
+      bridge.emitSnapshot(movingMs: 5000, distanceM: 20);
       await tester.pump();
       expect(_text(tester, ActiveRunScreen.paceValueKey), '--:-- /km');
     });
@@ -151,12 +151,118 @@ void main() {
     });
   });
 
+  group('Tracking semantics (moving time, current pace)', () {
+    testWidgets('the timer shows movingMs, labelled Moving time', (
+      tester,
+    ) async {
+      await _pump(tester, bridge);
+      bridge.emitSnapshot(
+        elapsedMs: (30 * 60) * 1000, // wall clock, includes pauses
+        movingMs: (25 * 60 + 7) * 1000,
+      );
+      await tester.pump();
+      expect(_text(tester, ActiveRunScreen.movingTimeValueKey), '25:07');
+      expect(find.text(AppStrings.statMovingTime), findsOneWidget);
+      expect(find.text('Elapsed time'), findsNothing);
+      expect(find.text('30:00'), findsNothing);
+    });
+
+    testWidgets('moving time freezes while paused, resumes afterwards', (
+      tester,
+    ) async {
+      await _pump(tester, bridge);
+      bridge.emitSnapshot(elapsedMs: 61000, movingMs: 61000, distanceM: 200);
+      await tester.pump();
+      expect(_text(tester, ActiveRunScreen.movingTimeValueKey), '1:01');
+
+      await tester.tap(find.byKey(ActiveRunScreen.pauseResumeButtonKey));
+      await tester.pump();
+      expect(find.text(AppStrings.pausedBadge), findsOneWidget);
+
+      // While paused the bridge keeps sending snapshots: wall-clock time
+      // rises, moving time does not. The timer must not move.
+      for (final int elapsed in [70000, 90000, 125000]) {
+        bridge.emitSnapshot(elapsedMs: elapsed, movingMs: 61000);
+        await tester.pump();
+        expect(_text(tester, ActiveRunScreen.movingTimeValueKey), '1:01');
+      }
+
+      await tester.tap(find.byKey(ActiveRunScreen.pauseResumeButtonKey));
+      await tester.pump();
+      bridge.emitSnapshot(elapsedMs: 126000, movingMs: 62000);
+      await tester.pump();
+      expect(find.text(AppStrings.pausedBadge), findsNothing);
+      expect(_text(tester, ActiveRunScreen.movingTimeValueKey), '1:02');
+    });
+
+    testWidgets('pace is labelled Current pace and follows each snapshot', (
+      tester,
+    ) async {
+      await _pump(tester, bridge);
+      expect(find.text(AppStrings.statCurrentPace), findsOneWidget);
+      expect(find.text(AppStrings.statAveragePaceLong), findsNothing);
+
+      bridge.emitSnapshot(movingMs: 60000, distanceM: 300, paceSecPerKm: 300);
+      await tester.pump();
+      expect(_text(tester, ActiveRunScreen.paceValueKey), '5:00 /km');
+
+      // Shown exactly as reported: no averaging with earlier values.
+      bridge.emitSnapshot(movingMs: 61000, distanceM: 302, paceSecPerKm: 420);
+      await tester.pump();
+      expect(_text(tester, ActiveRunScreen.paceValueKey), '7:00 /km');
+    });
+
+    testWidgets('unavailable current pace shows --:-- /km', (tester) async {
+      await _pump(tester, bridge);
+      for (final double? pace in [null, 0, 1500]) {
+        bridge.emitSnapshot(movingMs: 5000, distanceM: 20, paceSecPerKm: pace);
+        await tester.pump();
+        expect(
+          _text(tester, ActiveRunScreen.paceValueKey),
+          '--:-- /km',
+          reason: '$pace',
+        );
+      }
+    });
+
+    testWidgets('running shows the Recording pill; paused shows Paused', (
+      tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await _pump(tester, bridge);
+      expect(find.text(AppStrings.runStatusRecording), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(
+          AppStrings.runStatusSemantics(AppStrings.runStatusRecording),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(ActiveRunScreen.pauseResumeButtonKey));
+      await tester.pump();
+      expect(find.text(AppStrings.runStatusRecording), findsNothing);
+      expect(find.text(AppStrings.runStatusPaused), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('moving time is read as label plus value', (tester) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await _pump(tester, bridge);
+      bridge.emitSnapshot(elapsedMs: 99000, movingMs: 61000);
+      await tester.pump();
+      expect(
+        tester.getSemantics(find.byKey(ActiveRunScreen.movingTimeValueKey)),
+        containsSemantics(label: '${AppStrings.statMovingTime}\n1:01'),
+      );
+      handle.dispose();
+    });
+  });
+
   group('Pause and resume', () {
     testWidgets('pause shows PAUSED, Resume, and keeps the last values', (
       tester,
     ) async {
       await _pump(tester, bridge);
-      bridge.emitSnapshot(elapsedMs: 61000, distanceM: 500, speedMps: 2.5);
+      bridge.emitSnapshot(movingMs: 61000, distanceM: 500, speedMps: 2.5);
       await tester.pump();
 
       await tester.tap(find.byKey(ActiveRunScreen.pauseResumeButtonKey));
@@ -166,7 +272,7 @@ void main() {
       expect(find.text(AppStrings.pausedBadge), findsOneWidget);
       expect(find.text(AppStrings.runStatusPaused), findsOneWidget);
       expect(find.text(AppStrings.resumeRun), findsOneWidget);
-      expect(_text(tester, ActiveRunScreen.elapsedValueKey), '1:01');
+      expect(_text(tester, ActiveRunScreen.movingTimeValueKey), '1:01');
       expect(_text(tester, ActiveRunScreen.distanceValueKey), '0.50 km');
       expect(_text(tester, ActiveRunScreen.speedValueKey), '9.0 km/h');
 
@@ -236,7 +342,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(AppStrings.errorStopFailed), findsOneWidget);
-      expect(find.text(AppStrings.runStatusLive), findsOneWidget);
+      expect(find.text(AppStrings.runStatusRecording), findsOneWidget);
       expect(calls.results, isEmpty);
 
       bridge.stopError = null;
@@ -370,7 +476,7 @@ void main() {
       await tester.tap(find.byKey(ActiveRunScreen.tryAgainButtonKey));
       await tester.pump();
       expect(bridge.startCalls, 2);
-      expect(find.text(AppStrings.runStatusLive), findsOneWidget);
+      expect(find.text(AppStrings.runStatusRecording), findsOneWidget);
       expect(calls.exits, 0);
     });
 
@@ -410,7 +516,7 @@ void main() {
     testWidgets('all four live statistics are at least 32sp', (tester) async {
       await _pump(tester, bridge, size: const Size(320, 568), textScale: 1.3);
       bridge.emitSnapshot(
-        elapsedMs: 3723000,
+        movingMs: 3723000,
         distanceM: 12345,
         speedMps: 4,
         paceSecPerKm: 333,
@@ -448,7 +554,7 @@ void main() {
       tester.view.padding = const FakeViewPadding(bottom: bottomInset * 3);
       addTearDown(tester.view.resetPadding);
       await _pump(tester, bridge, size: screen);
-      bridge.emitSnapshot(elapsedMs: 600000, distanceM: 2000, speedMps: 3);
+      bridge.emitSnapshot(movingMs: 600000, distanceM: 2000, speedMps: 3);
       await tester.pump();
 
       final Rect card = tester.getRect(
@@ -484,7 +590,7 @@ void main() {
     ) async {
       await _pump(tester, bridge, size: const Size(320, 568), textScale: 1.3);
       bridge.emitGps(kGpsWeak);
-      bridge.emitSnapshot(elapsedMs: 600000, distanceM: 2000, speedMps: 3);
+      bridge.emitSnapshot(movingMs: 600000, distanceM: 2000, speedMps: 3);
       await tester.pump();
       for (final Key key in [
         ActiveRunScreen.pauseResumeButtonKey,
@@ -534,7 +640,7 @@ void main() {
             // about 1.8x wider than Roboto digits. With it, a 7-character
             // h:mm:ss value cannot fit 248dp at 32sp x 1.3, so large-text
             // cases use the longest under-an-hour value instead.
-            elapsedMs: c.value.$2 > 1.0
+            movingMs: c.value.$2 > 1.0
                 ? (59 * 60 + 59) * 1000
                 : (9 * 3600 + 59 * 60 + 59) * 1000,
             distanceM: 42195,
@@ -611,8 +717,8 @@ void main() {
     );
     await _pump(tester, mock);
     await tester.pump(const Duration(milliseconds: 1050));
-    expect(find.text(AppStrings.runStatusLive), findsOneWidget);
-    expect(_text(tester, ActiveRunScreen.elapsedValueKey), isNot('--:--'));
+    expect(find.text(AppStrings.runStatusRecording), findsOneWidget);
+    expect(_text(tester, ActiveRunScreen.movingTimeValueKey), isNot('--:--'));
     expect(find.text(AppStrings.gpsGood), findsOneWidget);
 
     // Leave the screen; the parent still owns and disposes the mock.

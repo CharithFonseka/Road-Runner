@@ -19,26 +19,48 @@ ActiveRunScreen(
   - After a failed start or an unresolved stop, it calls `onExit`.
 - Removing the screen cancels its event subscription only. It does not stop the run.
 
-## Open integration questions
+## What the screen shows
 
-### For Aadila (bridge)
+| Stat | Bridge field | Label | Notes |
+|---|---|---|---|
+| Main timer (62sp) | `movingMs` | Moving time | Freezes while paused. |
+| Pace (32sp) | `paceSecPerKm` | Current pace | `--:-- /km` when null or slower than 20 min/km. |
+| Distance (32sp) | `distanceM` | Distance | km, 2 decimals. |
+| Speed (32sp) | `speedMps` | Speed | km/h, 1 decimal. |
 
-1. **Elapsed time while paused.** The screen shows `TrackingSnapshot.elapsedMs` as "Elapsed time", exactly as reported. `MockTrackingBridge` keeps increasing `elapsedMs` while paused. Please confirm what the native service does.
-2. **Pace meaning.** The screen labels `paceSecPerKm` "Average pace" because the mock computes moving time divided by distance. If the native value becomes a current or rolling pace, the label must change.
-3. **Paused snapshots.** While paused, the screen keeps whatever the latest snapshot says (the mock sends speed 0 and pace null). The screen does not invent or zero any values.
+- GPS quality (Searching, Weak, Good) and the run status pill (Starting, Recording, Paused, Finishing) are in the header, so they never shrink the four statistics.
+- `elapsedMs` (wall-clock time) is not shown.
 
-### For Aadila and Praveen (stopping from the notification)
+## Confirmed bridge behaviour (Aadila)
 
-When the run is stopped outside the screen, the bridge sends a `stopped` state event but no `RunResult`. The screen then calls `getState()`:
+- **Moving time and elapsed time:**
+  - `elapsedMs` is wall-clock duration and keeps rising during Pause.
+  - `movingMs` freezes during Pause.
+- **Pace:** `paceSecPerKm` is the current pace, derived from smoothed speed. Average pace is a separate statistic for completed runs, shown on Summary and History.
+- **Notification:** it has Pause and Resume actions, but no Stop.
+- **Finishing a run:** a normal finish calls `stopRun()` and receives the `RunResult` directly.
+- **Crash recovery:** this can use `getState()` and `getUnfinishedRun()`. That is the app shell's job, not this screen's.
 
-- If the status is `stopped` and has both a `runId` and a `filePath`, that real result is passed to `onRunFinished`.
-- Otherwise, the screen shows **"Run stopped"** with an **Exit** button. No result or file path is invented.
+### Defensive stop handling
 
-The mock's `getState()` returns no `filePath`, so this path always ends unresolved today. A supported way to recover the result is needed, either:
+The notification cannot stop a run. Even so, the screen still handles a `stopped` event that it did not cause, for example when the service ends unexpectedly:
 
-- `getState().filePath` after a stop, or
-- `getUnfinishedRun()` covering this case.
+1. It calls `getState()`.
+2. If that returns a stopped run with both a `runId` and a `filePath`, the real result is passed to `onRunFinished`.
+3. Otherwise the screen shows **"Run stopped"** with **Exit**. No result is invented.
+
+`MockTrackingBridge` stops itself after 300 ticks (5 minutes). Its `getState()` has no `filePath`, so with the mock this path ends on "Run stopped".
+
+**Note for Aadila:** `MockTrackingBridge` currently emits moving time divided by distance, which is average pace, as `paceSecPerKm`. The screen labels whatever it receives "Current pace", so previews with the mock show an average-pace value. The native service sends the real current pace.
 
 ## Temporary formatter
 
-`live_run_formatter.dart` only converts units: ms to time, m to km, m/s to km/h, and s/km to m:ss. Replace it with Nadeesha's domain formatters when they are merged.
+`live_run_formatter.dart` only converts units: ms to time, m to km, m/s to km/h, and s/km to m:ss.
+
+Nadeesha's `lib/domain/stats/formatting.dart` is merged, but it is not a drop-in replacement:
+
+- `formatDistance` and `formatSpeed` include the unit, and this screen draws units separately at a smaller size.
+- `formatDistance` returns `0.00 km` for missing values, and this screen needs a placeholder instead.
+- There is no duration formatter.
+
+Moving to the shared formatters is planned for a later phase.

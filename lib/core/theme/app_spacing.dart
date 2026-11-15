@@ -34,8 +34,9 @@ class AppSpacing {
   /// Standard primary and outlined buttons, e.g. "Allow Location Access".
   static const double buttonHeight = 56.0;
 
-  /// The hero "Start Run" button on Home.
-  static const double heroButtonHeight = 64.0;
+  /// The hero Start control on Home: the Revision 5 Slide to Start track
+  /// (72dp, with a 64dp handle). Was 64 before Revision 5.
+  static const double heroButtonHeight = 72.0;
 
   // ─── Corner radii (UI kit) ──────────────────────────────────────────────────
 

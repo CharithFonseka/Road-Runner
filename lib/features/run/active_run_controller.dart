@@ -6,10 +6,14 @@
 // (Aadila). The parent owns the bridge: this controller never calls
 // bridge.dispose() and never stops a run on its own.
 //
-// Open integration questions (see lib/features/run/README.md):
-//  * Whether TrackingSnapshot.elapsedMs keeps rising while paused.
-//  * Whether TrackingStatus.filePath is filled after a run is stopped from
-//    the notification (used to recover the RunResult).
+// Confirmed bridge behaviour (Aadila; see lib/features/run/README.md):
+//  * elapsedMs is wall-clock time and keeps rising while paused; movingMs
+//    freezes while paused. The screen shows movingMs.
+//  * paceSecPerKm is current pace from smoothed speed.
+//  * The notification offers Pause and Resume only, never Stop. A normal
+//    finish calls stopRun() and receives the RunResult directly.
+//  * A stopped event this screen did not cause (e.g. the service ending
+//    unexpectedly) is still handled defensively through getState().
 
 import 'dart:async';
 
@@ -367,8 +371,9 @@ class ActiveRunController extends ChangeNotifier {
     }
   }
 
-  /// The run was stopped without our stopRun() call (e.g. from the
-  /// notification). The only supported way to learn the result is
+  /// The run was stopped without our stopRun() call. The notification
+  /// cannot stop a run, so this is a defensive path (unexpected service
+  /// stop, or MockTrackingBridge's automatic 5-minute stop). The only supported way to learn the result is
   /// getState(): if it reports a stopped run with a runId AND a filePath,
   /// that real result is passed on. Otherwise nothing is invented and the
   /// screen shows [RunPhase.stoppedUnresolved].

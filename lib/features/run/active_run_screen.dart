@@ -5,6 +5,12 @@
 // Shows live values exactly as the TrackingBridge reports them. Values are
 // only formatted for display (LiveRunFormatter); nothing is calculated here.
 //
+// Tracking semantics (confirmed by Aadila):
+//  * The main timer is TrackingSnapshot.movingMs ("Moving time"). It freezes
+//    while paused. elapsedMs is wall-clock time and is not shown.
+//  * paceSecPerKm is the CURRENT pace from smoothed speed ("Current pace"),
+//    not the run's average pace.
+//
 // Navigation is the parent's job:
 //  * onRunFinished receives the real RunResult from bridge.stopRun().
 //  * onExit is called when the user leaves after a failed start, or after
@@ -56,7 +62,13 @@ class ActiveRunScreen extends StatefulWidget {
   static const Key exitButtonKey = Key('activeRun.exit');
   static const Key issueRetryButtonKey = Key('activeRun.issueRetry');
   static const Key issueDismissButtonKey = Key('activeRun.issueDismiss');
-  static const Key elapsedValueKey = Key('activeRun.elapsed');
+
+  /// The main timer (moving time).
+  static const Key movingTimeValueKey = Key('activeRun.movingTime');
+
+  /// Old name for [movingTimeValueKey], kept so existing callers compile.
+  @Deprecated('Use movingTimeValueKey. The timer now shows moving time.')
+  static const Key elapsedValueKey = movingTimeValueKey;
   static const Key paceValueKey = Key('activeRun.pace');
   static const Key distanceValueKey = Key('activeRun.distance');
   static const Key speedValueKey = Key('activeRun.speed');
@@ -372,10 +384,10 @@ class _StatsCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             LiveStat(
-              label: AppStrings.statElapsedTime,
-              value: formatter.elapsed(s?.elapsedMs),
+              label: AppStrings.statMovingTime,
+              value: formatter.elapsed(s?.movingMs),
               template: '0:00:00',
-              valueKey: ActiveRunScreen.elapsedValueKey,
+              valueKey: ActiveRunScreen.movingTimeValueKey,
               style: AppTextStyles.liveTimer.copyWith(
                 color: paused ? AppColors.canyonBrownMuted : null,
               ),
@@ -383,7 +395,7 @@ class _StatsCard extends StatelessWidget {
             ),
             const Divider(height: AppSpacing.large),
             LiveStat(
-              label: AppStrings.statAveragePaceLong,
+              label: AppStrings.statCurrentPace,
               value: formatter.pace(s?.paceSecPerKm),
               unit: AppStrings.unitPerKm,
               template: '00:00',
@@ -473,7 +485,7 @@ class _DistanceSpeedRow extends StatelessWidget {
   }
 }
 
-/// "PAUSED" next to the elapsed-time label. Outlined, not tinted, so the
+/// "PAUSED" next to the moving-time label. Outlined, not tinted, so the
 /// orange text keeps 5.36:1 on the card.
 class _PausedBadge extends StatelessWidget {
   const _PausedBadge();

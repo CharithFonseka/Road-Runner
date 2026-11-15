@@ -14,6 +14,22 @@ class AppStrings {
 
   static const String appName = 'Road Runner';
 
+  // ─── Splash ─────────────────────────────────────────────────────────────────
+
+  /// Spoken by screen readers for the start-up progress indicator.
+  static const String splashLoading = 'Loading Road Runner';
+
+  // ─── Navigation drawer ──────────────────────────────────────────────────────
+
+  /// Screen-reader name of the drawer itself.
+  static const String navMenuLabel = 'Main navigation';
+  static const String navTagline = 'Offline GPS run tracker';
+  static const String navHome = 'Home';
+  static const String navHistory = 'History';
+  static const String navSettings = 'Settings';
+  static const String navCloseMenu = 'Close menu';
+  static const String navRunNote = 'Not available while a run is recording.';
+
   // ─── Home ───────────────────────────────────────────────────────────────────
 
   static const String homeTagline = 'Ready for your next run?';
@@ -34,12 +50,60 @@ class AppStrings {
 
   static const String homeFooter = 'Lace up and hit the road.';
 
+  // Home (Revision 5): header, Recent runs card and Slide to Start.
+  static const String homeOpenMenu = 'Open navigation menu';
+  static const String homeSettings = 'Settings';
+  static const String recentRunsTitle = 'Recent runs';
+  static const String viewAll = 'View all';
+  static const String statPace = 'Pace';
+  static const String recentRunsLoading = 'Loading recent runs';
+  static const String recentRunsEmptyMessage =
+      'Your saved runs will appear here after your first run.';
+  static const String recentRunsErrorTitle = 'Couldn’t load your runs';
+  static const String recentRunsErrorMessage =
+      'Your saved runs are still on this phone. Try loading them again.';
+  static const String recentRunsRetry = 'Try again';
+  static String recentRunSemantics(
+    String date,
+    String distance,
+    String duration,
+    String pace,
+  ) => 'Run on $date. Distance $distance, duration $duration, pace $pace.';
+
+  /// Short month names for run dates such as "14 Nov 2026" (UI kit format).
+  static const List<String> monthsShort = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  static String runDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')} ${monthsShort[d.month - 1]} '
+      '${d.year}';
+
+  static const String slideToStart = 'Slide to start';
+  static const String slideToStartArrows = '›››';
+  static const String slideOrHold = 'or press and hold';
+  static const String slideKeepHolding = 'Keep holding';
+  static const String slideStarting = 'Starting run';
+  static const String startRunSemanticsLabel = 'Start run';
+  static const String startRunSemanticsHint =
+      'Slide the handle right, or press and hold, to start';
+
   // ─── Active Run ─────────────────────────────────────────────────────────────
 
   static const String runTitle = 'Run';
 
   static const String runStatusStarting = 'Starting';
-  static const String runStatusLive = 'Live';
+  static const String runStatusRecording = 'Recording';
   static const String runStatusPaused = 'Paused';
   static const String runStatusFinishing = 'Finishing';
   static String runStatusSemantics(String status) => 'Run status: $status';
@@ -47,8 +111,8 @@ class AppStrings {
   /// Badge next to the elapsed time while paused.
   static const String pausedBadge = 'PAUSED';
 
-  static const String statElapsedTime = 'Elapsed time';
   static const String statAveragePaceLong = 'Average pace';
+  static const String statCurrentPace = 'Current pace';
   static const String statSpeed = 'Speed';
 
   static const String unitKm = 'km';

@@ -7,7 +7,7 @@ Flutter screens. Each sub-folder is one feature.
 
 | Folder | Screen | Key FRs |
 |---|---|---|
-| `home/` | Home screen — big Start button, last run card, History link | FR-01 (trigger), FR-71 |
+| `home/` | Home screen — Recent runs card, Slide to Start, navigation drawer (see `home/README.md`) | FR-01 (trigger), FR-61, FR-71 |
 | `run/` | Live run screen — time, distance, speed, pace, pause, stop | FR-20, 21, 22, 23 |
 | `summary/` | Post-run summary — stats, path painter, splits | FR-50, 51, 52 |
 | `history/` | History list + detail (reuses Summary) | FR-61, 62 |

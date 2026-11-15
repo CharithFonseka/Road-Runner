@@ -108,7 +108,7 @@ class GpsStatusBadge extends StatelessWidget {
   }
 }
 
-/// Run status: Starting, Live, Paused or Finishing.
+/// Run status: Starting, Recording, Paused or Finishing.
 class RunStatusPill extends StatelessWidget {
   const RunStatusPill({super.key, required this.phase});
 
@@ -120,11 +120,11 @@ class RunStatusPill extends StatelessWidget {
       case RunPhase.running:
         return _StatusChip(
           icon: Icons.fiber_manual_record,
-          texts: const [AppStrings.runStatusLive],
+          texts: const [AppStrings.runStatusRecording],
           foreground: AppColors.liveBlue,
           background: AppColors.liveBlue.withValues(alpha: 0.10),
           semanticsLabel: AppStrings.runStatusSemantics(
-            AppStrings.runStatusLive,
+            AppStrings.runStatusRecording,
           ),
         );
       case RunPhase.paused:
