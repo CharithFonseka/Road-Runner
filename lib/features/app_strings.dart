@@ -188,6 +188,25 @@ class AppStrings {
   static const String backToHome = 'Back to Home';
   static const String viewHistory = 'View History';
 
+  // ─── History ────────────────────────────────────────────────────────────────
+
+  static const String historyHeaderSubtitle = 'Your past runs';
+  static const String historyEmptyTitle = 'No runs yet';
+  static const String historyEmptyMessage =
+      'Every adventure starts with a first step. Finish a run to build your '
+      'history.';
+  static String historyDateTime(String date, String time) => '$date · $time';
+  static String historyRunSemantics(
+    String date,
+    String distance,
+    String duration,
+    String pace,
+  ) =>
+      'Run on $date. Distance $distance, duration $duration, '
+      'average pace $pace. Opens run summary.';
+  static String historyRunCount(int count) =>
+      count == 1 ? '1 saved run' : '$count saved runs';
+
   static const String stoppedUnresolvedTitle = 'Run stopped';
   static const String stoppedUnresolvedMessage =
       "Tracking was stopped outside this screen, so the run result isn't "
