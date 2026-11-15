@@ -153,6 +153,41 @@ class AppStrings {
   static const String permissionsFooter =
       'Your location is used only while tracking your run.';
 
+  // ─── Run Summary ────────────────────────────────────────────────────────────
+
+  static const String summaryTitle = 'Run Summary';
+  static const String summaryDateUnavailable = 'Date unavailable';
+  static String summaryDateTime(String date, String time) => '$date · $time';
+
+  static const String statMovingTime = 'Moving time';
+  static const String statAverageSpeed = 'Average speed';
+  static String statSemantics(String label, String value) => '$label: $value';
+
+  static const String routeTitle = 'Route';
+  static const String routeSubtitle = 'Your run path, north up';
+  static const String routeTooShort = 'Route too short to map';
+  static const String routeStart = 'Start';
+  static const String routeFinish = 'Finish';
+  static const String routeSlower = 'Slower';
+  static const String routeFaster = 'Faster';
+  static const String routeNoSpeed = 'Speed colours unavailable for this run';
+  static const String routeSemantics =
+      'Route map of your run, from the start circle to the finish square.';
+  static const String routeSemanticsSpeed =
+      'Colours show speed, from orange for slower to teal for faster.';
+
+  static const String splitsTitle = 'Splits';
+  static String splitKm(int km) => '$km km';
+  static const String splitFastest = 'FASTEST';
+  static String splitSemantics(int km, String pace, bool fastest) =>
+      'Kilometre $km: $pace per kilometre${fastest ? ', fastest split' : ''}';
+  static const String splitsUnderOneKm = 'Run under 1 km';
+  static const String splitsUnderOneKmDetail =
+      'Splits appear once you run a full kilometre.';
+
+  static const String backToHome = 'Back to Home';
+  static const String viewHistory = 'View History';
+
   static const String stoppedUnresolvedTitle = 'Run stopped';
   static const String stoppedUnresolvedMessage =
       "Tracking was stopped outside this screen, so the run result isn't "
