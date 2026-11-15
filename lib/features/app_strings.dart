@@ -316,11 +316,28 @@ class AppStrings {
 
   // ─── History ────────────────────────────────────────────────────────────────
 
-  static const String historyHeaderSubtitle = 'Your past runs';
+  static const String historyHeaderSubtitle = 'Newest first';
+  static const String historyFilterLabel = 'Filter runs';
+  static const String historyAllRuns = 'All Runs';
+  static const String historyThisMonth = 'This Month';
+  static const String historyLastMonth = 'Last Month';
+  static const String historyTotalTime = 'Total time';
+  static const String historyLoading = 'Loading run history';
+  static const String historyErrorTitle = 'Could not load history';
+  static const String historyErrorMessage = 'Please try again in a moment.';
+  static const String historyRetry = 'Try again';
+  static const String historyStartRun = 'Start a run';
   static const String historyEmptyTitle = 'No runs yet';
+  static const String historyEmptyThisMonthTitle = 'No runs this month';
+  static const String historyEmptyLastMonthTitle = 'No runs last month';
   static const String historyEmptyMessage =
       'Every adventure starts with a first step. Finish a run to build your '
       'history.';
+  static const String historyEmptyPeriodMessage =
+      'Every adventure starts with a first step. Start a run to build your '
+      'history.';
+  static String historySummaryRunsDistance(int runs, String distance) =>
+      '$runs ${runs == 1 ? 'run' : 'runs'} · $distance km';
   static String historyDateTime(String date, String time) => '$date · $time';
   static String historyRunSemantics(
     String date,
