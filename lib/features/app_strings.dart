@@ -155,11 +155,6 @@ class AppStrings {
 
   // ─── Permissions ────────────────────────────────────────────────────────────
 
-  static const String permissionsScreenTitle = 'Location Permission';
-  static const String permissionsIntro =
-      'Road Runner needs a few permissions to track your runs accurately, '
-      'even while the screen is locked.';
-
   static const String permissionLocationTitle = 'Precise location';
   static const String permissionLocationReason =
       'Uses GPS to measure your distance, pace and route.';
@@ -180,7 +175,6 @@ class AppStrings {
 
   static const String allowLocationAccess = 'Allow Location Access';
   static const String allowNotifications = 'Allow Notifications';
-  static const String openSettings = 'Open Settings';
   static const String checkAgain = 'Check Again';
   static const String continueAction = 'Continue';
   static const String notNow = 'Not Now';
@@ -214,8 +208,76 @@ class AppStrings {
       "Couldn't open Settings. Open your phone's Settings, then Apps > "
       'Road Runner > Permissions.';
 
+  // Permissions, UI kit Revision 5 scenes.
+  static const String permissionsBack = 'Back';
+  static const String permissionsIntroTitle = 'Before your first run';
+  static const String permissionsIntroSubtitle = 'Two quick permissions';
+  static const String permissionsIntroHeading =
+      'Allow location and notifications';
+  static const String permissionsIntroBody =
+      'Road Runner asks only after you tap Continue. You can change these '
+      'later in Settings.';
+  static const String locationDeniedHeader = 'Location permission';
+  static const String locationDeniedHeading = 'Location permission denied';
+  static const String locationDeniedBody =
+      'Road Runner can’t track runs without precise location. Tap Allow '
+      'Location Access to be asked again.';
+  static const String locationBlockedBody =
+      'Road Runner can’t track runs without precise location. Allow it in '
+      'app settings.';
+  static const String locationBlockedStep1 = 'Open app settings';
+  static const String locationBlockedStep2 = 'Tap Permissions, then Location';
+  static const String locationBlockedStep3 =
+      'Choose “Allow only while using the app” and turn on “Use precise '
+      'location”';
+  static String stepSemantics(int n, String text) => 'Step $n: $text';
+  static const String servicesOffHeader = 'Location services';
+  static const String servicesOffHeading = 'Device location is off';
+  static const String servicesOffBody =
+      'Location services are turned off on this phone, so GPS can’t be used.';
+  static const String servicesOffStepTitle = 'Turn on Location';
+  static const String servicesOffStepDetail =
+      'Use the quick settings tile, or open Settings and turn on Location. '
+      'Then tap Check Again.';
+
   static const String permissionsFooter =
       'Your location is used only while tracking your run.';
+
+  // ─── Settings ───────────────────────────────────────────────────────────────
+
+  static const String settingsTitle = 'Settings';
+  static const String settingsSubtitle = 'Permissions and app info';
+  static const String settingsBack = 'Back';
+  static const String settingsPermissionsSection = 'Permissions';
+  static const String settingsAboutSection = 'About Road Runner';
+  static const String settingsLocationDetail = 'Tracks your route with GPS';
+  static const String settingsNotificationDetail =
+      'Shows your run on the lock screen';
+  static const String settingsServicesTitle = 'Device Location Services';
+  static const String settingsServicesDetail = 'Phone location setting';
+  static const String managePermissions = 'Manage permissions';
+  static const String openAppSettings = 'Open app settings';
+  static const String settingsBlockedHint =
+      'A permission is blocked. Only your phone’s app settings can allow it '
+      'again.';
+  static const String aboutTrackerDetail =
+      'Records distance, pace and route with your phone’s GPS. No internet '
+      'connection needed.';
+  static const String aboutStorageTitle = 'Stored on this phone';
+  static const String aboutStorageDetail =
+      'Your runs are saved locally on this device.';
+  static const String aboutVersionTitle = 'Version';
+  static String settingsRowSemantics(
+    String title,
+    String detail,
+    String status,
+  ) => '$title: $status. $detail';
+
+  /// Permission status chip labels (plus Allowed / Not allowed / Blocked /
+  /// Off above).
+  static const String permissionStatusOn = 'On';
+  static const String permissionStatusChecking = 'Checking';
+  static const String permissionStatusUnavailable = 'Unavailable';
 
   // ─── Run Summary ────────────────────────────────────────────────────────────
 

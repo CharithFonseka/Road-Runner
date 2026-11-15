@@ -1,4 +1,4 @@
-// Road Runner — Permissions screen (explain, then ask).
+// Road Runner — Permissions screen (explain, then ask). UI kit Revision 5.
 // Owner: Tharushi
 // SRS reference: Section 8.4, FR-40, FR-41, NFR-09, NFR-14
 //
@@ -6,8 +6,16 @@
 // system prompt appears. Prompts only open when the user taps the main
 // button. When the app returns from Settings, the state is read again.
 //
+// Three scenes (see PermissionScene), chosen from the controller's step:
+//   * explain        — running figures; explanation and Continue;
+//   * locationDenied — standing figures; ordinary denial (ask again) or
+//                      blocked (numbered steps + Open app settings);
+//   * servicesOff    — standing figures; how to turn Location on, then
+//                      Check Again (the gateway cannot open that setting).
+//
 // Navigation is the parent's job: onContinue when everything is ready,
-// onNotNow when the user leaves without granting.
+// onNotNow when the user leaves without granting, onBack for the header
+// Back button (falls back to onNotNow). No drawer here.
 
 import 'dart:async';
 
@@ -17,10 +25,14 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
-import '../home/widgets/icon_tile.dart';
+import '../home/widgets/sky_header.dart';
+import '../shared/app_navigation_drawer.dart' show DrawerLandscapePainter;
+import '../shared/permission_status_chip.dart';
 import 'permission_gateway.dart';
 import 'permissions_controller.dart';
 import 'widgets/permission_illustration.dart';
+
+export 'widgets/permission_illustration.dart' show PermissionScene;
 
 class PermissionsScreen extends StatefulWidget {
   const PermissionsScreen({
@@ -28,6 +40,7 @@ class PermissionsScreen extends StatefulWidget {
     required this.gateway,
     required this.onContinue,
     required this.onNotNow,
+    this.onBack,
   });
 
   /// Reads and requests permissions. Use [PermissionHandlerGateway] in the
@@ -40,9 +53,31 @@ class PermissionsScreen extends StatefulWidget {
   /// The user chose not to grant permissions now.
   final VoidCallback onNotNow;
 
+  /// Header Back button. Null uses [onNotNow] (leaving without granting).
+  final VoidCallback? onBack;
+
   static const Key primaryButtonKey = Key('permissions.primary');
   static const Key notNowButtonKey = Key('permissions.notNow');
   static const Key messageKey = Key('permissions.message');
+  static const Key backButtonKey = Key('permissions.back');
+  static const Key illustrationKey = Key('permissions.illustration');
+  static const Key headingKey = Key('permissions.heading');
+  static Key stepKey(int n) => Key('permissions.step.$n');
+
+  /// Scene for a controller state.
+  static PermissionScene sceneFor(PermissionStep step, PermissionIssue? issue) {
+    if (step == PermissionStep.locationBlocked) {
+      return PermissionScene.locationDenied;
+    }
+    if (step == PermissionStep.needsLocation &&
+        issue == PermissionIssue.locationDenied) {
+      return PermissionScene.locationDenied;
+    }
+    if (step == PermissionStep.locationServicesOff) {
+      return PermissionScene.servicesOff;
+    }
+    return PermissionScene.explain;
+  }
 
   @override
   State<PermissionsScreen> createState() => _PermissionsScreenState();
@@ -72,80 +107,272 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: ListenableBuilder(
-          listenable: _controller,
-          builder: (context, _) => _buildContent(),
-        ),
+      backgroundColor: AppColors.sand,
+      body: ListenableBuilder(
+        listenable: _controller,
+        builder: (context, _) => _buildContent(context),
       ),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(BuildContext context) {
     final PermissionStep step = _controller.step;
-    final _Action? primary = _primaryAction(step);
-    return SingleChildScrollView(
-      padding: AppSpacing.screenPadding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Semantics(
-            header: true,
-            child: const Text(
-              AppStrings.permissionsScreenTitle,
-              textAlign: TextAlign.center,
-              style: AppTextStyles.heading,
+    final PermissionIssue? issue = _controller.issue;
+    final PermissionScene scene = PermissionsScreen.sceneFor(step, issue);
+    final _Action? primary = _primaryAction(step, issue);
+    final double bottomInset = MediaQuery.paddingOf(context).bottom;
+
+    final (String header, String? subtitle) = switch (scene) {
+      PermissionScene.explain => (
+        AppStrings.permissionsIntroTitle,
+        AppStrings.permissionsIntroSubtitle,
+      ),
+      PermissionScene.locationDenied => (AppStrings.locationDeniedHeader, null),
+      PermissionScene.servicesOff => (AppStrings.servicesOffHeader, null),
+    };
+    final (String heading, String body) = switch (scene) {
+      PermissionScene.explain => (
+        AppStrings.permissionsIntroHeading,
+        AppStrings.permissionsIntroBody,
+      ),
+      PermissionScene.locationDenied => (
+        AppStrings.locationDeniedHeading,
+        step == PermissionStep.locationBlocked
+            ? AppStrings.locationBlockedBody
+            : AppStrings.locationDeniedBody,
+      ),
+      PermissionScene.servicesOff => (
+        AppStrings.servicesOffHeading,
+        AppStrings.servicesOffBody,
+      ),
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CompactSkyHeader(
+          title: header,
+          subtitle: subtitle,
+          landscapeHeight: 40,
+          landscapePainter: const DrawerLandscapePainter(),
+          leading: HeaderIconButton(
+            key: PermissionsScreen.backButtonKey,
+            icon: Icons.arrow_back_rounded,
+            tooltip: AppStrings.permissionsBack,
+            onPressed: widget.onBack ?? widget.onNotNow,
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.medium,
+              AppSpacing.small,
+              AppSpacing.medium,
+              AppSpacing.medium,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PermissionIllustration(
+                  key: PermissionsScreen.illustrationKey,
+                  scene: scene,
+                ),
+                const SizedBox(height: AppSpacing.itemGap),
+                Semantics(
+                  header: true,
+                  child: Text(
+                    heading,
+                    key: PermissionsScreen.headingKey,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      height: 28 / 22,
+                      color: AppColors.canyonBrown,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    body,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 20 / 14,
+                      color: AppColors.canyonBrownMuted,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _card(scene, step),
+                if (_showMessage(step, issue)) ...[
+                  const SizedBox(height: AppSpacing.itemGap),
+                  _StatusMessage(
+                    key: PermissionsScreen.messageKey,
+                    step: step,
+                    issue: issue,
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.medium),
+                const _Footer(),
+              ],
             ),
           ),
-          const SizedBox(height: AppSpacing.itemGap),
-          const PermissionIllustration(),
-          const SizedBox(height: AppSpacing.medium),
-          _ReasonsCard(snapshot: _controller.snapshot),
-          const SizedBox(height: AppSpacing.medium),
-          _StatusMessage(
-            key: PermissionsScreen.messageKey,
-            step: step,
-            issue: _controller.issue,
+        ),
+        // Fixed actions, kept above the Android navigation bar.
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.medium,
+            AppSpacing.itemGap,
+            AppSpacing.medium,
+            AppSpacing.medium + bottomInset,
           ),
-          const SizedBox(height: AppSpacing.medium),
-          if (primary != null)
-            FilledButton.icon(
-              key: PermissionsScreen.primaryButtonKey,
-              onPressed: _controller.busy ? null : primary.onPressed,
-              icon: Icon(primary.icon),
-              label: Text(primary.label),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (primary != null)
+                FilledButton.icon(
+                  key: PermissionsScreen.primaryButtonKey,
+                  onPressed: _controller.busy ? null : primary.onPressed,
+                  icon: Icon(primary.icon),
+                  label: Text(primary.label),
+                ),
+              if (primary != null && step != PermissionStep.ready)
+                const SizedBox(height: AppSpacing.itemGap),
+              if (step != PermissionStep.ready)
+                OutlinedButton(
+                  key: PermissionsScreen.notNowButtonKey,
+                  onPressed: widget.onNotNow,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: AppColors.burntOrangeDeep,
+                      width: 1.5,
+                    ),
+                    backgroundColor: AppColors.sandLight,
+                  ),
+                  child: const Text(AppStrings.notNow),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The status box is shown when it adds something the scene text does
+  /// not already say (progress, success, failures, the notification step).
+  bool _showMessage(PermissionStep step, PermissionIssue? issue) {
+    if (issue == PermissionIssue.requestFailed ||
+        issue == PermissionIssue.settingsFailed ||
+        issue == PermissionIssue.notificationDenied) {
+      return true;
+    }
+    switch (step) {
+      case PermissionStep.checking:
+      case PermissionStep.checkFailed:
+      case PermissionStep.needsNotification:
+      case PermissionStep.notificationBlocked:
+      case PermissionStep.ready:
+        return true;
+      case PermissionStep.needsLocation:
+      case PermissionStep.locationBlocked:
+      case PermissionStep.locationServicesOff:
+        return false;
+    }
+  }
+
+  Widget _card(PermissionScene scene, PermissionStep step) {
+    final PermissionSnapshot? s = _controller.snapshot;
+    switch (scene) {
+      case PermissionScene.explain:
+        return _InfoCard(
+          children: [
+            _ReasonRow(
+              icon: Icons.location_on_outlined,
+              title: AppStrings.permissionLocationTitle,
+              reason: AppStrings.permissionLocationReason,
+              status: s == null
+                  ? null
+                  : PermissionChipStatus.fromAccess(s.location),
             ),
-          if (step != PermissionStep.ready) ...[
-            const SizedBox(height: AppSpacing.itemGap),
-            OutlinedButton(
-              key: PermissionsScreen.notNowButtonKey,
-              onPressed: widget.onNotNow,
-              child: const Text(AppStrings.notNow),
+            _ReasonRow(
+              icon: Icons.notifications_none_rounded,
+              title: AppStrings.permissionNotificationTitle,
+              reason: AppStrings.permissionNotificationReason,
+              status: s == null
+                  ? null
+                  : PermissionChipStatus.fromAccess(s.notification),
+            ),
+            if (s != null && !s.locationServicesEnabled)
+              const _ReasonRow(
+                icon: Icons.location_disabled_rounded,
+                title: AppStrings.locationServicesTitle,
+                reason: AppStrings.locationServicesReason,
+                status: PermissionChipStatus.off,
+              ),
+          ],
+        );
+      case PermissionScene.locationDenied:
+        if (step == PermissionStep.locationBlocked) {
+          return const _InfoCard(
+            children: [
+              _StepRow(n: 1, text: AppStrings.locationBlockedStep1),
+              _StepRow(n: 2, text: AppStrings.locationBlockedStep2),
+              _StepRow(n: 3, text: AppStrings.locationBlockedStep3),
+            ],
+          );
+        }
+        return const _InfoCard(
+          children: [
+            _ReasonRow(
+              icon: Icons.location_on_outlined,
+              title: AppStrings.permissionLocationTitle,
+              reason: AppStrings.permissionLocationReason,
+              status: PermissionChipStatus.notAllowed,
             ),
           ],
-          const SizedBox(height: AppSpacing.medium),
-          const _Footer(),
-        ],
-      ),
-    );
+        );
+      case PermissionScene.servicesOff:
+        return const _InfoCard(
+          children: [
+            _ReasonRow(
+              icon: Icons.location_off_outlined,
+              title: AppStrings.servicesOffStepTitle,
+              reason: AppStrings.servicesOffStepDetail,
+              status: PermissionChipStatus.off,
+            ),
+          ],
+        );
+    }
   }
 
-  _Action? _primaryAction(PermissionStep step) {
+  _Action? _primaryAction(PermissionStep step, PermissionIssue? issue) {
     switch (step) {
       case PermissionStep.checking:
         return null;
       case PermissionStep.checkFailed:
+      case PermissionStep.locationServicesOff:
         return _Action(
           AppStrings.checkAgain,
-          Icons.refresh,
+          Icons.refresh_rounded,
           _controller.refresh,
         );
       case PermissionStep.needsLocation:
-        return _Action(
-          AppStrings.allowLocationAccess,
-          Icons.location_on_outlined,
-          _controller.requestAccess,
-        );
+        // First time: "Continue" after the explanation. After an ordinary
+        // denial: ask again, by name.
+        return issue == PermissionIssue.locationDenied
+            ? _Action(
+                AppStrings.allowLocationAccess,
+                Icons.location_on_outlined,
+                _controller.requestAccess,
+              )
+            : _Action(
+                AppStrings.continueAction,
+                Icons.check_rounded,
+                _controller.requestAccess,
+              );
       case PermissionStep.needsNotification:
         return _Action(
           AppStrings.allowNotifications,
@@ -155,20 +382,14 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
       case PermissionStep.locationBlocked:
       case PermissionStep.notificationBlocked:
         return _Action(
-          AppStrings.openSettings,
-          Icons.settings_outlined,
+          AppStrings.openAppSettings,
+          Icons.open_in_new_rounded,
           _controller.openSettings,
-        );
-      case PermissionStep.locationServicesOff:
-        return _Action(
-          AppStrings.checkAgain,
-          Icons.refresh,
-          _controller.refresh,
         );
       case PermissionStep.ready:
         return _Action(
           AppStrings.continueAction,
-          Icons.arrow_forward,
+          Icons.arrow_forward_rounded,
           widget.onContinue,
         );
     }
@@ -183,46 +404,25 @@ class _Action {
   final VoidCallback onPressed;
 }
 
-// ─── Reasons card ───────────────────────────────────────────────────────────
+// ─── Card rows ──────────────────────────────────────────────────────────────
 
-class _ReasonsCard extends StatelessWidget {
-  const _ReasonsCard({required this.snapshot});
+class _InfoCard extends StatelessWidget {
+  const _InfoCard({required this.children});
 
-  final PermissionSnapshot? snapshot;
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    final PermissionSnapshot? s = snapshot;
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(AppStrings.permissionsIntro, style: AppTextStyles.body),
-            const SizedBox(height: AppSpacing.itemGap),
-            _ReasonRow(
-              icon: Icons.my_location,
-              title: AppStrings.permissionLocationTitle,
-              reason: AppStrings.permissionLocationReason,
-              status: s == null ? null : _PermissionStatus.of(s.location),
-            ),
-            const SizedBox(height: AppSpacing.itemGap),
-            _ReasonRow(
-              icon: Icons.notifications_none,
-              title: AppStrings.permissionNotificationTitle,
-              reason: AppStrings.permissionNotificationReason,
-              status: s == null ? null : _PermissionStatus.of(s.notification),
-            ),
-            if (s != null && !s.locationServicesEnabled) ...[
-              const SizedBox(height: AppSpacing.itemGap),
-              const _ReasonRow(
-                icon: Icons.location_disabled,
-                title: AppStrings.locationServicesTitle,
-                reason: AppStrings.locationServicesReason,
-                status: _PermissionStatus.off,
-              ),
+            for (int i = 0; i < children.length; i++) ...[
+              if (i > 0) const Divider(height: 1),
+              children[i],
             ],
           ],
         ),
@@ -231,39 +431,40 @@ class _ReasonsCard extends StatelessWidget {
   }
 }
 
-/// Row status, shown with an icon AND a word (never colour alone).
-enum _PermissionStatus {
-  allowed(
-    AppStrings.permissionStatusAllowed,
-    Icons.check_circle,
-    AppColors.tealDeep,
-  ),
-  notAllowed(
-    AppStrings.permissionStatusNotAllowed,
-    Icons.radio_button_unchecked,
-    AppColors.canyonBrownMuted,
-  ),
-  blocked(AppStrings.permissionStatusBlocked, Icons.block, AppColors.error),
-  off(AppStrings.permissionStatusOff, Icons.location_off, AppColors.error);
+class _Tile extends StatelessWidget {
+  const _Tile({this.icon, this.number});
 
-  const _PermissionStatus(this.label, this.icon, this.color);
+  final IconData? icon;
+  final int? number;
 
-  final String label;
-  final IconData icon;
-  final Color color;
-
-  static _PermissionStatus of(PermissionAccess access) {
-    switch (access) {
-      case PermissionAccess.granted:
-        return allowed;
-      case PermissionAccess.denied:
-        return notAllowed;
-      case PermissionAccess.permanentlyDenied:
-        return blocked;
-    }
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(
+          color: AppColors.iconTile,
+          borderRadius: BorderRadius.all(Radius.circular(10)),
+        ),
+        child: number != null
+            ? Text(
+                '$number',
+                // Text on the tile must be canyonBrownDeep (9.88:1).
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.canyonBrownDeep,
+                ),
+              )
+            : Icon(icon, size: 20, color: AppColors.burntOrangeDeep),
+      ),
+    );
   }
 }
 
+/// Icon tile, title, reason and (when known) a status chip.
 class _ReasonRow extends StatelessWidget {
   const _ReasonRow({
     required this.icon,
@@ -275,58 +476,97 @@ class _ReasonRow extends StatelessWidget {
   final IconData icon;
   final String title;
   final String reason;
-  final _PermissionStatus? status;
+  final PermissionChipStatus? status;
 
   @override
   Widget build(BuildContext context) {
-    final _PermissionStatus? st = status;
-    return MergeSemantics(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          IconTile(icon: icon),
-          const SizedBox(width: AppSpacing.itemGap),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: AppSpacing.small,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      title,
-                      style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w700,
+    final PermissionChipStatus? st = status;
+    return Semantics(
+      container: true,
+      label: st == null
+          ? '$title. $reason'
+          : '${AppStrings.permissionRowSemantics(title, st.label)}. $reason',
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _Tile(icon: icon),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: AppSpacing.small,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          height: 1.3,
+                          color: AppColors.canyonBrown,
+                        ),
                       ),
+                      if (st != null) PermissionStatusChip(status: st),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    reason,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 18 / 13,
+                      color: AppColors.canyonBrownMuted,
                     ),
-                    if (st != null)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ExcludeSemantics(
-                            child: Icon(st.icon, size: 16, color: st.color),
-                          ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              st.label,
-                              style: AppTextStyles.caption.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: st.color,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-                Text(reason, style: AppTextStyles.caption),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Numbered instruction (blocked location).
+class _StepRow extends StatelessWidget {
+  const _StepRow({required this.n, required this.text});
+
+  final int n;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      key: PermissionsScreen.stepKey(n),
+      container: true,
+      label: AppStrings.stepSemantics(n, text),
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            _Tile(number: n),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  height: 20 / 15,
+                  color: AppColors.canyonBrown,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -383,6 +623,7 @@ class _StatusMessage extends StatelessWidget {
               child: Text(
                 text,
                 style: AppTextStyles.body.copyWith(
+                  fontSize: 15,
                   color: AppColors.canyonBrownDeep,
                 ),
               ),

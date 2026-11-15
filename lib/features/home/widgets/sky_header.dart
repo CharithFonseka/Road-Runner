@@ -238,22 +238,32 @@ class CompactSkyHeader extends StatelessWidget {
   const CompactSkyHeader({
     super.key,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     this.leading,
     this.trailing,
     this.showLandscape = true,
+    this.landscapeHeight = compactLandscapeHeight,
+    this.landscapePainter = const CompactLandscapePainter(),
   });
 
   final String title;
-  final String subtitle;
+
+  /// Optional second line under the title.
+  final String? subtitle;
   final Widget? leading;
   final Widget? trailing;
 
   /// False leaves out the desert strip (very short screens).
   final bool showLandscape;
 
+  /// Strip height: 72 (compact, Home) or 40 (slim, inner screens).
+  final double landscapeHeight;
+
+  /// Strip artwork; the slim variant uses DrawerLandscapePainter.
+  final CustomPainter landscapePainter;
+
   /// Height of the compact landscape strip (UI kit "compact" variant).
-  static const double landscapeHeight = 72;
+  static const double compactLandscapeHeight = 72;
 
   @override
   Widget build(BuildContext context) {
@@ -301,18 +311,20 @@ class CompactSkyHeader extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          height: 1.3,
-                          color: AppColors.canyonBrown,
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            height: 1.3,
+                            color: AppColors.canyonBrown,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -324,11 +336,11 @@ class CompactSkyHeader extends StatelessWidget {
             ),
           ),
           if (showLandscape)
-            const ExcludeSemantics(
+            ExcludeSemantics(
               child: SizedBox(
                 height: landscapeHeight,
                 width: double.infinity,
-                child: CustomPaint(painter: CompactLandscapePainter()),
+                child: CustomPaint(painter: landscapePainter),
               ),
             )
           else

@@ -12,6 +12,9 @@ Flutter screens. Each sub-folder is one feature.
 | `summary/` | Post-run summary — stats, path painter, splits | FR-50, 51, 52 |
 | `history/` | History list + detail (reuses Summary) | FR-61, 62 |
 | `permissions/` | Explain-then-ask permission flow | FR-40, 41 |
+| `settings/` | Settings — permission status and About (see `settings/README.md`) | FR-40, 41 |
+| `splash/` | Start-up splash (see `splash/README.md`) | FR-70, 71 |
+| `shared/` | Navigation drawer, permission status chip | — |
 
 ## Rules
 
