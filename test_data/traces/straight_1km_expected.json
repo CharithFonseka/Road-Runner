@@ -1,0 +1,16 @@
+{
+  "distance_m": 1002.5,
+  "accepted_points": 301,
+  "splits": [
+    {
+      "km_index": 1,
+      "duration_ms": 299252,
+      "is_partial": false
+    },
+    {
+      "km_index": 2,
+      "duration_ms": 748,
+      "is_partial": true
+    }
+  ]
+}
