@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Split;
 
 import 'bridge/native_tracking_bridge.dart';
 import 'bridge/tracking_bridge.dart';
