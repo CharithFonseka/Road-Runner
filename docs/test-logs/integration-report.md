@@ -19,8 +19,8 @@ SRS reference: Section 7, Section 8.1, Section 9.1 – 9.2
 - [x] `bash scripts/check_contract.sh` passes (**64/64 constants match**)
 - [x] `AndroidManifest.xml` declares only the 6 approved SRS §3.3 permissions (`ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `POST_NOTIFICATIONS`, `WAKE_LOCK`) and `android:allowBackup="false"`
 - [x] `pubspec.yaml` contains only SRS §3.1 approved packages (`flutter_riverpod`, `sqflite`, `go_router`, `permission_handler`, `cupertino_icons`)
-- [ ] ⚠️ **Action required on GitHub:** Workflow file exists at `github/workflows/ci.yml` (commit `87929ab`) without the leading dot; rename/move to `.github/workflows/ci.yml` so GitHub Actions triggers on PRs
-- [ ] Run `flutter pub get`, `flutter analyze`, `flutter test`, and `./gradlew testDebugUnitTest` on a machine with Flutter SDK installed (or once `.github/workflows/ci.yml` is active)
+- [x] `.github/workflows/ci.yml` active on GitHub Actions
+- [ ] Run `flutter pub get`, `flutter analyze`, `flutter test`, and `./gradlew testDebugUnitTest` on a machine with Flutter SDK installed (or via `.github/workflows/ci.yml`)
 
 ---
 
@@ -47,7 +47,7 @@ SRS reference: Section 7, Section 8.1, Section 9.1 – 9.2
 - [ ] Real run started from app -> `.jsonl` file created in `filesDir/runs/<runId>.jsonl` -> 1 s `snapshot` events reach Flutter
 
 ### Build Notes & Blockers
-- _Notes:_
+- _Notes:_ Code integration completed in `lib/main.dart` (Home, Permissions, ActiveRun, Summary, History, crash recovery, startup resync, `AppTheme.light()`, `SqliteRunRepository`, `NativeTrackingBridge`, `computeSplits`/`formatDistance`/`formatPace`) and `MainActivity.kt` (`TrackingBridgePlugin` registration + `ServiceDelegate` + `TrackingApi.events` forwarding). Pending CI/device verification (Flutter SDK not installed on local machine).
 
 ---
 
@@ -70,7 +70,7 @@ SRS reference: Section 7, Section 8.1, Section 9.1 – 9.2
 - [ ] Run persists to SQLite (`sqflite`) across app restart and opens cleanly from History (`FR-60`–`FR-62`)
 
 ### Build Notes & Blockers
-- _Notes:_
+- _Notes:_ Code integration completed in `lib/main.dart` (Home, Permissions, ActiveRun, Summary, History, crash recovery, startup resync, `AppTheme.light()`, `SqliteRunRepository`, `NativeTrackingBridge`, `computeSplits`/`formatDistance`/`formatPace`) and `MainActivity.kt` (`TrackingBridgePlugin` registration + `ServiceDelegate` + `TrackingApi.events` forwarding). Pending CI/device verification (Flutter SDK not installed on local machine).
 
 ---
 
