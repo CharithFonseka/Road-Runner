@@ -33,4 +33,64 @@ class AppStrings {
   static const String permissionsSubtitle = 'Allow location to track your runs';
 
   static const String homeFooter = 'Lace up and hit the road.';
+
+  // ─── Active Run ─────────────────────────────────────────────────────────────
+
+  static const String runTitle = 'Run';
+
+  static const String runStatusStarting = 'Starting';
+  static const String runStatusLive = 'Live';
+  static const String runStatusPaused = 'Paused';
+  static const String runStatusFinishing = 'Finishing';
+  static String runStatusSemantics(String status) => 'Run status: $status';
+
+  /// Badge next to the elapsed time while paused.
+  static const String pausedBadge = 'PAUSED';
+
+  static const String statElapsedTime = 'Elapsed time';
+  static const String statAveragePaceLong = 'Average pace';
+  static const String statSpeed = 'Speed';
+
+  static const String unitKm = 'km';
+  static const String unitKmPerHour = 'km/h';
+  static const String unitPerKm = '/km';
+
+  static const String gpsLabel = 'GPS';
+  static const String gpsSearching = 'Searching';
+  static const String gpsWeak = 'Weak';
+  static const String gpsGood = 'Good';
+  static String gpsSemantics(String quality) => 'GPS signal: $quality';
+
+  static const String pauseRun = 'Pause';
+  static const String resumeRun = 'Resume';
+  static const String stopRun = 'Stop';
+
+  static const String stopDialogTitle = 'Finish your run?';
+  static const String stopDialogMessage =
+      'Tracking will stop and your run summary will open next.';
+  static const String finishRun = 'Finish Run';
+  static const String continueRunning = 'Continue Running';
+
+  static const String errorLocationOff =
+      'Location is turned off. Turn it on to track your run.';
+  static const String errorPermissionDenied =
+      'Road Runner needs location permission to track your run.';
+  static const String errorServiceFailed =
+      'Tracking is not responding. Please try again.';
+  static const String errorPauseFailed =
+      "Couldn't pause your run. Please try again.";
+  static const String errorResumeFailed =
+      "Couldn't resume your run. Please try again.";
+  static const String errorStopFailed =
+      "Couldn't finish your run. It is still recording. Please try again.";
+
+  static const String startFailedTitle = "Couldn't start your run";
+  static const String tryAgain = 'Try Again';
+  static const String exitRun = 'Exit';
+  static const String dismiss = 'Dismiss';
+
+  static const String stoppedUnresolvedTitle = 'Run stopped';
+  static const String stoppedUnresolvedMessage =
+      "Tracking was stopped outside this screen, so the run result isn't "
+      'available here yet.';
 }
