@@ -11,12 +11,14 @@ import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/features/app_strings.dart';
 import 'package:road_runner/features/permissions/permission_gateway.dart';
 import 'package:road_runner/features/permissions/permissions_screen.dart';
+import 'package:road_runner/features/permissions/widgets/permission_illustration.dart';
 
 import 'fake_permission_gateway.dart';
 
 class _Calls {
   int continued = 0;
   int notNow = 0;
+  int back = 0;
 }
 
 Future<_Calls> _pump(
@@ -24,6 +26,7 @@ Future<_Calls> _pump(
   FakePermissionGateway gateway, {
   Size size = const Size(360, 800),
   double textScale = 1.0,
+  bool withBack = false,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
@@ -40,6 +43,7 @@ Future<_Calls> _pump(
           gateway: gateway,
           onContinue: () => calls.continued++,
           onNotNow: () => calls.notNow++,
+          onBack: withBack ? () => calls.back++ : null,
         ),
       ),
     ),
@@ -71,8 +75,9 @@ void main() {
       final FakePermissionGateway gateway = FakePermissionGateway();
       await _pump(tester, gateway);
 
-      expect(find.text(AppStrings.permissionsScreenTitle), findsOneWidget);
-      expect(find.text(AppStrings.permissionsIntro), findsOneWidget);
+      expect(find.text(AppStrings.permissionsIntroTitle), findsOneWidget);
+      expect(find.text(AppStrings.permissionsIntroHeading), findsOneWidget);
+      expect(find.text(AppStrings.permissionsIntroBody), findsOneWidget);
       expect(find.text(AppStrings.permissionLocationTitle), findsOneWidget);
       expect(find.text(AppStrings.permissionNotificationTitle), findsOneWidget);
       expect(
@@ -80,7 +85,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text(AppStrings.permissionsFooter), findsOneWidget);
-      _expectPrimary(AppStrings.allowLocationAccess);
+      _expectPrimary(AppStrings.continueAction);
       expect(find.text(AppStrings.notNow), findsOneWidget);
 
       // Opening the screen reads state but never shows a system prompt.
@@ -171,8 +176,12 @@ void main() {
       await _pump(tester, gateway);
       await _tapPrimary(tester);
 
-      expect(find.text(AppStrings.locationDeniedMessage), findsOneWidget);
+      expect(find.text(AppStrings.locationDeniedHeading), findsOneWidget);
+      expect(find.text(AppStrings.locationDeniedBody), findsOneWidget);
       expect(find.text(AppStrings.permissionStatusNotAllowed), findsWidgets);
+      // Ordinary denial: no "blocked" steps, no app-settings detour.
+      expect(find.byKey(PermissionsScreen.stepKey(1)), findsNothing);
+      expect(gateway.settingsCalls, 0);
       _expectPrimary(AppStrings.allowLocationAccess);
       expect(gateway.notificationRequests, 0);
 
@@ -200,9 +209,22 @@ void main() {
         location: PermissionAccess.permanentlyDenied,
       );
       await _pump(tester, gateway);
-      expect(find.text(AppStrings.locationBlockedMessage), findsOneWidget);
-      expect(find.text(AppStrings.permissionStatusBlocked), findsOneWidget);
-      _expectPrimary(AppStrings.openSettings);
+      expect(find.text(AppStrings.locationDeniedHeading), findsOneWidget);
+      expect(find.text(AppStrings.locationBlockedBody), findsOneWidget);
+      for (final (int n, String step) in [
+        (1, AppStrings.locationBlockedStep1),
+        (2, AppStrings.locationBlockedStep2),
+        (3, AppStrings.locationBlockedStep3),
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byKey(PermissionsScreen.stepKey(n)),
+            matching: find.text(step),
+          ),
+          findsOneWidget,
+        );
+      }
+      _expectPrimary(AppStrings.openAppSettings);
 
       await _tapPrimary(tester);
       expect(gateway.settingsCalls, 1);
@@ -216,8 +238,8 @@ void main() {
         ..locationAnswer = PermissionAccess.permanentlyDenied;
       await _pump(tester, gateway);
       await _tapPrimary(tester);
-      expect(find.text(AppStrings.locationBlockedMessage), findsOneWidget);
-      _expectPrimary(AppStrings.openSettings);
+      expect(find.text(AppStrings.locationBlockedBody), findsOneWidget);
+      _expectPrimary(AppStrings.openAppSettings);
     });
 
     testWidgets('notifications blocked offers Open Settings', (tester) async {
@@ -227,7 +249,7 @@ void main() {
       );
       await _pump(tester, gateway);
       expect(find.text(AppStrings.notificationBlockedMessage), findsOneWidget);
-      _expectPrimary(AppStrings.openSettings);
+      _expectPrimary(AppStrings.openAppSettings);
     });
 
     testWidgets('returning from Settings re-reads the state', (tester) async {
@@ -251,7 +273,8 @@ void main() {
       }
       await tester.pump();
 
-      expect(find.text(AppStrings.locationBlockedMessage), findsNothing);
+      expect(find.text(AppStrings.locationDeniedHeading), findsNothing);
+      expect(find.text(AppStrings.permissionsIntroHeading), findsOneWidget);
       _expectPrimary(AppStrings.allowNotifications);
     });
   });
@@ -267,11 +290,14 @@ void main() {
       );
       await _pump(tester, gateway);
 
-      expect(find.text(AppStrings.locationServicesOffMessage), findsOneWidget);
-      expect(find.text(AppStrings.locationServicesTitle), findsOneWidget);
+      expect(find.text(AppStrings.servicesOffHeader), findsOneWidget);
+      expect(find.text(AppStrings.servicesOffHeading), findsOneWidget);
+      expect(find.text(AppStrings.servicesOffBody), findsOneWidget);
+      expect(find.text(AppStrings.servicesOffStepTitle), findsOneWidget);
       expect(find.text(AppStrings.permissionStatusOff), findsOneWidget);
-      expect(find.text(AppStrings.locationBlockedMessage), findsNothing);
-      expect(find.text(AppStrings.locationDeniedMessage), findsNothing);
+      expect(find.text(AppStrings.locationDeniedHeading), findsNothing);
+      // No invented "open Location settings" action: the gateway cannot.
+      expect(find.text(AppStrings.openAppSettings), findsNothing);
       _expectPrimary(AppStrings.checkAgain);
 
       gateway.servicesEnabled = true;
@@ -312,7 +338,7 @@ void main() {
 
       gateway.checkError = null;
       await _tapPrimary(tester);
-      _expectPrimary(AppStrings.allowLocationAccess);
+      _expectPrimary(AppStrings.continueAction);
     });
 
     testWidgets('request failure shows a message and allows retry', (
@@ -323,7 +349,7 @@ void main() {
       await _pump(tester, gateway);
       await _tapPrimary(tester);
       expect(find.text(AppStrings.permissionRequestFailed), findsOneWidget);
-      _expectPrimary(AppStrings.allowLocationAccess);
+      _expectPrimary(AppStrings.continueAction);
     });
 
     testWidgets('Settings that cannot open give manual instructions', (
@@ -345,7 +371,11 @@ void main() {
       final SemanticsHandle handle = tester.ensureSemantics();
       await _pump(tester, FakePermissionGateway());
       expect(
-        tester.getSemantics(find.text(AppStrings.permissionsScreenTitle)),
+        tester.getSemantics(find.text(AppStrings.permissionsIntroTitle)),
+        containsSemantics(isHeader: true),
+      );
+      expect(
+        tester.getSemantics(find.text(AppStrings.permissionsIntroHeading)),
         containsSemantics(isHeader: true),
       );
       final String row = tester
@@ -363,7 +393,7 @@ void main() {
       expect(
         tester.getSemantics(_primary),
         containsSemantics(
-          label: AppStrings.allowLocationAccess,
+          label: AppStrings.continueAction,
           isButton: true,
           isEnabled: true,
           hasTapAction: true,
@@ -385,11 +415,11 @@ void main() {
       for (final Key key in [
         PermissionsScreen.primaryButtonKey,
         PermissionsScreen.notNowButtonKey,
+        PermissionsScreen.backButtonKey,
       ]) {
-        expect(
-          tester.getSize(find.byKey(key)).height,
-          greaterThanOrEqualTo(AppSpacing.minTouchTarget),
-        );
+        final Size size = tester.getSize(find.byKey(key));
+        expect(size.height, greaterThanOrEqualTo(AppSpacing.minTouchTarget));
+        expect(size.width, greaterThanOrEqualTo(AppSpacing.minTouchTarget));
       }
     });
   });
@@ -398,12 +428,18 @@ void main() {
     final Map<String, (Size, double)> sizes = {
       '360x800': (const Size(360, 800), 1.0),
       '320x568': (const Size(320, 568), 1.0),
+      '412x915 (Galaxy A33)': (const Size(412, 915), 1.0),
+      '360x800 at 1.3x text': (const Size(360, 800), 1.3),
       '320x568 at 1.3x text': (const Size(320, 568), 1.3),
     };
     final Map<String, FakePermissionGateway Function()> states = {
       'initial': FakePermissionGateway.new,
       'blocked': () =>
           FakePermissionGateway(location: PermissionAccess.permanentlyDenied),
+      'notifications blocked': () => FakePermissionGateway(
+        location: PermissionAccess.granted,
+        notification: PermissionAccess.permanentlyDenied,
+      ),
       'services off': () => FakePermissionGateway(
         location: PermissionAccess.granted,
         servicesEnabled: false,
@@ -424,8 +460,23 @@ void main() {
             textScale: s.value.$2,
           );
           expect(tester.takeException(), isNull);
-          await tester.ensureVisible(_primary);
+          // Actions are fixed at the bottom: visible without scrolling.
           expect(_primary.hitTestable(), findsOneWidget);
+          final Size screen = s.value.$1;
+          expect(
+            tester.getRect(_primary).bottom,
+            lessThanOrEqualTo(screen.height - AppSpacing.medium + 0.5),
+          );
+          // Both runner figures fully on screen.
+          for (final Key k in [
+            PermissionIllustration.femaleKey,
+            PermissionIllustration.maleKey,
+          ]) {
+            final Rect r = tester.getRect(find.byKey(k));
+            expect(r.left, greaterThanOrEqualTo(0));
+            expect(r.right, lessThanOrEqualTo(screen.width));
+            expect(r.height, greaterThan(0));
+          }
         });
       }
     }

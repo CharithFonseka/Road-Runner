@@ -1,157 +1,223 @@
-// Road Runner — Home screen.
+// Road Runner — Home screen (UI kit Revision 5).
 // Owner: Tharushi
-// SRS reference: Section 8.4, FR-01 (trigger), FR-71, NFR-09, NFR-14
+// SRS reference: Section 8.4, FR-01 (trigger), FR-61, FR-71, NFR-09, NFR-14
 //
-// Home only displays data and reports taps. It never starts a run or talks
-// to TrackingBridge / repositories directly: the app flow (owned by the
-// integration shell) supplies [lastRun] and handles the callbacks.
+// Layout, top to bottom:
+//   * compact sky header: menu button (opens the navigation drawer), name,
+//     tagline and a Settings shortcut, all 48dp targets;
+//   * "Recent runs" card filling the free space, with its own scrolling
+//     list and loading, empty and error states;
+//   * a fixed 72dp Slide to Start control above the system navigation bar.
+//
+// Home only displays data and reports actions. It never starts a run, reads
+// the repository or talks to TrackingBridge: the app shell supplies the runs
+// and handles every callback (permissions, navigation, retry).
 
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
+import '../history/history_run.dart';
+import '../history/history_screen.dart';
+import '../run/live_run_formatter.dart';
+import '../shared/app_navigation_drawer.dart';
 import 'last_run_summary.dart';
-import 'widgets/last_run_card.dart';
-import 'widgets/nav_row.dart';
+import 'widgets/recent_runs_card.dart';
 import 'widgets/sky_header.dart';
+import 'widgets/slide_to_start.dart';
 
-/// The first screen: Start Run, the last run, and links to History and
-/// Permissions.
+export 'widgets/recent_runs_card.dart' show RecentRunsStatus;
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
+    @Deprecated('Pass recentRuns. Kept so older callers still compile.')
     this.lastRun,
     required this.onStartRun,
     required this.onOpenHistory,
     required this.onOpenPermissions,
+    this.recentRuns = const <HistoryRun>[],
+    this.recentRunsStatus = RecentRunsStatus.ready,
+    this.onRetry,
+    this.onRunSelected,
+    this.onOpenSettings,
+    this.isStartingRun = false,
+    this.startRunEnabled = true,
+    this.formatter = const LiveRunFormatter(),
   });
 
-  /// Most recent saved run, already formatted. Null shows the empty state.
+  /// Legacy single "last run" input from before Revision 5. Shown as the
+  /// only Recent runs row when [recentRuns] is empty; tapping it opens
+  /// History. New code should pass [recentRuns].
+  @Deprecated('Pass recentRuns. Kept so older callers still compile.')
   final LastRunSummary? lastRun;
 
-  /// Called when the user taps Start Run.
+  /// Called once each time the user completes Slide to Start (drag, hold,
+  /// screen reader or keyboard). The parent checks permissions and opens
+  /// the Run screen; there is no extra confirmation on Home.
   final VoidCallback onStartRun;
 
-  /// Called when the user taps the History row.
+  /// "View all", the drawer's History entry, and run rows when
+  /// [onRunSelected] is not supplied.
   final VoidCallback onOpenHistory;
 
-  /// Called when the user taps the Permissions row.
+  /// Kept for compatibility. Home has no Permissions row any more
+  /// (Permissions is reached from Settings or when starting a run). Used
+  /// for the Settings shortcut and the drawer's Settings entry until the
+  /// shell supplies [onOpenSettings].
   final VoidCallback onOpenPermissions;
 
-  /// Key for the Start Run button (used by tests and integration).
-  static const Key startRunButtonKey = Key('home_start_run_button');
+  /// Saved runs in any order; shown newest first. The parent decides how
+  /// many are "recent" (for example the latest 10).
+  final List<HistoryRun> recentRuns;
 
-  /// Font size of the hero button label (UI kit: 22 bold).
-  static const double _heroLabelSize = 22;
+  /// Loading, ready or error. Set [RecentRunsStatus.loading] only for
+  /// reads that are actually slow; never add a delay to show it.
+  final RecentRunsStatus recentRunsStatus;
+
+  /// "Try again" in the error state. Null hides the button.
+  final VoidCallback? onRetry;
+
+  /// Called with a tapped run's ID (the parent opens Summary).
+  final ValueChanged<String>? onRunSelected;
+
+  /// Settings shortcut and drawer entry. Falls back to [onOpenPermissions].
+  final VoidCallback? onOpenSettings;
+
+  /// The parent's "starting a run" flag (for example while it checks
+  /// permissions). True shows "Starting run"; turning it back to false
+  /// re-arms the slider.
+  final bool isStartingRun;
+
+  /// False disables Slide to Start.
+  final bool startRunEnabled;
+
+  /// Display-only conversions. Swap for the stats formatters when merged.
+  final LiveRunFormatter formatter;
+
+  /// Key of the Slide to Start control (was the Start Run button).
+  static const Key startRunButtonKey = Key('home_start_run_button');
+  static const Key menuButtonKey = Key('home.menu');
+  static const Key settingsButtonKey = Key('home.settings');
+  static const Key recentRunsKey = Key('home.recentRuns');
+
+  /// Below this height (phone in landscape) the desert strip is left out
+  /// so the Recent runs card keeps usable space.
+  static const double compactHeightBreakpoint = 480;
+
+  VoidCallback get _openSettings => onOpenSettings ?? onOpenPermissions;
+
+  List<RecentRunRow> _rows() {
+    if (recentRuns.isNotEmpty) {
+      return [
+        for (final HistoryRun run in HistoryScreen.newestFirst(recentRuns))
+          RecentRunRow(
+            runId: run.runId,
+            dateLabel: AppStrings.runDate(run.startedAt.toLocal()),
+            distance:
+                '${formatter.distanceKm(run.distanceM)} ${AppStrings.unitKm}',
+            duration: formatter.elapsed(run.movingMs),
+            pace:
+                '${formatter.pace(run.averagePaceSecPerKm)}'
+                '${AppStrings.unitPerKm}',
+          ),
+      ];
+    }
+    // ignore: deprecated_member_use_from_same_package
+    final LastRunSummary? legacy = lastRun;
+    if (legacy != null) {
+      return [
+        RecentRunRow(
+          dateLabel: legacy.dateLabel,
+          distance: legacy.distance,
+          duration: legacy.duration,
+          pace: legacy.averagePace,
+        ),
+      ];
+    }
+    return const [];
+  }
+
+  void _onRowSelected(RecentRunRow row) {
+    final String? id = row.runId;
+    final ValueChanged<String>? select = onRunSelected;
+    if (id != null && select != null) {
+      select(id);
+    } else {
+      onOpenHistory();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final double bottomInset = MediaQuery.paddingOf(context).bottom;
+    final bool tall =
+        MediaQuery.sizeOf(context).height >= compactHeightBreakpoint;
     return Scaffold(
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SkyHeader(
+      backgroundColor: AppColors.sand,
+      drawer: AppNavigationDrawer(
+        selected: AppDestination.home,
+        onOpenHome: () {}, // Home is the current page: the drawer only closes.
+        onOpenHistory: onOpenHistory,
+        onOpenSettings: _openSettings,
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Builder(
+            builder: (context) => CompactSkyHeader(
               title: AppStrings.appName,
               subtitle: AppStrings.homeTagline,
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.medium,
-                AppSpacing.medium,
-                AppSpacing.medium,
-                AppSpacing.large + MediaQuery.paddingOf(context).bottom,
+              showLandscape: tall,
+              leading: HeaderIconButton(
+                key: menuButtonKey,
+                icon: Icons.menu_rounded,
+                tooltip: AppStrings.homeOpenMenu,
+                onPressed: () => Scaffold.of(context).openDrawer(),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _startRunButton(),
-                  const SizedBox(height: AppSpacing.medium),
-                  LastRunCard(lastRun: lastRun),
-                  const SizedBox(height: AppSpacing.medium),
-                  Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Column(
-                        children: [
-                          NavRow(
-                            icon: Icons.bar_chart_rounded,
-                            title: AppStrings.historyTitle,
-                            subtitle: AppStrings.historySubtitle,
-                            onTap: onOpenHistory,
-                          ),
-                          const Divider(
-                            indent: AppSpacing.medium,
-                            endIndent: AppSpacing.medium,
-                          ),
-                          NavRow(
-                            icon: Icons.location_on_outlined,
-                            title: AppStrings.permissionsTitle,
-                            subtitle: AppStrings.permissionsSubtitle,
-                            onTap: onOpenPermissions,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.large),
-                  const _Footer(),
-                ],
+              trailing: HeaderIconButton(
+                key: settingsButtonKey,
+                icon: Icons.settings_outlined,
+                tooltip: AppStrings.homeSettings,
+                onPressed: _openSettings,
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _startRunButton() {
-    return SizedBox(
-      height: AppSpacing.heroButtonHeight,
-      child: FilledButton.icon(
-        key: startRunButtonKey,
-        onPressed: onStartRun,
-        style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(AppSpacing.heroButtonHeight),
-          textStyle: AppTextStyles.button.copyWith(fontSize: _heroLabelSize),
-          elevation: 4,
-          shadowColor: AppColors.burntOrangeDeep.withValues(alpha: 0.5),
-        ),
-        icon: const Icon(Icons.directions_run_rounded, size: 26),
-        label: const Text(AppStrings.startRun),
-      ),
-    );
-  }
-}
-
-class _Footer extends StatelessWidget {
-  const _Footer();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const ExcludeSemantics(
-          child: Icon(
-            Icons.landscape_outlined,
-            size: 32,
-            color: AppColors.duskPink,
           ),
-        ),
-        const SizedBox(height: AppSpacing.small),
-        Text(
-          AppStrings.homeFooter,
-          textAlign: TextAlign.center,
-          style: AppTextStyles.body.copyWith(
-            fontWeight: FontWeight.w700,
-            fontStyle: FontStyle.italic,
-            color: AppColors.canyonBrownMuted,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.medium,
+                6,
+                AppSpacing.medium,
+                0,
+              ),
+              child: RecentRunsCard(
+                key: recentRunsKey,
+                status: recentRunsStatus,
+                rows: _rows(),
+                onViewAll: onOpenHistory,
+                onRowSelected: _onRowSelected,
+                onRetry: onRetry,
+              ),
+            ),
           ),
-        ),
-      ],
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.medium,
+              AppSpacing.itemGap,
+              AppSpacing.medium,
+              AppSpacing.medium + bottomInset,
+            ),
+            child: SlideToStart(
+              key: startRunButtonKey,
+              onStart: onStartRun,
+              starting: isStartingRun,
+              enabled: startRunEnabled,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -28,9 +28,10 @@ class LiveRunFormatter {
   static const String speedPlaceholder = '--.-';
   static const String pacePlaceholder = '--:--';
 
-  /// Elapsed time: "m:ss" under one hour ("18:42"), "h:mm:ss" from one hour
-  /// ("1:02:03"). The short form keeps the 62sp timer readable at large
-  /// system text sizes without dropping below 32sp.
+  /// A duration such as moving time: "m:ss" under one hour ("18:42"),
+  /// "h:mm:ss" from one hour ("1:02:03"). The short form keeps the 62sp
+  /// timer readable at large system text sizes without dropping below 32sp.
+  /// (The name is historical; it formats any millisecond duration.)
   String elapsed(int? ms) {
     if (ms == null || ms < 0) return elapsedPlaceholder;
     final int totalSeconds = ms ~/ 1000;

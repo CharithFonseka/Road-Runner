@@ -9,12 +9,13 @@ import 'package:road_runner/core/contract/contract.dart';
 import 'package:road_runner/data/run.dart';
 import 'package:road_runner/data/run_repository.dart';
 import 'package:road_runner/domain/stats/stats.dart';
-import 'package:road_runner/features/app_strings.dart';
 import 'package:road_runner/features/history/history_screen.dart';
+import 'package:road_runner/features/home/widgets/slide_to_start.dart';
 import 'package:road_runner/features/home/home_screen.dart';
 import 'package:road_runner/features/permissions/permission_gateway.dart';
 import 'package:road_runner/features/permissions/permissions_screen.dart';
 import 'package:road_runner/features/run/active_run_screen.dart';
+import 'package:road_runner/features/shared/app_navigation_drawer.dart';
 import 'package:road_runner/features/summary/summary_screen.dart';
 import 'package:road_runner/main.dart';
 
@@ -62,11 +63,9 @@ class _StubRunRepository implements RunRepository {
   final List<Run> runs;
   final Map<String, List<Point>> pointsByRun;
 
-  _StubRunRepository({
-    List<Run>? runs,
-    Map<String, List<Point>>? pointsByRun,
-  })  : runs = runs ?? [],
-        pointsByRun = pointsByRun ?? {};
+  _StubRunRepository({List<Run>? runs, Map<String, List<Point>>? pointsByRun})
+    : runs = runs ?? [],
+      pointsByRun = pointsByRun ?? {};
 
   @override
   Future<void> saveFromFile(String runId, String filePath) async {}
@@ -120,8 +119,9 @@ class _StubPermissionGateway implements PermissionGateway {
 }
 
 void main() {
-  testWidgets('RoadRunnerApp renders HomeScreen with last run',
-      (WidgetTester tester) async {
+  testWidgets('RoadRunnerApp renders HomeScreen with last run', (
+    WidgetTester tester,
+  ) async {
     final bridge = _StubTrackingBridge();
     final repo = _StubRunRepository(
       runs: [
@@ -152,8 +152,9 @@ void main() {
     bridge.dispose();
   });
 
-  testWidgets('RoadRunnerApp opens History and Summary from Home',
-      (WidgetTester tester) async {
+  testWidgets('RoadRunnerApp opens History and Summary from Home', (
+    WidgetTester tester,
+  ) async {
     final bridge = _StubTrackingBridge();
     final repo = _StubRunRepository(
       runs: [
@@ -168,8 +169,18 @@ void main() {
       ],
       pointsByRun: {
         'run-42': const [
-          Point(tUtcMs: 1700000000000, lat: 6.9271, lon: 79.8612, speedMps: 3.3),
-          Point(tUtcMs: 1700000600000, lat: 6.9451, lon: 79.8612, speedMps: 3.3),
+          Point(
+            tUtcMs: 1700000000000,
+            lat: 6.9271,
+            lon: 79.8612,
+            speedMps: 3.3,
+          ),
+          Point(
+            tUtcMs: 1700000600000,
+            lat: 6.9451,
+            lon: 79.8612,
+            speedMps: 3.3,
+          ),
         ],
       },
     );
@@ -184,7 +195,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text(AppStrings.historyTitle));
+    await tester.tap(find.byKey(HomeScreen.menuButtonKey));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(AppNavigationDrawer.destinationKey(AppDestination.history)),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(HistoryScreen), findsOneWidget);
 
@@ -194,8 +209,9 @@ void main() {
     bridge.dispose();
   });
 
-  testWidgets('Start Run routes to Permissions when location is denied',
-      (WidgetTester tester) async {
+  testWidgets('Start Run routes to Permissions when location is denied', (
+    WidgetTester tester,
+  ) async {
     final bridge = _StubTrackingBridge();
     final repo = _StubRunRepository();
     final permissions = _StubPermissionGateway(
@@ -215,14 +231,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(HomeScreen.startRunButtonKey));
+    final double travel =
+        tester.getRect(find.byKey(HomeScreen.startRunButtonKey)).width -
+        SlideToStart.handleSize -
+        2 * SlideToStart.inset;
+    await tester.drag(
+      find.byKey(SlideToStart.handleKey),
+      Offset(travel * 0.8, 0),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(PermissionsScreen), findsOneWidget);
     bridge.dispose();
   });
 
-  testWidgets('Start Run routes directly to ActiveRunScreen when granted',
-      (WidgetTester tester) async {
+  testWidgets('Start Run routes directly to ActiveRunScreen when granted', (
+    WidgetTester tester,
+  ) async {
     final bridge = _StubTrackingBridge();
     final repo = _StubRunRepository();
     final permissions = _StubPermissionGateway();
@@ -236,7 +260,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(HomeScreen.startRunButtonKey));
+    final double travel =
+        tester.getRect(find.byKey(HomeScreen.startRunButtonKey)).width -
+        SlideToStart.handleSize -
+        2 * SlideToStart.inset;
+    await tester.drag(
+      find.byKey(SlideToStart.handleKey),
+      Offset(travel * 0.8, 0),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(ActiveRunScreen), findsOneWidget);
     bridge.dispose();
