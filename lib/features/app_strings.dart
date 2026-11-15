@@ -89,6 +89,70 @@ class AppStrings {
   static const String exitRun = 'Exit';
   static const String dismiss = 'Dismiss';
 
+  // ─── Permissions ────────────────────────────────────────────────────────────
+
+  static const String permissionsScreenTitle = 'Location Permission';
+  static const String permissionsIntro =
+      'Road Runner needs a few permissions to track your runs accurately, '
+      'even while the screen is locked.';
+
+  static const String permissionLocationTitle = 'Precise location';
+  static const String permissionLocationReason =
+      'Uses GPS to measure your distance, pace and route.';
+  static const String permissionNotificationTitle = 'Notifications';
+  static const String permissionNotificationReason =
+      'Shows your run in a notification so you can follow it from the lock '
+      'screen.';
+  static const String locationServicesTitle = 'Location services';
+  static const String locationServicesReason =
+      "Your phone's Location setting must be on for GPS tracking.";
+
+  static const String permissionStatusAllowed = 'Allowed';
+  static const String permissionStatusNotAllowed = 'Not allowed';
+  static const String permissionStatusBlocked = 'Blocked';
+  static const String permissionStatusOff = 'Off';
+  static String permissionRowSemantics(String title, String status) =>
+      '$title: $status';
+
+  static const String allowLocationAccess = 'Allow Location Access';
+  static const String allowNotifications = 'Allow Notifications';
+  static const String openSettings = 'Open Settings';
+  static const String checkAgain = 'Check Again';
+  static const String continueAction = 'Continue';
+  static const String notNow = 'Not Now';
+
+  static const String permissionsChecking = 'Checking permissions…';
+  static const String permissionsCheckFailed =
+      "Couldn't check permissions. Please try again.";
+  static const String permissionsReady =
+      "You're all set. Road Runner can track your runs.";
+  static const String locationDeniedMessage =
+      'Location was not allowed. Road Runner needs it to record your runs. '
+      'Tap Allow Location Access to try again.';
+  static const String locationBlockedMessage =
+      'Location is blocked for Road Runner. Tap Open Settings, choose '
+      'Permissions > Location, select "Allow only while using the app" and '
+      'turn on "Use precise location".';
+  static const String locationServicesOffMessage =
+      "Your phone's Location is turned off. This is a phone setting, not an "
+      'app permission. Swipe down from the top of the screen, turn on '
+      'Location, then tap Check Again.';
+  static const String notificationNeededMessage =
+      'Allow notifications so your run stays visible on the lock screen.';
+  static const String notificationDeniedMessage =
+      'Notifications were not allowed. Tap Allow Notifications to try again.';
+  static const String notificationBlockedMessage =
+      'Notifications are blocked for Road Runner. Tap Open Settings, choose '
+      'Notifications and turn them on.';
+  static const String permissionRequestFailed =
+      "Couldn't ask for permission. Please try again.";
+  static const String settingsOpenFailed =
+      "Couldn't open Settings. Open your phone's Settings, then Apps > "
+      'Road Runner > Permissions.';
+
+  static const String permissionsFooter =
+      'Your location is used only while tracking your run.';
+
   static const String stoppedUnresolvedTitle = 'Run stopped';
   static const String stoppedUnresolvedMessage =
       "Tracking was stopped outside this screen, so the run result isn't "
