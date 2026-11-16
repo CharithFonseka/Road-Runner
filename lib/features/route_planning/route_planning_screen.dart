@@ -8,12 +8,12 @@ import 'package:latlong2/latlong.dart';
 
 import '../../core/theme/app_palette.dart';
 import '../../data/current_weather_client.dart';
-import '../../data/current_location_client.dart';
 import '../../data/planned_route.dart';
 import '../../data/planned_route_repository.dart';
 import '../../data/run_weather_client.dart';
 import 'ors_directions_client.dart';
 import 'place_search_client.dart';
+import 'route_point_picker_sheet.dart';
 
 /// Pick two map points or search a destination, preview the walking route,
 /// then save or start a run.
@@ -42,14 +42,17 @@ class RoutePlanningScreen extends StatefulWidget {
   final Future<LatLng?> Function()? onCurrentLocation;
 
   static const Key mapKey = Key('routePlanning.map');
-  static const Key searchFieldKey = Key('routePlanning.search');
+  static const Key searchFieldKey = RoutePointPickerSheet.searchFieldKey;
   static const Key nameFieldKey = Key('routePlanning.name');
   static const Key findKey = Key('routePlanning.find');
   static const Key saveKey = Key('routePlanning.save');
   static const Key startRunKey = Key('routePlanning.startRun');
   static const Key startPointKey = Key('routePlanning.startPoint');
   static const Key endPointKey = Key('routePlanning.endPoint');
-  static const Key currentLocationKey = Key('routePlanning.currentLocation');
+  static const Key currentLocationKey =
+      RoutePointPickerSheet.currentLocationKey;
+  static const Key activitySelectorKey = Key('routePlanning.activity');
+  static const Key inputPanelKey = Key('routePlanning.inputPanel');
 
   @override
   State<RoutePlanningScreen> createState() => _RoutePlanningScreenState();
@@ -60,8 +63,6 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
   final TextEditingController _name = TextEditingController(
     text: 'Planned route',
   );
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocus = FocusNode();
   late final PlaceSearchClient _placeSearch =
       widget.placeSearch ?? PlaceSearchClient();
   late final Future<vt.Style> _style =
@@ -74,13 +75,9 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
   String _startLabel = 'Choose start';
   String _finishLabel = 'Choose end';
   bool _choosingStart = true;
-  bool _locating = false;
   int _routeGeneration = 0;
+  RouteActivity _activity = RouteActivity.run;
   List<PlannedRoutePoint>? _preview;
-  List<PlaceSearchResult> _searchResults = const [];
-  Timer? _searchDebounce;
-  bool _searching = false;
-  int _searchSeq = 0;
   bool _busy = false;
   bool _mapReady = false;
   RunWeather? _weather;
@@ -115,22 +112,16 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
     _controller.dispose();
     _name.dispose();
-    _searchController.dispose();
-    _searchFocus.dispose();
     _style.then((style) => style.dispose()).ignore();
     super.dispose();
   }
 
   void _selectPoint(LatLng point, {String label = 'Map point'}) {
-    _searchFocus.unfocus();
     final choosingStart = _choosingStart;
     setState(() {
       _routeGeneration++;
-      _searchResults = const [];
-      _searchController.clear();
       if (choosingStart) {
         _start = point;
         _startLabel = label;
@@ -154,89 +145,46 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
     }
   }
 
-  Future<void> _useCurrentLocation() async {
-    if (_locating) return;
-    setState(() => _locating = true);
-    try {
-      final getter = widget.onCurrentLocation;
-      final location = getter != null
-          ? await getter()
-          : await const CurrentLocationClient().currentLocation();
-      if (!mounted) return;
-      if (location == null) {
-        throw StateError('Turn on location and try again.');
-      }
-      _selectPoint(location, label: 'Current location');
-      if (_mapReady) {
-        _controller.move(location, math.max(_controller.camera.zoom, 14));
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Current location unavailable. Check location permission and GPS.',
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _locating = false);
-    }
-  }
-
-  void _onSearchChanged(String value) {
-    _searchDebounce?.cancel();
-    if (value.trim().length < 2) {
-      setState(() {
-        _searchSeq++;
-        _searching = false;
-        _searchResults = const [];
-      });
-      return;
-    }
-    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
-      unawaited(_runSearch(value));
+  void _selectActivity(RouteActivity activity) {
+    if (_activity == activity) return;
+    setState(() {
+      _activity = activity;
+      _routeGeneration++;
+      _preview = null;
     });
-  }
-
-  Future<void> _runSearch(String query, {bool showError = false}) async {
-    final trimmed = query.trim();
-    if (trimmed.length < 2) return;
-    final seq = ++_searchSeq;
-    setState(() => _searching = true);
-    try {
-      final bias = _mapReady ? _controller.camera.center : widget.initialCenter;
-      final results = await _placeSearch.search(trimmed, biasCenter: bias);
-      if (!mounted || seq != _searchSeq) return;
-      setState(() {
-        _searchResults = results;
-        _searching = false;
-      });
-    } catch (error) {
-      if (!mounted || seq != _searchSeq) return;
-      setState(() {
-        _searchResults = const [];
-        _searching = false;
-      });
-      if (showError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not search places: $error')),
-        );
-      }
+    if (_start != null && _finish != null && !_busy) {
+      unawaited(_findRoute());
     }
   }
 
-  void _selectDestination(PlaceSearchResult result) {
-    _searchDebounce?.cancel();
-    final wasChoosingStart = _choosingStart;
-    _selectPoint(result.location, label: result.name);
-    if (!wasChoosingStart &&
+  Future<void> _openPointPicker(bool start) async {
+    setState(() => _choosingStart = start);
+    final choice = await showModalBottomSheet<RoutePointChoice>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: context.palette.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => RoutePointPickerSheet(
+        isStart: start,
+        placeSearch: _placeSearch,
+        biasCenter: _mapReady
+            ? _controller.camera.center
+            : widget.initialCenter,
+        currentLocationGetter: widget.onCurrentLocation,
+      ),
+    );
+    if (!mounted || choice?.point == null) return;
+    _selectPoint(choice!.point!, label: choice.label ?? 'Selected place');
+    if (!start &&
+        choice.label != 'Current location' &&
         (_name.text.trim().isEmpty || _name.text == 'Planned route')) {
-      _name.text = 'Run to ${result.name}';
+      _name.text = '${_activity.label} to ${choice.label}';
     }
     if (_mapReady) {
-      _controller.move(result.location, math.max(_controller.camera.zoom, 14));
+      _controller.move(choice.point!, math.max(_controller.camera.zoom, 14));
     }
   }
 
@@ -245,7 +193,11 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
     final generation = _routeGeneration;
     setState(() => _busy = true);
     try {
-      final points = await widget.directions.walkingRoute(_start!, _finish!);
+      final points = await widget.directions.route(
+        _start!,
+        _finish!,
+        activity: _activity,
+      );
       if (!mounted || generation != _routeGeneration) return;
       setState(() => _preview = points);
       if (_mapReady) {
@@ -286,6 +238,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
         name: _name.text,
         createdAtUtcMs: now.millisecondsSinceEpoch,
         points: points,
+        activity: _activity,
       );
       await widget.repository.save(route);
       return route;
@@ -426,209 +379,146 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                     left: 12,
                     right: 12,
                     child: Material(
+                      key: RoutePlanningScreen.inputPanelKey,
                       elevation: 3,
                       borderRadius: BorderRadius.circular(12),
+                      clipBehavior: Clip.antiAlias,
                       color: palette.surface,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                            child: SegmentedButton<bool>(
-                              style: ButtonStyle(
-                                backgroundColor:
-                                    WidgetStateProperty.resolveWith(
-                                      (states) =>
-                                          states.contains(WidgetState.selected)
-                                          ? palette.iconTile
-                                          : palette.surface,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.sizeOf(context).height * 0.5,
+                        ),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                                child: SegmentedButton<RouteActivity>(
+                                  key: RoutePlanningScreen.activitySelectorKey,
+                                  style: ButtonStyle(
+                                    backgroundColor:
+                                        WidgetStateProperty.resolveWith(
+                                          (states) =>
+                                              states.contains(
+                                                WidgetState.selected,
+                                              )
+                                              ? palette.iconTile
+                                              : palette.surface,
+                                        ),
+                                    foregroundColor:
+                                        WidgetStateProperty.resolveWith(
+                                          (states) =>
+                                              states.contains(
+                                                WidgetState.selected,
+                                              )
+                                              ? palette.accent
+                                              : palette.textPrimary,
+                                        ),
+                                    side: WidgetStatePropertyAll(
+                                      BorderSide(color: palette.buttonOutline),
                                     ),
-                                foregroundColor:
-                                    WidgetStateProperty.resolveWith(
-                                      (states) =>
-                                          states.contains(WidgetState.selected)
-                                          ? palette.accent
-                                          : palette.textPrimary,
+                                  ),
+                                  segments: const [
+                                    ButtonSegment(
+                                      value: RouteActivity.walk,
+                                      icon: Icon(
+                                        Icons.directions_walk_rounded,
+                                        size: 18,
+                                      ),
+                                      label: Text('Walk'),
                                     ),
-                                side: WidgetStatePropertyAll(
-                                  BorderSide(color: palette.buttonOutline),
+                                    ButtonSegment(
+                                      value: RouteActivity.run,
+                                      icon: Icon(
+                                        Icons.directions_run_rounded,
+                                        size: 18,
+                                      ),
+                                      label: Text('Run'),
+                                    ),
+                                    ButtonSegment(
+                                      value: RouteActivity.cycle,
+                                      icon: Icon(
+                                        Icons.directions_bike_rounded,
+                                        size: 18,
+                                      ),
+                                      label: Text('Cycle'),
+                                    ),
+                                  ],
+                                  selected: {_activity},
+                                  onSelectionChanged: (selection) =>
+                                      _selectActivity(selection.first),
                                 ),
                               ),
-                              segments: const [
-                                ButtonSegment(
-                                  value: true,
-                                  icon: Icon(
-                                    Icons.trip_origin_rounded,
-                                    size: 18,
-                                  ),
-                                  label: Text('Start point'),
+                              ListTile(
+                                key: RoutePlanningScreen.startPointKey,
+                                dense: true,
+                                leading: Icon(
+                                  Icons.trip_origin_rounded,
+                                  color: palette.routeStart,
                                 ),
-                                ButtonSegment(
-                                  value: false,
-                                  icon: Icon(Icons.flag_outlined, size: 18),
-                                  label: Text('End point'),
+                                title: const Text('Start'),
+                                subtitle: Text(
+                                  _startLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
-                              selected: {_choosingStart},
-                              onSelectionChanged: (selection) => setState(
-                                () => _choosingStart = selection.first,
+                                trailing: const Icon(
+                                  Icons.chevron_right_rounded,
+                                ),
+                                onTap: () => _openPointPicker(true),
                               ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Start: $_startLabel',
-                                    key: RoutePlanningScreen.startPointKey,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall,
-                                  ),
+                              Divider(height: 1, color: palette.hairline),
+                              ListTile(
+                                key: RoutePlanningScreen.endPointKey,
+                                dense: true,
+                                leading: Icon(
+                                  Icons.flag_rounded,
+                                  color: palette.routeFinish,
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'End: $_finishLabel',
-                                    key: RoutePlanningScreen.endPointKey,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall,
-                                  ),
+                                title: const Text('Destination'),
+                                subtitle: Text(
+                                  _finishLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
-                            ),
-                          ),
-                          TextField(
-                            key: RoutePlanningScreen.searchFieldKey,
-                            controller: _searchController,
-                            focusNode: _searchFocus,
-                            textInputAction: TextInputAction.search,
-                            onChanged: _onSearchChanged,
-                            onSubmitted: (value) =>
-                                unawaited(_runSearch(value, showError: true)),
-                            decoration: InputDecoration(
-                              hintText: _choosingStart
-                                  ? 'Search start point'
-                                  : 'Search destination',
-                              prefixIcon: const Icon(Icons.search),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 14,
+                                trailing: const Icon(
+                                  Icons.chevron_right_rounded,
+                                ),
+                                onTap: () => _openPointPicker(false),
                               ),
-                              suffixIcon: _searching
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(12),
-                                      child: SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
+                              if (_weather != null)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    0,
+                                    12,
+                                    8,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.wb_cloudy_outlined,
+                                        size: 18,
+                                        color: palette.accent,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          '${_weatherArea ?? 'Selected area'} · ${_weather!.temperatureC?.round() ?? '—'}°C · ${weatherDescription(_weather)}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
                                         ),
                                       ),
-                                    )
-                                  : _searchController.text.isNotEmpty
-                                  ? IconButton(
-                                      tooltip: 'Clear search',
-                                      icon: const Icon(Icons.close),
-                                      onPressed: () {
-                                        _searchDebounce?.cancel();
-                                        setState(() {
-                                          _searchController.clear();
-                                          _searchResults = const [];
-                                          _searching = false;
-                                        });
-                                      },
-                                    )
-                                  : null,
-                            ),
-                          ),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton.icon(
-                              key: RoutePlanningScreen.currentLocationKey,
-                              onPressed: _locating
-                                  ? null
-                                  : () => unawaited(_useCurrentLocation()),
-                              icon: _locating
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.my_location_rounded,
-                                      size: 18,
-                                    ),
-                              label: Text(
-                                _choosingStart
-                                    ? 'Use my location as start'
-                                    : 'Use my location as end',
-                              ),
-                            ),
-                          ),
-                          if (_weather != null)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.wb_cloudy_outlined,
-                                    size: 20,
-                                    color: palette.accent,
+                                    ],
                                   ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      '${_weatherArea ?? 'Selected area'} · ${_weather!.temperatureC?.round() ?? '—'}°C · ${weatherDescription(_weather)}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          if (_searchResults.isNotEmpty)
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxHeight: 200),
-                              child: ListView.separated(
-                                shrinkWrap: true,
-                                padding: EdgeInsets.zero,
-                                itemCount: _searchResults.length,
-                                separatorBuilder: (_, _) =>
-                                    const Divider(height: 1),
-                                itemBuilder: (context, index) {
-                                  final item = _searchResults[index];
-                                  return ListTile(
-                                    dense: true,
-                                    leading: const Icon(Icons.place_outlined),
-                                    title: Text(
-                                      item.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    subtitle: item.subtitle.isEmpty
-                                        ? null
-                                        : Text(
-                                            item.subtitle,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                    onTap: () => _selectDestination(item),
-                                  );
-                                },
-                              ),
-                            ),
-                        ],
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -659,8 +549,8 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                 children: [
                   Text(
                     preview != null
-                        ? 'Route ready · ${_routeDistanceKm(preview).toStringAsFixed(2)} km'
-                        : 'Choose ${_choosingStart ? 'start' : 'end'} on the map, search, or use your location.',
+                        ? '${_activity.label} route ready · ${_routeDistanceKm(preview).toStringAsFixed(2)} km'
+                        : 'Choose a start and destination above, or tap the map to set each point.',
                   ),
                   if (preview != null) ...[
                     const SizedBox(height: 8),
@@ -679,7 +569,6 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                         onPressed: _busy
                             ? null
                             : () {
-                                _searchDebounce?.cancel();
                                 setState(() {
                                   _routeGeneration++;
                                   _start = null;
@@ -688,8 +577,6 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                                   _finishLabel = 'Choose end';
                                   _choosingStart = true;
                                   _preview = null;
-                                  _searchResults = const [];
-                                  _searchController.clear();
                                 });
                               },
                         child: const Text('Clear'),
@@ -703,7 +590,9 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                                     _start != null && _finish != null && !_busy
                                     ? _findRoute
                                     : null,
-                                child: const Text('Find walking route'),
+                                child: Text(
+                                  'Find ${_activity.label.toLowerCase()} route',
+                                ),
                               )
                             : OutlinedButton(
                                 key: RoutePlanningScreen.saveKey,
@@ -713,7 +602,8 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                       ),
                     ],
                   ),
-                  if (widget.onStartRun != null) ...[
+                  if (_activity == RouteActivity.run &&
+                      widget.onStartRun != null) ...[
                     const SizedBox(height: 8),
                     FilledButton.icon(
                       key: RoutePlanningScreen.startRunKey,
@@ -722,6 +612,12 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                       label: Text(
                         preview == null ? 'Start run' : 'Save & start run',
                       ),
+                    ),
+                  ] else if (_activity != RouteActivity.run) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Save this ${_activity.label.toLowerCase()} route. GPS tracking and badges are for runs.',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ],

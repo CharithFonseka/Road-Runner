@@ -48,6 +48,7 @@ void main() {
 
       expect(loaded, isNotNull);
       expect(loaded!.id, equals('route-1'));
+      expect(loaded.activity, RouteActivity.run);
       expect(loaded.name, equals('Morning Beach Loop'));
       expect(loaded.createdAtUtcMs, equals(1731600000000));
       expect(loaded.points.length, equals(2));
@@ -55,6 +56,21 @@ void main() {
       expect(loaded.points[0].lon, equals(79.8612));
       expect(loaded.points[1].lat, equals(6.9280));
       expect(loaded.points[1].lon, equals(79.8625));
+    });
+
+    test('saves and reloads a cycling route mode', () async {
+      const route = PlannedRoute(
+        id: 'cycle-1',
+        name: 'Bike to the park',
+        createdAtUtcMs: 1731600000000,
+        activity: RouteActivity.cycle,
+        points: [
+          PlannedRoutePoint(lat: 6.9271, lon: 79.8612),
+          PlannedRoutePoint(lat: 6.93, lon: 79.864),
+        ],
+      );
+      await repository.save(route);
+      expect((await repository.get(route.id))?.activity, RouteActivity.cycle);
     });
 
     test('reopening nonexistent route returns null', () async {
@@ -253,7 +269,7 @@ void main() {
       );
     });
 
-    test('version 3 to 6 migration preserves existing runs and creates route tables', () async {
+    test('version 3 to 7 migration preserves existing runs and creates route tables', () async {
       final migrationDbPath = '${tempDir.path}/migration_v3.db';
 
       // 1. Create a version 3 database with an existing run
@@ -309,7 +325,7 @@ void main() {
       });
       await v3Db.close();
 
-      // 2. Open via AppDatabase, which triggers _onUpgrade from 3 -> 6
+      // 2. Open via AppDatabase, which triggers _onUpgrade from 3 -> 7
       final upgradedAppDb = AppDatabase();
       final v6Db = await upgradedAppDb.open(path: migrationDbPath);
 
@@ -339,6 +355,7 @@ void main() {
       final loadedNewRoute = await upgradedRepo.get('new-v6-route');
       expect(loadedNewRoute, isNotNull);
       expect(loadedNewRoute!.name, equals('V6 Migration Route'));
+      expect(loadedNewRoute.activity, RouteActivity.run);
 
       await v6Db.close();
     });
@@ -412,6 +429,7 @@ void main() {
       final plan = await upgraded.query(AppDatabase.tablePlannedRoutes);
       final points = await upgraded.query(AppDatabase.tablePlannedRoutePoints);
       expect(plan.single['name'], 'City loop');
+      expect(plan.single['activity'], 'run');
       expect(points.single['lat'], 6.927);
       await upgraded.close();
     });

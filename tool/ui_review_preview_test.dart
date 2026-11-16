@@ -339,14 +339,20 @@ void main() {
     );
     final map = find.byKey(RoutePlanningScreen.mapKey);
     final topLeft = tester.getTopLeft(map);
-    await tester.tapAt(topLeft + const Offset(80, 230));
+    final panelBottom = tester
+        .getBottomLeft(find.byKey(RoutePlanningScreen.inputPanelKey))
+        .dy;
+    await tester.tapAt(Offset(topLeft.dx + 80, panelBottom + 20));
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tapAt(topLeft + const Offset(240, 350));
+    await tester.tapAt(Offset(topLeft.dx + 240, panelBottom + 90));
     await tester.pump(const Duration(milliseconds: 300));
     if (find.byKey(RoutePlanningScreen.findKey).evaluate().isNotEmpty) {
       await tester.tap(find.byKey(RoutePlanningScreen.findKey));
       await tester.pump();
     }
     await savePreview(tester, 'route-planner');
+    await tester.tap(find.byKey(RoutePlanningScreen.startPointKey));
+    await tester.pumpAndSettle();
+    await savePreview(tester, 'route-point-picker');
   });
 }

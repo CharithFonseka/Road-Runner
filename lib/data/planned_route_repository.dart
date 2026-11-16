@@ -22,6 +22,7 @@ class PlannedRouteRepository {
         'id': route.id,
         'name': route.name.trim(),
         'created_at_utc_ms': route.createdAtUtcMs,
+        'activity': route.activity.name,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       final batch = txn.batch();
       for (var i = 0; i < route.points.length; i++) {
@@ -56,6 +57,7 @@ class PlannedRouteRepository {
       id: row['id'] as String,
       name: row['name'] as String,
       createdAtUtcMs: (row['created_at_utc_ms'] as num).toInt(),
+      activity: RouteActivityLabel.fromStorage(row['activity'] as String?),
       points: List.unmodifiable(
         pointRows.map(
           (point) => PlannedRoutePoint(
