@@ -170,30 +170,125 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onOpenHistory: widget.onOpenHistory,
         onOpenSettings: () {}, // current page: the drawer only closes
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Builder(
-            builder: (context) => CompactSkyHeader(
-              title: AppStrings.settingsTitle,
-              subtitle: AppStrings.settingsSubtitle,
-              landscapeHeight: 40,
-              landscapePainter: DrawerLandscapePainter(palette: palette),
-              leading: HeaderIconButton(
-                key: SettingsScreen.backButtonKey,
-                icon: Icons.arrow_back_rounded,
-                tooltip: AppStrings.settingsBack,
-                onPressed: widget.onBack,
-              ),
-              trailing: HeaderIconButton(
-                key: SettingsScreen.menuButtonKey,
-                icon: Icons.menu_rounded,
-                tooltip: AppStrings.homeOpenMenu,
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final bool isLandscape =
+              constraints.maxWidth > constraints.maxHeight &&
+              constraints.maxWidth >= 500;
+          if (isLandscape) {
+            return _buildLandscape(context, palette, bottomInset);
+          }
+          return _buildPortrait(context, palette, bottomInset);
+        },
+      ),
+    );
+  }
+
+  Widget _buildPortrait(
+    BuildContext context,
+    AppPalette palette,
+    double bottomInset,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Builder(
+          builder: (context) => CompactSkyHeader(
+            title: AppStrings.settingsTitle,
+            subtitle: AppStrings.settingsSubtitle,
+            landscapeHeight: 40,
+            landscapePainter: DrawerLandscapePainter(palette: palette),
+            leading: HeaderIconButton(
+              key: SettingsScreen.backButtonKey,
+              icon: Icons.arrow_back_rounded,
+              tooltip: AppStrings.settingsBack,
+              onPressed: widget.onBack,
+            ),
+            trailing: HeaderIconButton(
+              key: SettingsScreen.menuButtonKey,
+              icon: Icons.menu_rounded,
+              tooltip: AppStrings.homeOpenMenu,
+              onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           ),
-          Expanded(
+        ),
+        Expanded(
+          child: ListenableBuilder(
+            listenable: _controller,
+            builder: (context, _) => ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.medium,
+                0,
+                AppSpacing.medium,
+                AppSpacing.large + bottomInset,
+              ),
+              children: [
+                if (widget.onSignInWithGoogle != null) ...[
+                  const _SectionHeading('Account & Cloud Sync'),
+                  _accountCard(context),
+                ],
+                const _SectionHeading(AppStrings.settingsPermissionsSection),
+                _permissionsCard(),
+                const _SectionHeading(AppStrings.settingsAboutSection),
+                _AboutCard(version: widget.appVersion),
+                if (widget.onDebugSimulationChanged != null) ...[
+                  const _SectionHeading('Demo & Testing (Debug)'),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    clipBehavior: Clip.antiAlias,
+                    child: SwitchListTile(
+                      key: const Key('settings.debugSimulation'),
+                      title: const Text('Simulate runner route'),
+                      subtitle: const Text(
+                        'Replays a repeatable ~1.2 km park loop through the native GPS filter.',
+                      ),
+                      value: widget.debugSimulationEnabled ?? false,
+                      onChanged: widget.onDebugSimulationChanged,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLandscape(
+    BuildContext context,
+    AppPalette palette,
+    double bottomInset,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Builder(
+          builder: (context) => CompactSkyHeader(
+            title: AppStrings.settingsTitle,
+            subtitle: AppStrings.settingsSubtitle,
+            landscapeHeight: 40,
+            landscapePainter: DrawerLandscapePainter(palette: palette),
+            leading: HeaderIconButton(
+              key: SettingsScreen.backButtonKey,
+              icon: Icons.arrow_back_rounded,
+              tooltip: AppStrings.settingsBack,
+              onPressed: widget.onBack,
+            ),
+            trailing: HeaderIconButton(
+              key: SettingsScreen.menuButtonKey,
+              icon: Icons.menu_rounded,
+              tooltip: AppStrings.homeOpenMenu,
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
+          ),
+        ),
+        Expanded(
+          child: SafeArea(
+            left: true,
+            right: true,
+            top: false,
+            bottom: false,
             child: ListenableBuilder(
               listenable: _controller,
               builder: (context, _) => ListView(
@@ -204,36 +299,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   AppSpacing.large + bottomInset,
                 ),
                 children: [
-                  if (widget.onSignInWithGoogle != null) ...[
-                    const _SectionHeading('Account & Cloud Sync'),
-                    _accountCard(context),
-                  ],
-                  const _SectionHeading(AppStrings.settingsPermissionsSection),
-                  _permissionsCard(),
-                  const _SectionHeading(AppStrings.settingsAboutSection),
-                  _AboutCard(version: widget.appVersion),
-                  if (widget.onDebugSimulationChanged != null) ...[
-                    const _SectionHeading('Demo & Testing (Debug)'),
-                    Card(
-                      margin: EdgeInsets.zero,
-                      clipBehavior: Clip.antiAlias,
-                      child: SwitchListTile(
-                        key: const Key('settings.debugSimulation'),
-                        title: const Text('Simulate runner route'),
-                        subtitle: const Text(
-                          'Replays a repeatable ~1.2 km park loop through the native GPS filter.',
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const _SectionHeading(
+                              AppStrings.settingsPermissionsSection,
+                            ),
+                            _permissionsCard(),
+                          ],
                         ),
-                        value: widget.debugSimulationEnabled ?? false,
-                        onChanged: widget.onDebugSimulationChanged,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: AppSpacing.medium),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (widget.onSignInWithGoogle != null) ...[
+                              const _SectionHeading('Account & Cloud Sync'),
+                              _accountCard(context),
+                            ],
+                            const _SectionHeading(
+                              AppStrings.settingsAboutSection,
+                            ),
+                            _AboutCard(version: widget.appVersion),
+                            if (widget.onDebugSimulationChanged != null) ...[
+                              const _SectionHeading('Demo & Testing (Debug)'),
+                              Card(
+                                margin: EdgeInsets.zero,
+                                clipBehavior: Clip.antiAlias,
+                                child: SwitchListTile(
+                                  key: const Key('settings.debugSimulation'),
+                                  title: const Text('Simulate runner route'),
+                                  subtitle: const Text(
+                                    'Replays a repeatable ~1.2 km park loop through the native GPS filter.',
+                                  ),
+                                  value: widget.debugSimulationEnabled ?? false,
+                                  onChanged: widget.onDebugSimulationChanged,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -252,7 +371,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (user == null) ...[
               Text(
                 'Sign in with Google to back up your profile, goals, streaks, and badges.',
-                style: AppTextStyles.body.copyWith(color: palette.textSecondary),
+                style: AppTextStyles.body.copyWith(
+                  color: palette.textSecondary,
+                ),
               ),
               if (widget.accountError != null) ...[
                 const SizedBox(height: 10),
@@ -267,7 +388,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 12),
               FilledButton.icon(
                 key: SettingsScreen.signInButtonKey,
-                onPressed: widget.accountBusy ? null : widget.onSignInWithGoogle,
+                onPressed: widget.accountBusy
+                    ? null
+                    : widget.onSignInWithGoogle,
                 icon: const Icon(Icons.login_rounded),
                 label: Text(
                   widget.accountBusy ? 'Signing in...' : 'Sign in with Google',
@@ -278,7 +401,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   CircleAvatar(
                     backgroundColor: palette.primaryFill,
-                    child: Icon(Icons.person_rounded, color: palette.onPrimaryFill),
+                    child: Icon(
+                      Icons.person_rounded,
+                      color: palette.onPrimaryFill,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -312,7 +438,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   'Weekly goal: ${profile.weeklyGoalKm.toStringAsFixed(0)} km • '
                   'Streak: ${profile.currentStreakDays}d • '
                   'Badges: ${profile.badges.length}',
-                  style: AppTextStyles.caption.copyWith(color: palette.textSecondary),
+                  style: AppTextStyles.caption.copyWith(
+                    color: palette.textSecondary,
+                  ),
                 ),
               ],
               if (widget.accountError != null) ...[
@@ -331,9 +459,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Expanded(
                     child: OutlinedButton.icon(
                       key: SettingsScreen.syncAccountButtonKey,
-                      onPressed: widget.accountBusy ? null : widget.onSyncAccount,
+                      onPressed: widget.accountBusy
+                          ? null
+                          : widget.onSyncAccount,
                       icon: const Icon(Icons.cloud_sync_outlined, size: 18),
-                      label: Text(widget.accountBusy ? 'Syncing...' : 'Sync now'),
+                      label: Text(
+                        widget.accountBusy ? 'Syncing...' : 'Sync now',
+                      ),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.itemGap),

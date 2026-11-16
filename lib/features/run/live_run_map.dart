@@ -9,10 +9,23 @@ import '../../core/theme/app_palette.dart';
 /// Street map for an active run. Coordinates are always local; only map tiles
 /// are fetched from OpenFreeMap. The route remains visible when tiles cannot load.
 class LiveRunMap extends StatefulWidget {
-  const LiveRunMap({super.key, required this.route, required this.snapshot});
+  const LiveRunMap({
+    super.key,
+    required this.route,
+    required this.snapshot,
+    this.height = 160,
+    this.showSearchingPlaceholder = false,
+  });
 
   final List<TrackingPoint> route;
   final TrackingSnapshot? snapshot;
+
+  /// Height of the map. Defaults to 160 in portrait; null allows the map to
+  /// expand to fill the available height in landscape mode.
+  final double? height;
+
+  /// Whether to display a styled placeholder when waiting for a GPS fix.
+  final bool showSearchingPlaceholder;
 
   @override
   State<LiveRunMap> createState() => _LiveRunMapState();
@@ -78,6 +91,9 @@ class _LiveRunMapState extends State<LiveRunMap> {
         .toList(growable: false);
 
     if (position == null) {
+      if (widget.showSearchingPlaceholder) {
+        return _buildSearchingPlaceholder(context, palette);
+      }
       // Keep the existing stat layout until the first accepted GPS fix.
       return const SizedBox.shrink();
     }
@@ -90,7 +106,7 @@ class _LiveRunMapState extends State<LiveRunMap> {
       borderRadius: BorderRadius.circular(16),
       child: SizedBox(
         key: const Key('activeRun.liveMap'),
-        height: 160,
+        height: widget.height,
         child: FutureBuilder<vt.Style>(
           future: _style,
           builder: (context, styleSnapshot) => Stack(
@@ -188,6 +204,60 @@ class _LiveRunMapState extends State<LiveRunMap> {
         ),
       ),
     );
+  }
+
+  Widget _buildSearchingPlaceholder(BuildContext context, AppPalette palette) {
+    final Widget content = ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        key: const Key('activeRun.liveMap.placeholder'),
+        decoration: BoxDecoration(
+          color: palette.mapBackground,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: palette.isDark
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.08),
+          ),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.location_searching_rounded,
+                  size: 38,
+                  color: palette.accent,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Searching for GPS…',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: palette.textPrimary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Live map will appear once satellites are acquired',
+                  style: TextStyle(fontSize: 12, color: palette.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (widget.height != null) {
+      return SizedBox(height: widget.height, child: content);
+    }
+    return SizedBox.expand(child: content);
   }
 }
 

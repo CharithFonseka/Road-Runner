@@ -13,6 +13,8 @@
 // the repository or talks to TrackingBridge: the app shell supplies the runs
 // and handles every callback (permissions, navigation, retry).
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_palette.dart';
@@ -114,6 +116,24 @@ class HomeScreen extends StatelessWidget {
   /// so the Recent runs card keeps usable space.
   static const double compactHeightBreakpoint = 480;
 
+  /// Maximum width for Slide to Start in landscape/wide screens so thumb travel
+  /// distance remains comfortable and ergonomic.
+  static const double maxLandscapeSliderWidth = 340;
+
+  static double _landscapeArtworkHeight(double availableHeight) {
+    if (availableHeight >= 380) {
+      return CompactSkyHeader.compactLandscapeHeight;
+    } else if (availableHeight >= 330) {
+      return 52;
+    } else {
+      return 40;
+    }
+  }
+
+  static bool _showLandscapeArtwork(double availableHeight) {
+    return availableHeight >= 280;
+  }
+
   VoidCallback get _openSettings => onOpenSettings ?? onOpenPermissions;
 
   List<RecentRunRow> _rows() {
@@ -161,9 +181,6 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppPalette palette = AppPalette.of(context);
-    final double bottomInset = MediaQuery.paddingOf(context).bottom;
-    final bool tall =
-        MediaQuery.sizeOf(context).height >= compactHeightBreakpoint;
     return Scaffold(
       backgroundColor: palette.background,
       drawer: AppNavigationDrawer(
@@ -172,35 +189,225 @@ class HomeScreen extends StatelessWidget {
         onOpenHistory: onOpenHistory,
         onOpenSettings: _openSettings,
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Builder(
-            builder: (context) => CompactSkyHeader(
-              title: AppStrings.appName,
-              subtitle: AppStrings.homeTagline,
-              showLandscape: tall,
-              leading: HeaderIconButton(
-                key: menuButtonKey,
-                icon: Icons.menu_rounded,
-                tooltip: AppStrings.homeOpenMenu,
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
-              trailing: HeaderIconButton(
-                key: settingsButtonKey,
-                icon: Icons.settings_outlined,
-                tooltip: AppStrings.homeSettings,
-                onPressed: _openSettings,
-              ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final bool isLandscape =
+              constraints.maxWidth > constraints.maxHeight &&
+              constraints.maxWidth >= 500;
+          if (isLandscape) {
+            return _buildLandscape(context, palette, constraints);
+          }
+          return _buildPortrait(context, palette, constraints);
+        },
+      ),
+    );
+  }
+
+  Widget _buildActionRow() {
+    return Row(
+      children: [
+        if (onPlanRoute != null)
+          Expanded(
+            child: OutlinedButton.icon(
+              key: planRouteButtonKey,
+              onPressed: onPlanRoute,
+              icon: const Icon(Icons.route_outlined, size: 18),
+              label: const Text('Plan a route'),
             ),
           ),
+        if (onPlanRoute != null && onOpenGoals != null)
+          const SizedBox(width: AppSpacing.itemGap),
+        if (onOpenGoals != null)
+          Expanded(
+            child: OutlinedButton.icon(
+              key: goalsButtonKey,
+              onPressed: onOpenGoals,
+              icon: const Icon(Icons.emoji_events_outlined, size: 18),
+              label: const Text('Goals & Badges'),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPortrait(
+    BuildContext context,
+    AppPalette palette,
+    BoxConstraints constraints,
+  ) {
+    final double bottomInset = MediaQuery.paddingOf(context).bottom;
+    final bool tall =
+        MediaQuery.sizeOf(context).height >= compactHeightBreakpoint;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Builder(
+          builder: (context) => CompactSkyHeader(
+            title: AppStrings.appName,
+            subtitle: AppStrings.homeTagline,
+            showLandscape: tall,
+            leading: HeaderIconButton(
+              key: menuButtonKey,
+              icon: Icons.menu_rounded,
+              tooltip: AppStrings.homeOpenMenu,
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
+            trailing: HeaderIconButton(
+              key: settingsButtonKey,
+              icon: Icons.settings_outlined,
+              tooltip: AppStrings.homeSettings,
+              onPressed: _openSettings,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.medium,
+              6,
+              AppSpacing.medium,
+              0,
+            ),
+            child: RecentRunsCard(
+              key: recentRunsKey,
+              status: recentRunsStatus,
+              rows: _rows(),
+              onViewAll: onOpenHistory,
+              onRowSelected: _onRowSelected,
+              onRetry: onRetry,
+            ),
+          ),
+        ),
+        if (onPlanRoute != null || onOpenGoals != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.medium,
+              AppSpacing.small,
+              AppSpacing.medium,
+              0,
+            ),
+            child: _buildActionRow(),
+          ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.medium,
+            AppSpacing.itemGap,
+            AppSpacing.medium,
+            AppSpacing.medium + bottomInset,
+          ),
+          child: SlideToStart(
+            key: startRunButtonKey,
+            onStart: onStartRun,
+            starting: isStartingRun,
+            enabled: startRunEnabled,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLandscape(
+    BuildContext context,
+    AppPalette palette,
+    BoxConstraints constraints,
+  ) {
+    final double topInset = MediaQuery.paddingOf(context).top;
+    final double bottomInset = MediaQuery.paddingOf(context).bottom;
+    final double availableHeight = constraints.maxHeight - bottomInset;
+    final bool showArtwork = _showLandscapeArtwork(availableHeight);
+    final double artworkHeight = _landscapeArtworkHeight(availableHeight);
+
+    final double leftWidth = math.min(
+      maxLandscapeSliderWidth,
+      (constraints.maxWidth - AppSpacing.medium) * 0.46,
+    );
+
+    return SafeArea(
+      left: true,
+      right: true,
+      top: false,
+      bottom: false,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: leftWidth,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Builder(
+                  builder: (context) => ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(16),
+                    ),
+                    child: CompactSkyHeader(
+                      title: AppStrings.appName,
+                      subtitle: AppStrings.homeTagline,
+                      showLandscape: showArtwork,
+                      landscapeHeight: artworkHeight,
+                      leading: HeaderIconButton(
+                        key: menuButtonKey,
+                        icon: Icons.menu_rounded,
+                        tooltip: AppStrings.homeOpenMenu,
+                        onPressed: () => Scaffold.of(context).openDrawer(),
+                      ),
+                      trailing: HeaderIconButton(
+                        key: settingsButtonKey,
+                        icon: Icons.settings_outlined,
+                        tooltip: AppStrings.homeSettings,
+                        onPressed: _openSettings,
+                      ),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                if (onPlanRoute != null || onOpenGoals != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.medium,
+                    ),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: maxLandscapeSliderWidth,
+                        ),
+                        child: _buildActionRow(),
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.medium,
+                    AppSpacing.itemGap,
+                    AppSpacing.medium,
+                    AppSpacing.medium + bottomInset,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: maxLandscapeSliderWidth,
+                      ),
+                      child: SlideToStart(
+                        key: startRunButtonKey,
+                        maxWidth: maxLandscapeSliderWidth,
+                        onStart: onStartRun,
+                        starting: isStartingRun,
+                        enabled: startRunEnabled,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.medium),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.medium,
-                6,
-                AppSpacing.medium,
+              padding: EdgeInsets.fromLTRB(
                 0,
+                topInset + 6,
+                AppSpacing.medium,
+                AppSpacing.medium + bottomInset,
               ),
               child: RecentRunsCard(
                 key: recentRunsKey,
@@ -210,53 +417,6 @@ class HomeScreen extends StatelessWidget {
                 onRowSelected: _onRowSelected,
                 onRetry: onRetry,
               ),
-            ),
-          ),
-          if (onPlanRoute != null || onOpenGoals != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.medium,
-                AppSpacing.small,
-                AppSpacing.medium,
-                0,
-              ),
-              child: Row(
-                children: [
-                  if (onPlanRoute != null)
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        key: planRouteButtonKey,
-                        onPressed: onPlanRoute,
-                        icon: const Icon(Icons.route_outlined, size: 18),
-                        label: const Text('Plan a route'),
-                      ),
-                    ),
-                  if (onPlanRoute != null && onOpenGoals != null)
-                    const SizedBox(width: AppSpacing.itemGap),
-                  if (onOpenGoals != null)
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        key: goalsButtonKey,
-                        onPressed: onOpenGoals,
-                        icon: const Icon(Icons.emoji_events_outlined, size: 18),
-                        label: const Text('Goals & Badges'),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              AppSpacing.medium,
-              AppSpacing.itemGap,
-              AppSpacing.medium,
-              AppSpacing.medium + bottomInset,
-            ),
-            child: SlideToStart(
-              key: startRunButtonKey,
-              onStart: onStartRun,
-              starting: isStartingRun,
-              enabled: startRunEnabled,
             ),
           ),
         ],
