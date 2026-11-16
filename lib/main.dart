@@ -12,13 +12,16 @@ import 'core/contract/contract.dart';
 import 'core/theme/app_palette.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_theme.dart';
+import 'data/goal_repository.dart';
 import 'data/run.dart';
 import 'data/run_repository.dart';
 import 'data/planned_route_repository.dart';
 import 'data/run_enrichment_service.dart';
+import 'domain/achievements/goals_summary.dart';
 import 'domain/stats/stats.dart';
 import 'features/account/account_gateway.dart';
 import 'features/account/account_models.dart';
+import 'features/achievements/goals_badges_screen.dart';
 import 'features/app_strings.dart';
 import 'features/history/history_run.dart';
 import 'features/history/history_screen.dart';
@@ -57,6 +60,7 @@ class RoadRunnerApp extends StatefulWidget {
     super.key,
     this.bridge,
     this.repository,
+    this.goalRepository,
     this.permissionGateway,
     this.accountGateway,
     this.checkStartupState = true,
@@ -67,6 +71,9 @@ class RoadRunnerApp extends StatefulWidget {
 
   /// Optional repository override for testing; defaults to [SqliteRunRepository].
   final RunRepository? repository;
+
+  /// Optional goal repository override for testing.
+  final GoalRepository? goalRepository;
 
   /// Optional permission gateway override for testing; defaults to
   /// [PermissionHandlerGateway].
@@ -93,6 +100,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   late final TrackingBridge _bridge;
   late final bool _ownsBridge;
   late final RunRepository _repository;
+  late final GoalRepository _goalRepository;
   late final RunEnrichmentService _enrichment;
   final Map<String, Future<void>> _pendingEnrichments = {};
   late final PermissionGateway _permissionGateway;
@@ -120,6 +128,10 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     _ownsBridge = widget.bridge == null;
     _bridge = widget.bridge ?? NativeTrackingBridge();
     _repository = widget.repository ?? SqliteRunRepository();
+    _goalRepository = widget.goalRepository ??
+        (widget.repository != null
+            ? _InMemoryGoalRepository()
+            : SqliteGoalRepository());
     _enrichment = RunEnrichmentService(repository: _repository);
     _permissionGateway =
         widget.permissionGateway ?? const PermissionHandlerGateway();
@@ -444,6 +456,55 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     }
   }
 
+  Future<AchievementsSnapshot> _buildAchievementsSnapshot() async {
+    final List<Run> runs = await _repository.list();
+    final double goalKm = await _goalRepository.getWeeklyGoalKm();
+    final Map<BadgeType, BadgeAward> earned = <BadgeType, BadgeAward>{};
+    for (final Run run in runs) {
+      final List<BadgeAward> runBadges =
+          await _repository.getBadgesForRun(run.id);
+      for (final BadgeAward award in runBadges) {
+        earned.putIfAbsent(award.type, () => award);
+      }
+    }
+    return AchievementsSnapshot(
+      weeklyDistanceKm: weeklyDistanceKm(runs),
+      weeklyGoalKm: goalKm,
+      weeklyRuns: weeklyRunCount(runs),
+      currentStreakDays: currentDailyStreak(runs),
+      longestStreakDays: longestDailyStreak(runs),
+      earnedBadges: earned,
+    );
+  }
+
+  Future<void> _openGoals() async {
+    AchievementsSnapshot snapshot = await _buildAchievementsSnapshot();
+    if (!mounted) return;
+    _navigatorKey.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (context) => StatefulBuilder(
+          builder: (context, setScreenState) => GoalsBadgesScreen(
+            snapshot: snapshot,
+            isCloudSynced: _accountUser != null,
+            onBack: () => _navigatorKey.currentState?.maybePop(),
+            onGoalUpdated: (newGoalKm) {
+              unawaited(() async {
+                await _goalRepository.setWeeklyGoalKm(newGoalKm);
+                final AchievementsSnapshot refreshed =
+                    await _buildAchievementsSnapshot();
+                if (!context.mounted) return;
+                setScreenState(() => snapshot = refreshed);
+                if (_accountUser != null) {
+                  unawaited(_syncAccount());
+                }
+              }());
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _syncAccount() async {
     final AccountGateway? gateway = _accountGateway;
     final AccountUser? user = _accountUser;
@@ -452,9 +513,38 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     _accountError = null;
     _notifyShell();
     try {
-      final CloudUserProfile profile = await gateway.loadProfile(user.uid) ??
-          CloudUserProfile(updatedAtMs: DateTime.now().millisecondsSinceEpoch);
+      final AchievementsSnapshot local = await _buildAchievementsSnapshot();
+      final CloudUserProfile? remote = await gateway.loadProfile(user.uid);
+      final int nowMs = DateTime.now().millisecondsSinceEpoch;
+      final List<String> badgeKeys =
+          local.earnedBadges.keys.map((b) => b.key).toList();
+      final CloudUserProfile profile = CloudUserProfile(
+        weeklyGoalKm: local.weeklyGoalKm,
+        currentStreakDays: local.currentStreakDays,
+        longestStreakDays: local.longestStreakDays >
+                (remote?.longestStreakDays ?? 0)
+            ? local.longestStreakDays
+            : (remote?.longestStreakDays ?? 0),
+        badges: badgeKeys,
+        updatedAtMs: nowMs,
+      );
       await gateway.saveProfile(user, profile);
+      await gateway.saveGoal(
+        user.uid,
+        CloudGoal(
+          id: 'weekly_distance',
+          title: 'Run ${local.weeklyGoalKm.toStringAsFixed(0)} km this week',
+          targetKm: local.weeklyGoalKm,
+          period: 'weekly',
+          updatedAtMs: nowMs,
+        ),
+      );
+      for (final BadgeType type in local.earnedBadges.keys) {
+        await gateway.saveBadge(
+          user.uid,
+          CloudBadge(id: type.key, earnedAtMs: nowMs),
+        );
+      }
       if (!mounted) return;
       _accountProfile = profile;
     } catch (_) {
@@ -555,7 +645,15 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     while (mounted) {
       try {
         await _repository.saveFromFile(result.runId, result.filePath);
+        try {
+          await _repository.recalculateBadges();
+        } catch (_) {
+          // Badge calculation errors must not block saving the run.
+        }
         unawaited(_enrichRun(result.runId));
+        if (_accountUser != null) {
+          unawaited(_syncAccount());
+        }
         try {
           await _bridge.discardRun(result.runId);
         } catch (_) {
@@ -917,6 +1015,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
             formatter: _formatter,
             onStartRun: () => unawaited(_handleStartRun()),
             onPlanRoute: () => unawaited(_openRoutePlanner()),
+            onOpenGoals: () => unawaited(_openGoals()),
             onOpenHistory: () => unawaited(_openHistory()),
             onOpenPermissions: _openPermissions,
             onOpenSettings: _openSettings,
@@ -961,6 +1060,18 @@ class _SummaryDetailsLoaderState extends State<_SummaryDetailsLoader> {
 
   @override
   Widget build(BuildContext context) => widget.builder(_summary);
+}
+
+class _InMemoryGoalRepository implements GoalRepository {
+  double _weeklyGoalKm = SqliteGoalRepository.defaultWeeklyGoalKm;
+
+  @override
+  Future<double> getWeeklyGoalKm() async => _weeklyGoalKm;
+
+  @override
+  Future<void> setWeeklyGoalKm(double goalKm) async {
+    _weeklyGoalKm = goalKm.clamp(1.0, 1000.0);
+  }
 }
 
 class _HistoryRouteScreen extends StatefulWidget {
