@@ -397,7 +397,10 @@ class FusedGpsRecorder(
                 addedDistanceM = decision.addedDistanceM,
                 fixUtcMs = fix.tUtcMs,
                 nowMonotonicMs = SystemClock.elapsedRealtime(),
+                reportedSpeedMps = fix.speedMps,
             )
+        } else {
+            speedSmoother.rejected()
         }
     }
 
