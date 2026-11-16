@@ -1,4 +1,5 @@
-// Road Runner — Unit Tests for SqliteRunRepository
+
+ // Road Runner — Unit Tests for SqliteRunRepository
 // Owner: Nadeesha
 // SRS reference: Section 8.5
 
@@ -38,16 +39,20 @@ void main() {
       final runId = 'test-run-123';
       final file = File('${tempDir.path}/$runId.jsonl');
 
-      // 1 km run at steady pace with 1 pause
+      // Approximately 1 km run with one pause.
+      // The first accepted point after resuming becomes a new distance baseline.
       final content = StringBuffer()
         ..writeln('{"v":1,"runId":"$runId","startedAtUtcMs":1731600000000}')
+        // First point before pause.
         ..writeln('{"k":"p","seq":0,"t":1731600000000,"lat":0.0,"lon":0.0,"acc":4.0,"spd":2.78,"alt":10.0,"ok":1}')
         ..writeln('{"k":"s","t":1731600050000,"state":"paused"}')
         ..writeln('{"k":"s","t":1731600070000,"state":"running"}')
-        // Point rejected by filter (ok = 0)
-        ..writeln('{"k":"p","seq":1,"t":1731600100000,"lat":5.0,"lon":5.0,"acc":50.0,"spd":20.0,"alt":10.0,"ok":0}')
-        // Reaching ~1000m
-        ..writeln('{"k":"p","seq":2,"t":1731600320000,"lat":0.0089933,"lon":0.0,"acc":3.5,"spd":3.2,"alt":12.0,"ok":1}')
+        // First point after resume: new baseline.
+        ..writeln('{"k":"p","seq":1,"t":1731600070000,"lat":0.0,"lon":0.0,"acc":3.0,"spd":0.0,"alt":10.0,"ok":true}')
+        // Rejected GPS spike.
+        ..writeln('{"k":"p","seq":2,"t":1731600100000,"lat":5.0,"lon":5.0,"acc":50.0,"spd":20.0,"alt":10.0,"ok":false}')
+        // Approximately 1,000 metres from the resumed baseline.
+        ..writeln('{"k":"p","seq":3,"t":1731600320000,"lat":0.0089933,"lon":0.0,"acc":3.5,"spd":3.2,"alt":12.0,"ok":true}')
         ..writeln('{"k":"end","t":1731600320000}');
 
       await file.writeAsString(content.toString());
@@ -60,25 +65,34 @@ void main() {
       expect(run!.id, runId);
       expect(run.startedAtUtcMs, 1731600000000);
       expect(run.endedAtUtcMs, 1731600320000);
+
       // Total elapsed = 320,000ms, paused = 20,000ms -> movingMs = 300,000ms
       expect(run.movingMs, 300000);
+
       // Distance computed between accepted points only
       expect(run.distanceM, closeTo(1000.0, 1.0));
       expect(run.avgPaceSecPerKm, isNotNull);
       expect(run.avgPaceSecPerKm!, closeTo(300.0, 1.0));
-      // Max speed among accepted points only (skips rejected 20.0 mps)
+
+      // Max speed among accepted points only
       expect(run.maxSpeedMps, closeTo(3.2, 0.01));
       expect(run.status, kStateSaved);
 
-      // Verify GPS points were inserted (both accepted and rejected)
+      // Verify all GPS points were inserted (including baseline and rejected point).
       final points = await repository.getPoints(runId);
-      expect(points, hasLength(3));
+      expect(points, hasLength(4));
+
       expect(points[0].seq, 0);
       expect(points[0].accepted, isTrue);
+
       expect(points[1].seq, 1);
-      expect(points[1].accepted, isFalse); // preserves rejected points!
+      expect(points[1].accepted, isTrue);
+
       expect(points[2].seq, 2);
-      expect(points[2].accepted, isTrue);
+      expect(points[2].accepted, isFalse);
+
+      expect(points[3].seq, 3);
+      expect(points[3].accepted, isTrue);
     });
 
     test('saveFromFile handles incomplete crashed run without end record', () async {
@@ -89,8 +103,8 @@ void main() {
         ..writeln('{"v":1,"runId":"$runId","startedAtUtcMs":1000}')
         ..writeln('{"k":"p","seq":0,"t":1000,"lat":0.0,"lon":0.0,"acc":3.0,"spd":2.5,"alt":5.0,"ok":1}')
         ..writeln('{"k":"p","seq":1,"t":5000,"lat":0.0001,"lon":0.0,"acc":3.0,"spd":2.5,"alt":5.0,"ok":1}');
-      // No {"k":"end"...} record
 
+      // No end record
       await file.writeAsString(content.toString());
 
       await repository.saveFromFile(runId, file.path);
@@ -99,8 +113,52 @@ void main() {
       expect(run, isNotNull);
       expect(run!.id, runId);
       expect(run.startedAtUtcMs, 1000);
-      expect(run.endedAtUtcMs, 5000); // defaults to last point timestamp
+      expect(run.endedAtUtcMs, 5000);
       expect(run.movingMs, 4000);
+    });
+
+    // Test: Kotlin sends boolean values instead of 1/0.
+    test('saveFromFile accepts boolean ok values from Kotlin JSONL', () async {
+      const runId = 'boolean-ok-test';
+      final file = File('${tempDir.path}/$runId.jsonl');
+
+      final content = StringBuffer()
+        ..writeln('{"v":1,"runId":"$runId","startedAtUtcMs":1000}')
+        ..writeln('{"k":"p","seq":0,"t":1000,"lat":0.0,"lon":0.0,"acc":3.0,"spd":2.0,"alt":5.0,"ok":true}')
+        ..writeln('{"k":"p","seq":1,"t":5000,"lat":0.0001,"lon":0.0,"acc":3.0,"spd":2.0,"alt":5.0,"ok":false}')
+        ..writeln('{"k":"end","t":5000}');
+
+      await file.writeAsString(content.toString());
+
+      await repository.saveFromFile(runId, file.path);
+
+      final points = await repository.getPoints(runId);
+
+      expect(points, hasLength(2));
+      expect(points[0].accepted, isTrue);
+      expect(points[1].accepted, isFalse);
+    });
+
+    test('saveFromFile handles an immediate-stop run with zero GPS points', () async {
+      const runId = 'zero-point-run';
+      final file = File('${tempDir.path}/$runId.jsonl');
+
+      final content = StringBuffer()
+        ..writeln('{"v":1,"runId":"$runId","startedAtUtcMs":1000}')
+        ..writeln('{"k":"end","t":1000}');
+
+      await file.writeAsString(content.toString());
+      await repository.saveFromFile(runId, file.path);
+
+      final run = await repository.get(runId);
+      expect(run, isNotNull);
+      expect(run!.id, runId);
+      expect(run.distanceM, 0.0);
+      expect(run.avgPaceSecPerKm, isNull);
+      expect(run.movingMs, 0);
+
+      final points = await repository.getPoints(runId);
+      expect(points, isEmpty);
     });
 
     test('saveFromFile rejects malformed files or runId mismatch', () async {
@@ -108,7 +166,10 @@ void main() {
 
       // 1. Missing file
       expect(
-        () => repository.saveFromFile('id-1', '${tempDir.path}/nonexistent.jsonl'),
+        () => repository.saveFromFile(
+          'id-1',
+          '${tempDir.path}/nonexistent.jsonl',
+        ),
         throwsA(isA<FileSystemException>()),
       );
 
@@ -120,7 +181,9 @@ void main() {
       );
 
       // 3. Run ID mismatch
-      await file.writeAsString('{"v":1,"runId":"id-WRONG","startedAtUtcMs":1000}\n');
+      await file.writeAsString(
+        '{"v":1,"runId":"id-WRONG","startedAtUtcMs":1000}\n',
+      );
       expect(
         () => repository.saveFromFile('id-EXPECTED', file.path),
         throwsA(isA<FormatException>()),
@@ -144,6 +207,7 @@ void main() {
         movingMs: 1000,
         distanceM: 500.0,
       );
+
       final runNew = const Run(
         id: 'run-new',
         startedAtUtcMs: 5000,
@@ -157,7 +221,7 @@ void main() {
 
       final runs = await repository.list();
       expect(runs, hasLength(2));
-      expect(runs[0].id, 'run-new'); // newest first
+      expect(runs[0].id, 'run-new');
       expect(runs[1].id, 'run-old');
     });
 
@@ -167,6 +231,7 @@ void main() {
 
     test('delete removes run and associated points', () async {
       final runId = 'to-delete';
+
       fakeDb.tables[AppDatabase.tableRuns]!.add({
         'id': runId,
         'started_at_utc_ms': 1000,
@@ -175,6 +240,7 @@ void main() {
         'distance_m': 100.0,
         'status': 'saved',
       });
+
       fakeDb.tables[AppDatabase.tableRunPoints]!.add({
         'run_id': runId,
         'seq': 0,
@@ -195,7 +261,7 @@ void main() {
     });
 
     test('getUnfinishedRunPath returns path of latest unclosed JSONL file', () async {
-      // 1. Completed run
+      // Completed run
       final completed = File('${tempDir.path}/completed.jsonl');
       await completed.writeAsString(
         '{"v":1,"runId":"completed","startedAtUtcMs":1000}\n'
@@ -205,7 +271,7 @@ void main() {
 
       expect(await repository.getUnfinishedRunPath(), isNull);
 
-      // 2. Unfinished run (no end record)
+      // Unfinished run (no end record)
       final unfinished = File('${tempDir.path}/unfinished.jsonl');
       await unfinished.writeAsString(
         '{"v":1,"runId":"unfinished","startedAtUtcMs":3000}\n'
@@ -253,6 +319,7 @@ class FakeDatabase extends Fake implements Database {
     final rows = List<Map<String, Object?>>.from(tables[table] ?? []);
 
     var filtered = rows;
+
     if (where != null && whereArgs != null) {
       if (where.startsWith('id = ?')) {
         final id = whereArgs.first;
@@ -265,8 +332,9 @@ class FakeDatabase extends Fake implements Database {
 
     if (orderBy != null) {
       if (orderBy.contains('started_at_utc_ms DESC')) {
-        filtered.sort((a, b) => ((b['started_at_utc_ms'] as num?) ?? 0)
-            .compareTo((a['started_at_utc_ms'] as num?) ?? 0));
+        filtered.sort((a, b) =>
+            ((b['started_at_utc_ms'] as num?) ?? 0)
+                .compareTo((a['started_at_utc_ms'] as num?) ?? 0));
       } else if (orderBy.contains('seq ASC')) {
         filtered.sort((a, b) =>
             ((a['seq'] as num?) ?? 0).compareTo((b['seq'] as num?) ?? 0));
@@ -288,9 +356,11 @@ class FakeDatabase extends Fake implements Database {
     ConflictAlgorithm? conflictAlgorithm,
   }) async {
     final list = tables[table]!;
+
     if (conflictAlgorithm == ConflictAlgorithm.replace) {
       list.removeWhere((item) => item['id'] == values['id']);
     }
+
     list.add(Map<String, Object?>.from(values));
     return 1;
   }
@@ -303,6 +373,7 @@ class FakeDatabase extends Fake implements Database {
   }) async {
     final list = tables[table]!;
     final initialLength = list.length;
+
     if (where != null && whereArgs != null) {
       if (where.startsWith('id = ?')) {
         list.removeWhere((item) => item['id'] == whereArgs.first);
@@ -312,6 +383,7 @@ class FakeDatabase extends Fake implements Database {
     } else {
       list.clear();
     }
+
     return initialLength - list.length;
   }
 
@@ -374,6 +446,7 @@ class FakeBatch extends Fake implements Batch {
     for (final op in _operations) {
       op();
     }
+
     return [];
   }
 }
