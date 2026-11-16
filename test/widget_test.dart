@@ -148,6 +148,55 @@ class _StubRunRepository implements RunRepository {
 
   @override
   Future<String?> getUnfinishedRunPath() async => null;
+
+  @override
+  Future<void> updateWeather(
+    String runId, {
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+  }) async {
+    final index = runs.indexWhere((r) => r.id == runId);
+    if (index != -1) {
+      runs[index] = runs[index].copyWith(
+        weatherTempC: temperatureC,
+        weatherWindKmh: windKmh,
+        weatherCode: weatherCode,
+      );
+    }
+  }
+
+  @override
+  Future<void> updateDetails(
+    String runId, {
+    String? runName,
+    String? placeName,
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+    String? localStartDay,
+  }) async {
+    final index = runs.indexWhere((r) => r.id == runId);
+    if (index != -1) {
+      runs[index] = runs[index].copyWith(
+        runName: runName,
+        placeName: placeName,
+        weatherTempC: temperatureC,
+        weatherWindKmh: windKmh,
+        weatherCode: weatherCode,
+        localStartDay: localStartDay,
+      );
+    }
+  }
+
+  @override
+  Future<List<BadgeAward>> getBadgesForRun(String runId) async => [];
+
+  @override
+  Future<int> getCurrentStreak() async => 0;
+
+  @override
+  Future<void> recalculateBadges() async {}
 }
 
 class _StubPermissionGateway implements PermissionGateway {
