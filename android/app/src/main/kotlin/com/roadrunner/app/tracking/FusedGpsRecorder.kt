@@ -17,6 +17,7 @@ import com.google.android.gms.location.Priority
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import android.Manifest
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import com.google.android.gms.location.LocationAvailability
@@ -35,7 +36,10 @@ class FusedGpsRecorder(
     private val worker = Handler(workerThread.looper)
     private val locationClient =
         LocationServices.getFusedLocationProviderClient(appContext)
-    private val filter = GpsFilter()
+    private val filter = GpsFilter(
+        allowMockLocations =
+            (appContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0,
+    )
     private val speedSmoother = LiveSpeedSmoother()
     private val clock = RunClock(startedAtMonotonicMs)
     private val stopping = AtomicBoolean(false)
