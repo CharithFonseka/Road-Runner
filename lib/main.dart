@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Split;
 import 'package:flutter/services.dart';
 
@@ -76,11 +77,16 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   late final RunRepository _repository;
   late final PermissionGateway _permissionGateway;
 
+  static const MethodChannel _debugSimChannel = MethodChannel(
+    'roadrunner/debug_sim',
+  );
+
   List<HistoryRun> _recentRuns = const [];
   RecentRunsStatus _recentRunsStatus = RecentRunsStatus.ready;
   late bool _startupCompleted = !widget.checkStartupState;
   bool _startupStarted = false;
   bool _isStartingRun = false;
+  bool _debugSimulationEnabled = false;
 
   @override
   void initState() {
@@ -116,6 +122,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     _startupStarted = true;
 
     await _refreshRecentRuns();
+    if (kDebugMode && _ownsBridge) {
+      await _loadDebugSimulation();
+    }
 
     bool resumeActiveRun = false;
     RunResult? pendingUnfinished;
@@ -311,14 +320,48 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     );
   }
 
+  Future<void> _loadDebugSimulation() async {
+    try {
+      final bool? enabled = await _debugSimChannel.invokeMethod<bool>(
+        'getEnabled',
+      );
+      if (mounted && enabled != null) {
+        _debugSimulationEnabled = enabled;
+      }
+    } catch (_) {
+      // Ignore on platforms without the debug channel.
+    }
+  }
+
+  Future<void> _setDebugSimulation(bool enabled) async {
+    _debugSimulationEnabled = enabled;
+    _notifyShell();
+    try {
+      await _debugSimChannel.invokeMethod<void>('setEnabled', {
+        'enabled': enabled,
+      });
+    } catch (_) {
+      // Ignore on platforms without the debug channel.
+    }
+  }
+
   void _openSettings({bool replaceCurrent = false}) {
     final route = MaterialPageRoute<void>(
-      builder: (context) => SettingsScreen(
-        gateway: _permissionGateway,
-        onBack: () => _navigatorKey.currentState?.maybePop(),
-        onOpenHome: _popToHome,
-        onOpenHistory: () => unawaited(_openHistory(replaceCurrent: true)),
-        onManagePermissions: _openPermissions,
+      builder: (context) => ListenableBuilder(
+        listenable: _shellRevision,
+        builder: (context, _) => SettingsScreen(
+          gateway: _permissionGateway,
+          onBack: () => _navigatorKey.currentState?.maybePop(),
+          onOpenHome: _popToHome,
+          onOpenHistory: () => unawaited(_openHistory(replaceCurrent: true)),
+          onManagePermissions: _openPermissions,
+          debugSimulationEnabled:
+              kDebugMode && _ownsBridge ? _debugSimulationEnabled : null,
+          onDebugSimulationChanged:
+              kDebugMode && _ownsBridge
+                  ? (value) => unawaited(_setDebugSimulation(value))
+                  : null,
+        ),
       ),
     );
     if (replaceCurrent) {
@@ -388,6 +431,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
           // Completed files or already-removed temp files may ignore discard.
         }
         await _refreshRecentRuns();
+    if (kDebugMode && _ownsBridge) {
+      await _loadDebugSimulation();
+    }
         final RunSummary? summary = await _loadRunSummary(result.runId);
         if (!mounted) return;
         if (summary == null) {
@@ -576,6 +622,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
         // Ignore if there is no corresponding temp file.
       }
       await _refreshRecentRuns();
+    if (kDebugMode && _ownsBridge) {
+      await _loadDebugSimulation();
+    }
       if (!mounted) return;
       if (fromHistory) {
         _navigatorKey.currentState?.pop();

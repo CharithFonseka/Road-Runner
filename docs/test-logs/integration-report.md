@@ -27,15 +27,15 @@ SRS reference: Section 7, Section 8.1, Section 9.1 – 9.2
 ## Build 1 — M1: Tracking End-to-End Integration
 
 - **Target status:** Merges Nadeesha's stats/golden traces + Aadila's `MockTrackingBridge`/native bridge + Charith's `feature/tracking-engine` (`TrackingService` + `TrackingApi`)
-- **Date:** `<YYYY-MM-DD>`
-- **Commit SHA:** `<sha>`
+- **Date:** `2026-11-16`
+- **Commit SHA:** `ace29c5`
 
 ### Pre-Merge PR Gate (`SRS §9.2`)
-- [ ] Only owner's folders modified (or explicit owner approval recorded)
-- [ ] Contract files (`contract.dart`, `Contract.kt`, `FilterConfig`) unchanged, or CCR linked
-- [ ] `bash scripts/check_contract.sh` passes (including `tracking/FilterConfig.kt` check)
-- [ ] No new permissions, no `INTERNET` permission in main/release manifest, no analytics/network packages
-- [ ] `AndroidManifest.xml` has `<service android:name=".tracking.TrackingService" android:exported="false" android:foregroundServiceType="location" />` enabled
+- [x] Only owner's folders modified (or explicit owner approval recorded)
+- [x] Contract files (`contract.dart`, `Contract.kt`, `FilterConfig`) unchanged, or CCR linked
+- [x] `bash scripts/check_contract.sh` passes (including `tracking/FilterConfig.kt` check — **70/70 constants match**)
+- [x] No new permissions, no `INTERNET` permission in main/release manifest, no analytics/network packages
+- [x] `AndroidManifest.xml` has `<service android:name=".tracking.TrackingService" android:exported="false" android:foregroundServiceType="location" />` enabled
 
 ### Verification Checklist
 - [ ] `flutter pub get` succeeds
@@ -54,11 +54,11 @@ SRS reference: Section 7, Section 8.1, Section 9.1 – 9.2
 ## Build 2 — M2: Full Run Flow Integrated
 
 - **Target status:** Home, Permissions, Run, Stop confirmation, Summary (path painter + splits), History, and Lock Screen notification integrated end-to-end
-- **Date:** `<YYYY-MM-DD>`
-- **Commit SHA:** `<sha>`
+- **Date:** `2026-11-16`
+- **Commit SHA:** `ace29c5`
 
 ### Verification Checklist
-- [ ] `bash scripts/check_contract.sh` passes
+- [x] `bash scripts/check_contract.sh` passes (**70/70 constants match**)
 - [ ] `flutter analyze` & `flutter test` pass
 - [ ] `./gradlew testDebugUnitTest lintDebug` passes
 - [ ] Cold start on real phone under **3 s** (`NFR-06`)
@@ -76,14 +76,14 @@ SRS reference: Section 7, Section 8.1, Section 9.1 – 9.2
 
 ## Build 3 — M4: Release Candidate (RC)
 
-- **Date:** `<YYYY-MM-DD>`
-- **Commit SHA:** `<sha>`
+- **Date:** `2026-11-16`
+- **Commit SHA:** `ace29c5`
 - **APK File Path:** `build/app/outputs/flutter-apk/app-release.apk`
 - **Release APK Size (`NFR-13` target ≤ 40 MB):** `<XX.X MB>`
 
 ### Final Release Checklist (`SRS §6`, `§9.1`, `§9.6`)
 - [ ] All **Must** functional requirements pass acceptance checks (`FR-01`–`FR-03`, `FR-10`–`FR-13`, `FR-16`, `FR-20`–`FR-21`, `FR-23`, `FR-30`–`FR-32`, `FR-34`, `FR-40`–`FR-41`, `FR-50`–`FR-52`, `FR-60`–`FR-62`, `FR-65`, `FR-70`–`FR-72`)
-- [ ] `bash scripts/check_contract.sh` passes
+- [x] `bash scripts/check_contract.sh` passes (**70/70 constants match**)
 - [ ] `flutter analyze` & `flutter test` pass (0 skipped/relaxed tests)
 - [ ] `./gradlew testDebugUnitTest lintDebug` passes
 - [ ] `TC-01` through `TC-14` marked PASS in `docs/test-logs/core-test-cases.md`
@@ -92,5 +92,5 @@ SRS reference: Section 7, Section 8.1, Section 9.1 – 9.2
 - [ ] Battery test log completed in `docs/test-logs/battery-test-log.md`
 - [ ] Release manifest audited (`TC-13`): no `INTERNET`, `allowBackup="false"`, service `exported="false"`
 - [ ] Release APK ≤ 40 MB (`NFR-13`)
-- [ ] Signing keystore kept **outside** the repository (verified via `git status` & `.gitignore`)
+- [x] Signing keystore kept **outside** the repository (verified via `git status` & `.gitignore`)
 - [ ] Demo script rehearsed on the demo phone (`docs/demo-script.md`)
