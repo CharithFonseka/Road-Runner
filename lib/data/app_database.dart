@@ -7,12 +7,13 @@ import 'package:sqflite/sqflite.dart';
 /// Manages the SQLite database lifecycle, schema initialization, and connections.
 class AppDatabase {
   static const String databaseName = 'road_runner.db';
-  static const int databaseVersion = 3;
+  static const int databaseVersion = 4;
 
   // Table names
   static const String tableRuns = 'runs';
   static const String tableRunPoints = 'run_points';
   static const String tableRunPauses = 'run_pauses';
+  static const String tablePlaceCache = 'place_cache';
 
   // Runs table columns
   static const String colRunId = 'id';
@@ -143,6 +144,15 @@ class AppDatabase {
         FOREIGN KEY ($colPauseRunId) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
       );
     ''');
+
+    await db.execute('''
+      CREATE TABLE $tablePlaceCache (
+        lat_bucket INTEGER NOT NULL,
+        lon_bucket INTEGER NOT NULL,
+        place_name TEXT NOT NULL,
+        PRIMARY KEY (lat_bucket, lon_bucket)
+      );
+    ''');
   }
 
   /// Handles schema migrations for future database versions.
@@ -174,6 +184,17 @@ class AppDatabase {
         await db.execute(sql);
       }
     }
+
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tablePlaceCache (
+          lat_bucket INTEGER NOT NULL,
+          lon_bucket INTEGER NOT NULL,
+          place_name TEXT NOT NULL,
+          PRIMARY KEY (lat_bucket, lon_bucket)
+        );
+      ''');
+    }
   }
 
   /// Closes the underlying database connection.
@@ -184,3 +205,6 @@ class AppDatabase {
     }
   }
 }
+
+/// Computes a discrete coordinate bucket grouping start coordinates within ~110m.
+int placeBucket(double coordinate) => (coordinate * 1000).round();

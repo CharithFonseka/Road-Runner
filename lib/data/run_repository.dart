@@ -8,8 +8,11 @@ import 'dart:io';
 import 'package:road_runner/core/contract/contract.dart';
 import 'package:road_runner/data/app_database.dart';
 import 'package:road_runner/data/run.dart';
+import 'package:road_runner/domain/run_name.dart';
 import 'package:road_runner/domain/stats/stats.dart';
 import 'package:sqflite/sqflite.dart';
+
+export 'package:road_runner/domain/run_name.dart';
 
 /// Repository interface for saving, loading, and managing runs and GPS points.
 abstract class RunRepository {
@@ -458,18 +461,6 @@ class SqliteRunRepository implements RunRepository {
 
     return null;
   }
-}
-
-/// Builds a run name based on time of day and optional location name.
-String makeRunName(DateTime localStart, String? placeName) {
-  final hour = localStart.hour;
-  final period = hour < 12
-      ? 'Morning'
-      : hour < 17
-      ? 'Afternoon'
-      : 'Evening';
-
-  return placeName == null ? '$period run' : '$period run in $placeName';
 }
 
 /// Formats a local date as YYYY-MM-DD for daily streak calculations.

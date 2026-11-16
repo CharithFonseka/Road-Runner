@@ -493,6 +493,37 @@ void main() {
     );
 
     test(
+      'updateWeather writes only weather fields for an existing run',
+      () async {
+        final runId = 'weather-only-run';
+        final file = File('${tempDir.path}/$runId.jsonl');
+
+        final content = StringBuffer()
+          ..writeln('{"v":1,"runId":"$runId","startedAtUtcMs":1000}')
+          ..writeln(
+            '{"k":"p","seq":0,"t":1000,"lat":0.0,"lon":0.0,"acc":3.0,"spd":2.0,"alt":5.0,"ok":1}',
+          )
+          ..writeln('{"k":"end","t":2000}');
+
+        await file.writeAsString(content.toString());
+        await repository.saveFromFile(runId, file.path);
+
+        await repository.updateWeather(
+          runId,
+          temperatureC: 21.3,
+          windKmh: 8.5,
+          weatherCode: 3,
+        );
+
+        final updated = await repository.get(runId);
+        expect(updated, isNotNull);
+        expect(updated!.weatherTempC, 21.3);
+        expect(updated.weatherWindKmh, 8.5);
+        expect(updated.weatherCode, 3);
+      },
+    );
+
+    test(
       'list retrieves runs including weather and location metadata',
       () async {
         final runWithWeather = Run(
@@ -606,6 +637,7 @@ class FakeDatabase extends Fake implements Database {
     AppDatabase.tableRuns: [],
     AppDatabase.tableRunPoints: [],
     AppDatabase.tableRunPauses: [],
+    AppDatabase.tablePlaceCache: [],
   };
 
   @override
@@ -641,6 +673,12 @@ class FakeDatabase extends Fake implements Database {
       } else if (where.startsWith('run_id = ?')) {
         final runId = whereArgs.first;
         filtered = filtered.where((r) => r['run_id'] == runId).toList();
+      } else if (where.startsWith('lat_bucket = ? AND lon_bucket = ?')) {
+        final lat = whereArgs[0];
+        final lon = whereArgs[1];
+        filtered = filtered
+            .where((r) => r['lat_bucket'] == lat && r['lon_bucket'] == lon)
+            .toList();
       }
     }
 
@@ -682,7 +720,15 @@ class FakeDatabase extends Fake implements Database {
     final list = tables[table]!;
 
     if (conflictAlgorithm == ConflictAlgorithm.replace) {
-      list.removeWhere((item) => item['id'] == values['id']);
+      if (table == AppDatabase.tablePlaceCache) {
+        list.removeWhere(
+          (item) =>
+              item['lat_bucket'] == values['lat_bucket'] &&
+              item['lon_bucket'] == values['lon_bucket'],
+        );
+      } else {
+        list.removeWhere((item) => item['id'] == values['id']);
+      }
     }
 
     list.add(Map<String, Object?>.from(values));
