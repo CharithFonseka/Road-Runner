@@ -150,6 +150,23 @@ class _StubRunRepository implements RunRepository {
   Future<String?> getUnfinishedRunPath() async => null;
 
   @override
+  Future<void> updateWeather(
+    String runId, {
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+  }) async {
+    final index = runs.indexWhere((r) => r.id == runId);
+    if (index != -1) {
+      runs[index] = runs[index].copyWith(
+        weatherTempC: temperatureC,
+        weatherWindKmh: windKmh,
+        weatherCode: weatherCode,
+      );
+    }
+  }
+
+  @override
   Future<void> updateDetails(
     String runId, {
     String? runName,

@@ -462,6 +462,37 @@ void main() {
     );
 
     test(
+      'updateWeather writes only weather fields for an existing run',
+      () async {
+        final runId = 'weather-only-run';
+        final file = File('${tempDir.path}/$runId.jsonl');
+
+        final content = StringBuffer()
+          ..writeln('{"v":1,"runId":"$runId","startedAtUtcMs":1000}')
+          ..writeln(
+            '{"k":"p","seq":0,"t":1000,"lat":0.0,"lon":0.0,"acc":3.0,"spd":2.0,"alt":5.0,"ok":1}',
+          )
+          ..writeln('{"k":"end","t":2000}');
+
+        await file.writeAsString(content.toString());
+        await repository.saveFromFile(runId, file.path);
+
+        await repository.updateWeather(
+          runId,
+          temperatureC: 21.3,
+          windKmh: 8.5,
+          weatherCode: 3,
+        );
+
+        final updated = await repository.get(runId);
+        expect(updated, isNotNull);
+        expect(updated!.weatherTempC, 21.3);
+        expect(updated.weatherWindKmh, 8.5);
+        expect(updated.weatherCode, 3);
+      },
+    );
+
+    test(
       'list retrieves runs including weather and location metadata',
       () async {
         final runWithWeather = Run(
@@ -481,6 +512,47 @@ void main() {
         expect(runs.first.id, 'run-with-weather');
         expect(runs.first.weatherTempC, 22.0);
         expect(runs.first.placeName, 'Galle Face Green');
+      },
+    );
+
+    test(
+      'saveFromFile preserves existing metadata when re-importing a run',
+      () async {
+        final runId = 'reimport-run-metadata';
+        final file = File('${tempDir.path}/$runId.jsonl');
+
+        final content = StringBuffer()
+          ..writeln('{"v":1,"runId":"$runId","startedAtUtcMs":1000}')
+          ..writeln(
+            '{"k":"p","seq":0,"t":1000,"lat":0.0,"lon":0.0,"acc":3.0,"spd":2.0,"alt":5.0,"ok":1}',
+          )
+          ..writeln('{"k":"end","t":2000}');
+
+        await file.writeAsString(content.toString());
+        await repository.saveFromFile(runId, file.path);
+
+        // Add enriched metadata
+        await repository.updateDetails(
+          runId,
+          runName: 'Custom Run Name',
+          placeName: 'Independence Square',
+          temperatureC: 25.5,
+          windKmh: 12.0,
+          weatherCode: 800,
+          localStartDay: '2026-11-16',
+        );
+
+        // Re-save/re-import same run
+        await repository.saveFromFile(runId, file.path);
+
+        final reimported = await repository.get(runId);
+        expect(reimported, isNotNull);
+        expect(reimported!.runName, 'Custom Run Name');
+        expect(reimported.placeName, 'Independence Square');
+        expect(reimported.weatherTempC, 25.5);
+        expect(reimported.weatherWindKmh, 12.0);
+        expect(reimported.weatherCode, 800);
+        expect(reimported.localStartDay, '2026-11-16');
       },
     );
 

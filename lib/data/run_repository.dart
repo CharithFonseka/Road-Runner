@@ -20,6 +20,12 @@ abstract class RunRepository {
   Future<List<PauseInterval>> getPauses(String runId);
   Future<void> delete(String runId);
   Future<String?> getUnfinishedRunPath();
+  Future<void> updateWeather(
+    String runId, {
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+  });
   Future<void> updateDetails(
     String runId, {
     String? runName,
@@ -335,6 +341,26 @@ class SqliteRunRepository implements RunRepository {
         whereArgs: [runId],
       );
     });
+  }
+
+  @override
+  Future<void> updateWeather(
+    String runId, {
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+  }) async {
+    final db = await _database.database;
+    await db.update(
+      AppDatabase.tableRuns,
+      {
+        'weather_temp_c': temperatureC,
+        'weather_wind_kmh': windKmh,
+        'weather_code': weatherCode,
+      },
+      where: '${AppDatabase.colRunId} = ?',
+      whereArgs: [runId],
+    );
   }
 
   @override

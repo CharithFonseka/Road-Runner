@@ -11,6 +11,7 @@ import 'core/theme/app_spacing.dart';
 import 'core/theme/app_theme.dart';
 import 'data/run.dart';
 import 'data/run_repository.dart';
+import 'data/run_weather_client.dart';
 import 'domain/stats/stats.dart';
 import 'features/app_strings.dart';
 import 'features/history/history_run.dart';
@@ -382,6 +383,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     while (mounted) {
       try {
         await _repository.saveFromFile(result.runId, result.filePath);
+        unawaited(enrichRunWeather(result.runId, repository: _repository));
         try {
           await _bridge.discardRun(result.runId);
         } catch (_) {
@@ -395,11 +397,8 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
         }
 
         final route = MaterialPageRoute<void>(
-          builder: (context) => _buildSummaryScreen(
-            context,
-            summary,
-            fromHistory: false,
-          ),
+          builder: (context) =>
+              _buildSummaryScreen(context, summary, fromHistory: false),
         );
         if (replaceTop) {
           _navigatorKey.currentState?.pushReplacement(route);
@@ -460,11 +459,8 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
       }
       _navigatorKey.currentState?.push(
         MaterialPageRoute<void>(
-          builder: (context) => _buildSummaryScreen(
-            context,
-            summary,
-            fromHistory: fromHistory,
-          ),
+          builder: (context) =>
+              _buildSummaryScreen(context, summary, fromHistory: fromHistory),
         ),
       );
     } catch (_) {
@@ -493,8 +489,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
         .toList();
 
     final List<Split> allSplits = computeSplits(points, pauses: pauses);
-    final List<Split> fullSplits =
-        allSplits.where((s) => !s.isPartial).toList();
+    final List<Split> fullSplits = allSplits
+        .where((s) => !s.isPartial)
+        .toList();
     final Split? partial = allSplits.where((s) => s.isPartial).lastOrNull;
 
     int? fastestMs;
@@ -514,8 +511,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
         )
         .toList();
 
-    final double? avgSpeedMps =
-        run.movingMs > 0 ? run.distanceM / (run.movingMs / 1000.0) : null;
+    final double? avgSpeedMps = run.movingMs > 0
+        ? run.distanceM / (run.movingMs / 1000.0)
+        : null;
 
     return RunSummary(
       runId: run.id,
@@ -586,9 +584,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
       if (!mounted) return;
       final BuildContext? errCtx = _navigatorKey.currentContext;
       if (errCtx != null && errCtx.mounted) {
-        ScaffoldMessenger.maybeOf(errCtx)?.showSnackBar(
-          const SnackBar(content: Text('Could not delete run.')),
-        );
+        ScaffoldMessenger.maybeOf(
+          errCtx,
+        )?.showSnackBar(const SnackBar(content: Text('Could not delete run.')));
       }
     }
   }
@@ -630,10 +628,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
               icon: Icons.delete_outline_rounded,
               tooltip: 'Delete run',
               onPressed: () => unawaited(
-                _confirmAndDeleteRun(
-                  summary.runId,
-                  fromHistory: fromHistory,
-                ),
+                _confirmAndDeleteRun(summary.runId, fromHistory: fromHistory),
               ),
             ),
           ),
@@ -658,14 +653,17 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
             (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
                 .copyWith(
                   statusBarColor: Colors.transparent,
-                  statusBarIconBrightness:
-                      isDark ? Brightness.light : Brightness.dark,
-                  statusBarBrightness:
-                      isDark ? Brightness.dark : Brightness.light,
+                  statusBarIconBrightness: isDark
+                      ? Brightness.light
+                      : Brightness.dark,
+                  statusBarBrightness: isDark
+                      ? Brightness.dark
+                      : Brightness.light,
                   systemNavigationBarColor: palette.background,
                   systemNavigationBarDividerColor: Colors.transparent,
-                  systemNavigationBarIconBrightness:
-                      isDark ? Brightness.light : Brightness.dark,
+                  systemNavigationBarIconBrightness: isDark
+                      ? Brightness.light
+                      : Brightness.dark,
                 );
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: overlayStyle,
@@ -688,9 +686,8 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
             onOpenPermissions: _openPermissions,
             onOpenSettings: _openSettings,
             onRetry: () => unawaited(_refreshRecentRuns(showLoading: true)),
-            onRunSelected: (runId) => unawaited(
-              _openSummaryForRunId(runId, fromHistory: false),
-            ),
+            onRunSelected: (runId) =>
+                unawaited(_openSummaryForRunId(runId, fromHistory: false)),
           );
         },
       ),
