@@ -577,7 +577,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     } catch (_) {
       if (!mounted) return;
       final BuildContext? errCtx = _navigatorKey.currentContext;
-      if (errCtx != null) {
+      if (errCtx != null && errCtx.mounted) {
         ScaffoldMessenger.maybeOf(errCtx)?.showSnackBar(
           const SnackBar(content: Text('Could not delete run.')),
         );
