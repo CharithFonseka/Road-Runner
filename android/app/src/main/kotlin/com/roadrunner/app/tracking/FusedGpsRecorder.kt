@@ -65,6 +65,9 @@ class FusedGpsRecorder(
     // These values are changed only on the worker thread.
     private var writer: RunFileWriter? = null
     private var distanceM = 0.0
+    private var lastAcceptedLat: Double? = null
+    private var lastAcceptedLon: Double? = null
+    private var lastAcceptedSeq: Int? = null
 
     private val snapshotTick = object : Runnable {
         override fun run() {
@@ -383,7 +386,7 @@ class FusedGpsRecorder(
         )
 
         val decision = filter.evaluate(fix)
-        writer?.appendPoint(fix, decision)
+        val seq = writer?.appendPoint(fix, decision)
         distanceM += decision.addedDistanceM
 
         TrackingApi.publishGps(
@@ -397,6 +400,12 @@ class FusedGpsRecorder(
         )
 
         if (decision.accepted) {
+            if (seq != null) {
+                lastAcceptedLat = fix.lat
+                lastAcceptedLon = fix.lon
+                lastAcceptedSeq = seq
+                TrackingApi.publishPoint(seq, fix.lat, fix.lon)
+            }
             speedSmoother.accepted(
                 addedDistanceM = decision.addedDistanceM,
                 fixUtcMs = fix.tUtcMs,
@@ -426,6 +435,9 @@ class FusedGpsRecorder(
                 speedMps = speedMps,
                 paceSecPerKm =
                     LiveSpeedSmoother.paceSecPerKm(speedMps),
+                lat = lastAcceptedLat,
+                lon = lastAcceptedLon,
+                seq = lastAcceptedSeq,
             )
         )
     }

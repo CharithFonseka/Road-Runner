@@ -21,6 +21,13 @@ ActiveRunScreen(
 
 ## What the screen shows
 
+The live street map appears after the first accepted GPS fix. It draws each
+accepted point from the bridge, follows the current position until the user
+moves the map, and offers a recenter button. When the screen reattaches to an
+active run, it restores the full accepted route from the app-private run file.
+The route stays visible if online map tiles are unavailable. OpenMapTiles and
+OpenStreetMap credit stays on the map.
+
 | Stat | Bridge field | Label | Notes |
 |---|---|---|---|
 | Main timer (62sp) | `movingMs` | Moving time | Freezes while paused. |

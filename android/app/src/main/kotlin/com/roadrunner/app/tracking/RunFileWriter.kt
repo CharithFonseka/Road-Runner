@@ -57,7 +57,7 @@ class RunFileWriter(
     }
 
     @Synchronized
-    fun appendPoint(fix: GpsFix, decision: FilterDecision) {
+    fun appendPoint(fix: GpsFix, decision: FilterDecision): Int {
         ensureOpen()
         require(fix.tUtcMs > 0)
         require(fix.lat.isFinite() && fix.lon.isFinite())
@@ -85,6 +85,7 @@ class RunFileWriter(
             append('}')
         }
 
+        val writtenSeq = nextSeq
         writeLine(line)
         nextSeq++
         pointsSinceSync++
@@ -93,6 +94,7 @@ class RunFileWriter(
         if (pointsSinceSync >= 5) {
             sync()
         }
+        return writtenSeq
     }
 
     @Synchronized
@@ -142,4 +144,4 @@ class RunFileWriter(
         output.fd.sync()
         pointsSinceSync = 0
     }
-}   
+}
