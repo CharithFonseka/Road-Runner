@@ -285,6 +285,77 @@ void main() {
       expect(colourOf(AppStrings.historyTotalTime), night.textSecondary);
     });
 
+    testWidgets(
+      'monthly summary card average pace caption contrast in both themes',
+      (tester) async {
+        const HistoryMonthlySummary summaryWithPace = HistoryMonthlySummary(
+          monthLabel: 'Nov 2026',
+          totalRuns: 2,
+          totalDistanceM: 8500,
+          totalMovingMs: (53 * 60 + 20) * 1000,
+          averagePaceSecPerKm: 376, // 6:16/km
+        );
+        final String paceText = '${AppStrings.statAveragePace} 6:16/km';
+
+        // 1. Dark theme: caption must use textSecondary with >= 4.5:1 contrast
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.dark(),
+            home: Scaffold(
+              body: HistoryScreen(
+                runs: _runs,
+                onRunSelected: (_) {},
+                onBackToHome: () {},
+                referenceDate: _today,
+                initialFilter: HistoryRunFilter.thisMonth,
+                thisMonthSummary: summaryWithPace,
+              ),
+            ),
+          ),
+        );
+
+        final Finder darkCard = find.byKey(HistoryScreen.summaryCardKey);
+        final Text darkPaceText = tester.widget<Text>(
+          find.descendant(of: darkCard, matching: find.text(paceText)),
+        );
+        expect(darkPaceText.style!.color, night.textSecondary);
+        expect(
+          _contrast(darkPaceText.style!.color!, night.surface),
+          greaterThanOrEqualTo(4.5),
+        );
+
+        // 2. Light theme: caption must use textSecondary with >= 4.5:1 contrast
+        final AppPalette day = AppPalette.light;
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const Key('light-app'),
+            theme: AppTheme.light(),
+            home: Scaffold(
+              body: HistoryScreen(
+                runs: _runs,
+                onRunSelected: (_) {},
+                onBackToHome: () {},
+                referenceDate: _today,
+                initialFilter: HistoryRunFilter.thisMonth,
+                thisMonthSummary: summaryWithPace,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final Finder lightCard = find.byKey(HistoryScreen.summaryCardKey);
+        final Text lightPaceText = tester.widget<Text>(
+          find.descendant(of: lightCard, matching: find.text(paceText)),
+        );
+        expect(lightPaceText.style!.color, day.textSecondary);
+        expect(
+          _contrast(lightPaceText.style!.color!, day.surface),
+          greaterThanOrEqualTo(4.5),
+        );
+      },
+    );
+
     testWidgets('loading skeletons use the night skeleton fill', (
       tester,
     ) async {
