@@ -1,9 +1,13 @@
 # Home feature (UI kit Revision 5)
 
-The current phone dashboard shows a route/weather card, weekly goal and streak,
+The current phone dashboard shows a nearby three-hour forecast from the device's
+current location, weekly goal with a visible animated fill and streak, earned
 badge preview and the two newest runs. The bottom bar opens Routes, a deliberate
 Run start sheet, History and Profile. The header keeps visible Settings and
 light/dark buttons. Recent runs fit both entries without taking over Home.
+Motion is short and disabled when the device requests reduced motion. Home
+offers **Use location** when nearby weather is unavailable; it never labels
+a previous run's location as the runner's current position.
 
 Owner: Tharushi
 SRS reference: Section 8.4, FR-01 (trigger), FR-61, FR-71, NFR-09, NFR-14

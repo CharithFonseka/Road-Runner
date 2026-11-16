@@ -6,6 +6,8 @@ import '../../domain/achievements/achievements.dart';
 import '../../domain/achievements/goals_summary.dart';
 import '../account/account_models.dart';
 import '../shared/app_bottom_navigation.dart';
+import '../shared/badge_icon.dart';
+import '../shared/smooth_progress_bar.dart';
 
 /// Local progress first; Google sign-in is an optional backup action.
 class ProfileScreen extends StatelessWidget {
@@ -169,6 +171,14 @@ class ProfileScreen extends StatelessWidget {
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
+                        Text(
+                          '${(snapshot.progressFraction * 100).round()}%',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                color: palette.accent,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
                         const Icon(Icons.chevron_right_rounded),
                       ],
                     ),
@@ -177,16 +187,10 @@ class ProfileScreen extends StatelessWidget {
                       '${snapshot.weeklyDistanceKm.toStringAsFixed(1)} / ${snapshot.weeklyGoalKm.toStringAsFixed(0)} km',
                     ),
                     const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(99),
-                      child: LinearProgressIndicator(
-                        value: snapshot.progressFraction,
-                        minHeight: 9,
-                        backgroundColor: palette.iconButtonFill,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          palette.primaryFill,
-                        ),
-                      ),
+                    SmoothProgressBar(
+                      value: snapshot.progressFraction,
+                      height: 12,
+                      label: 'Weekly goal progress',
                     ),
                   ],
                 ),
@@ -278,42 +282,63 @@ class _BadgeProgress extends StatelessWidget {
   final double progress;
   final String detail;
   @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: context.palette.iconTile,
-            child: Icon(
-              earned ? Icons.stars_rounded : Icons.lock_outline_rounded,
-              color: context.palette.accent,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  info.title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                Text(detail, style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 6),
-                LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 5,
-                  backgroundColor: context.palette.iconButtonFill,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    context.palette.primaryFill,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: earned
+              ? palette.accent.withValues(alpha: 0.5)
+              : palette.cardBorder,
+        ),
       ),
-    ),
-  );
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: earned ? palette.iconTile : palette.background,
+              child: Icon(
+                earned ? badgeIcon(info.type) : Icons.lock_outline_rounded,
+                color: palette.accent,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          info.title,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      if (earned)
+                        Icon(
+                          Icons.check_circle_rounded,
+                          size: 18,
+                          color: palette.accent,
+                        ),
+                    ],
+                  ),
+                  Text(detail, style: Theme.of(context).textTheme.bodySmall),
+                  const SizedBox(height: 9),
+                  SmoothProgressBar(
+                    value: progress,
+                    height: 7,
+                    label: '${info.title} progress',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

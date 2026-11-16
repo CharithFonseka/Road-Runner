@@ -1,7 +1,9 @@
 # Route planning
 
-The planner can search for a destination through Photon/OpenStreetMap or accept
-two points tapped on the map. It automatically requests a walking route along
+The planner has explicit Start and End point selectors. Either point can come
+from a map tap, Photon/OpenStreetMap place search, or **Use my location**. A
+foreground location fix is requested only after the user taps that control;
+location permission is requested when needed. It automatically requests a walking route along
 roads and paths. Without an OpenRouteService key it uses the public OSRM route
 service. The map uses OpenFreeMap tiles.
 

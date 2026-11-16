@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../core/theme/app_palette.dart';
 import '../../data/current_weather_client.dart';
+import '../../data/current_location_client.dart';
 import '../../data/planned_route.dart';
 import '../../data/planned_route_repository.dart';
 import '../../data/run_weather_client.dart';
@@ -27,6 +28,7 @@ class RoutePlanningScreen extends StatefulWidget {
     this.placeSearch,
     this.onStartRun,
     this.weatherFetcher,
+    this.onCurrentLocation,
   });
 
   final PlannedRouteRepository repository;
@@ -37,6 +39,7 @@ class RoutePlanningScreen extends StatefulWidget {
   final PlaceSearchClient? placeSearch;
   final ValueChanged<PlannedRoute?>? onStartRun;
   final Future<RunWeather?> Function(LatLng)? weatherFetcher;
+  final Future<LatLng?> Function()? onCurrentLocation;
 
   static const Key mapKey = Key('routePlanning.map');
   static const Key searchFieldKey = Key('routePlanning.search');
@@ -44,6 +47,9 @@ class RoutePlanningScreen extends StatefulWidget {
   static const Key findKey = Key('routePlanning.find');
   static const Key saveKey = Key('routePlanning.save');
   static const Key startRunKey = Key('routePlanning.startRun');
+  static const Key startPointKey = Key('routePlanning.startPoint');
+  static const Key endPointKey = Key('routePlanning.endPoint');
+  static const Key currentLocationKey = Key('routePlanning.currentLocation');
 
   @override
   State<RoutePlanningScreen> createState() => _RoutePlanningScreenState();
@@ -65,6 +71,11 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
 
   LatLng? _start;
   LatLng? _finish;
+  String _startLabel = 'Choose start';
+  String _finishLabel = 'Choose end';
+  bool _choosingStart = true;
+  bool _locating = false;
+  int _routeGeneration = 0;
   List<PlannedRoutePoint>? _preview;
   List<PlaceSearchResult> _searchResults = const [];
   Timer? _searchDebounce;
@@ -81,7 +92,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
     super.initState();
     if (widget.initialCenter.latitude != 0 ||
         widget.initialCenter.longitude != 0) {
-      _loadWeather(widget.initialCenter, 'Near your last run');
+      _loadWeather(widget.initialCenter, 'Map area');
     }
   }
 
@@ -113,28 +124,64 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
     super.dispose();
   }
 
-  void _selectPoint(LatLng point) {
+  void _selectPoint(LatLng point, {String label = 'Map point'}) {
     _searchFocus.unfocus();
-    var shouldFetch = false;
+    final choosingStart = _choosingStart;
     setState(() {
+      _routeGeneration++;
       _searchResults = const [];
-      if (_start == null && _finish != null) {
+      _searchController.clear();
+      if (choosingStart) {
         _start = point;
-        shouldFetch = true;
-      } else if (_start == null || _finish != null) {
-        _start = point;
-        _finish = null;
+        _startLabel = label;
+        _choosingStart = false;
       } else {
         _finish = point;
-        shouldFetch = true;
+        _finishLabel = label;
       }
       _preview = null;
     });
-    if (_start != null && _finish == null) {
-      unawaited(_loadWeather(_start!, 'Selected start'));
+    if (choosingStart) {
+      unawaited(
+        _loadWeather(
+          point,
+          label == 'Current location' ? 'Near you' : 'Selected start',
+        ),
+      );
     }
-    if (shouldFetch) {
+    if (_start != null && _finish != null) {
       unawaited(_findRoute());
+    }
+  }
+
+  Future<void> _useCurrentLocation() async {
+    if (_locating) return;
+    setState(() => _locating = true);
+    try {
+      final getter = widget.onCurrentLocation;
+      final location = getter != null
+          ? await getter()
+          : await const CurrentLocationClient().currentLocation();
+      if (!mounted) return;
+      if (location == null) {
+        throw StateError('Turn on location and try again.');
+      }
+      _selectPoint(location, label: 'Current location');
+      if (_mapReady) {
+        _controller.move(location, math.max(_controller.camera.zoom, 14));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Current location unavailable. Check location permission and GPS.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _locating = false);
     }
   }
 
@@ -182,31 +229,24 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
 
   void _selectDestination(PlaceSearchResult result) {
     _searchDebounce?.cancel();
-    _searchFocus.unfocus();
-    setState(() {
-      _finish = result.location;
-      _preview = null;
-      _searchResults = const [];
-      _searching = false;
-      _searchController.text = result.name;
-      if (_name.text.trim().isEmpty || _name.text == 'Planned route') {
-        _name.text = 'Run to ${result.name}';
-      }
-    });
-    if (_start != null) {
-      unawaited(_findRoute());
-    } else if (_mapReady) {
-      unawaited(_loadWeather(result.location, result.name));
+    final wasChoosingStart = _choosingStart;
+    _selectPoint(result.location, label: result.name);
+    if (!wasChoosingStart &&
+        (_name.text.trim().isEmpty || _name.text == 'Planned route')) {
+      _name.text = 'Run to ${result.name}';
+    }
+    if (_mapReady) {
       _controller.move(result.location, math.max(_controller.camera.zoom, 14));
     }
   }
 
   Future<void> _findRoute() async {
     if (_start == null || _finish == null || _busy) return;
+    final generation = _routeGeneration;
     setState(() => _busy = true);
     try {
       final points = await widget.directions.walkingRoute(_start!, _finish!);
-      if (!mounted) return;
+      if (!mounted || generation != _routeGeneration) return;
       setState(() => _preview = points);
       if (_mapReady) {
         _controller.fitCamera(
@@ -218,13 +258,20 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
         );
       }
     } catch (error) {
-      if (mounted) {
+      if (mounted && generation == _routeGeneration) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Could not plan route: $error')));
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        if (generation != _routeGeneration &&
+            _start != null &&
+            _finish != null) {
+          unawaited(_findRoute());
+        }
+      }
     }
   }
 
@@ -385,6 +432,79 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                            child: SegmentedButton<bool>(
+                              style: ButtonStyle(
+                                backgroundColor:
+                                    WidgetStateProperty.resolveWith(
+                                      (states) =>
+                                          states.contains(WidgetState.selected)
+                                          ? palette.iconTile
+                                          : palette.surface,
+                                    ),
+                                foregroundColor:
+                                    WidgetStateProperty.resolveWith(
+                                      (states) =>
+                                          states.contains(WidgetState.selected)
+                                          ? palette.accent
+                                          : palette.textPrimary,
+                                    ),
+                                side: WidgetStatePropertyAll(
+                                  BorderSide(color: palette.buttonOutline),
+                                ),
+                              ),
+                              segments: const [
+                                ButtonSegment(
+                                  value: true,
+                                  icon: Icon(
+                                    Icons.trip_origin_rounded,
+                                    size: 18,
+                                  ),
+                                  label: Text('Start point'),
+                                ),
+                                ButtonSegment(
+                                  value: false,
+                                  icon: Icon(Icons.flag_outlined, size: 18),
+                                  label: Text('End point'),
+                                ),
+                              ],
+                              selected: {_choosingStart},
+                              onSelectionChanged: (selection) => setState(
+                                () => _choosingStart = selection.first,
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Start: $_startLabel',
+                                    key: RoutePlanningScreen.startPointKey,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'End: $_finishLabel',
+                                    key: RoutePlanningScreen.endPointKey,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                           TextField(
                             key: RoutePlanningScreen.searchFieldKey,
                             controller: _searchController,
@@ -394,7 +514,9 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                             onSubmitted: (value) =>
                                 unawaited(_runSearch(value, showError: true)),
                             decoration: InputDecoration(
-                              hintText: 'Search destination (e.g. park, road)',
+                              hintText: _choosingStart
+                                  ? 'Search start point'
+                                  : 'Search destination',
                               prefixIcon: const Icon(Icons.search),
                               border: InputBorder.none,
                               contentPadding: const EdgeInsets.symmetric(
@@ -426,6 +548,32 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                                       },
                                     )
                                   : null,
+                            ),
+                          ),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              key: RoutePlanningScreen.currentLocationKey,
+                              onPressed: _locating
+                                  ? null
+                                  : () => unawaited(_useCurrentLocation()),
+                              icon: _locating
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.my_location_rounded,
+                                      size: 18,
+                                    ),
+                              label: Text(
+                                _choosingStart
+                                    ? 'Use my location as start'
+                                    : 'Use my location as end',
+                              ),
                             ),
                           ),
                           if (_weather != null)
@@ -512,11 +660,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                   Text(
                     preview != null
                         ? 'Route ready · ${_routeDistanceKm(preview).toStringAsFixed(2)} km'
-                        : _start == null && _finish != null
-                        ? 'Destination set. Tap the map to set your start point.'
-                        : _start != null && _finish == null
-                        ? 'Start set. Tap the map or search for a destination.'
-                        : 'Tap the map for start, then tap or search for a destination.',
+                        : 'Choose ${_choosingStart ? 'start' : 'end'} on the map, search, or use your location.',
                   ),
                   if (preview != null) ...[
                     const SizedBox(height: 8),
@@ -537,8 +681,12 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                             : () {
                                 _searchDebounce?.cancel();
                                 setState(() {
+                                  _routeGeneration++;
                                   _start = null;
                                   _finish = null;
+                                  _startLabel = 'Choose start';
+                                  _finishLabel = 'Choose end';
+                                  _choosingStart = true;
                                   _preview = null;
                                   _searchResults = const [];
                                   _searchController.clear();

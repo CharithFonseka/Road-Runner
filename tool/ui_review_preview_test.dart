@@ -15,6 +15,7 @@ import 'package:road_runner/bridge/mock_tracking_bridge.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/core/theme/app_text_styles.dart';
 import 'package:road_runner/data/planned_route.dart';
+import 'package:road_runner/data/current_weather_client.dart';
 import 'package:road_runner/data/planned_route_repository.dart';
 import 'package:road_runner/data/run_weather_client.dart';
 import 'package:road_runner/domain/achievements/achievements.dart';
@@ -109,7 +110,29 @@ Widget previewHome() => HomeScreen(
   weeklyDistanceKm: 8.5,
   weeklyGoalKm: 15,
   achievements: previewAchievements,
-  weather: const RunWeather(28, 8, 2),
+  forecast: LocalForecast(
+    current: const RunWeather(28, 8, 2),
+    nextHours: [
+      HourlyWeather(
+        time: DateTime(2026, 11, 17, 10),
+        temperatureC: 29,
+        code: 2,
+        rainChancePercent: 10,
+      ),
+      HourlyWeather(
+        time: DateTime(2026, 11, 17, 11),
+        temperatureC: 30,
+        code: 3,
+        rainChancePercent: 20,
+      ),
+      HourlyWeather(
+        time: DateTime(2026, 11, 17, 12),
+        temperatureC: 29,
+        code: 61,
+        rainChancePercent: 45,
+      ),
+    ],
+  ),
   onStartRun: () {},
   onOpenHistory: () {},
   onOpenPermissions: () {},
@@ -316,10 +339,10 @@ void main() {
     );
     final map = find.byKey(RoutePlanningScreen.mapKey);
     final topLeft = tester.getTopLeft(map);
-    await tester.tapAt(topLeft + const Offset(80, 130));
-    await tester.pump();
-    await tester.tapAt(topLeft + const Offset(240, 260));
-    await tester.pump();
+    await tester.tapAt(topLeft + const Offset(80, 230));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tapAt(topLeft + const Offset(240, 350));
+    await tester.pump(const Duration(milliseconds: 300));
     if (find.byKey(RoutePlanningScreen.findKey).evaluate().isNotEmpty) {
       await tester.tap(find.byKey(RoutePlanningScreen.findKey));
       await tester.pump();

@@ -88,7 +88,7 @@ class RecentRunsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(16, 6, 8, 2),
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 3, 8, 0),
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 minHeight: AppSpacing.minTouchTarget,
@@ -226,9 +226,9 @@ class _RunRow extends StatelessWidget {
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               16,
-              compact ? 8 : 10,
+              compact ? 6 : 10,
               16,
-              compact ? 8 : 10,
+              compact ? 6 : 10,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

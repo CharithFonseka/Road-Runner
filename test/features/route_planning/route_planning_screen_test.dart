@@ -18,6 +18,58 @@ class _RecordingRoutes extends PlannedRouteRepository {
 }
 
 void main() {
+  testWidgets('current location can fill the selected start and end points', (
+    tester,
+  ) async {
+    var fixes = 0;
+    final directions = OrsDirectionsClient(
+      apiKey: 'test-key',
+      post: (_, _, body) async {
+        expect(body['coordinates'], [
+          [79.8612, 6.9271],
+          [79.864, 6.93],
+        ]);
+        return {
+          'features': [
+            {
+              'geometry': {
+                'type': 'LineString',
+                'coordinates': [
+                  [79.8612, 6.9271],
+                  [79.864, 6.93],
+                ],
+              },
+            },
+          ],
+        };
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RoutePlanningScreen(
+          repository: _RecordingRoutes(),
+          directions: directions,
+          initialCenter: const LatLng(6.9271, 79.8612),
+          styleFuture: Completer<vt.Style>().future,
+          weatherFetcher: (_) async => null,
+          onCurrentLocation: () async => ++fixes == 1
+              ? const LatLng(6.9271, 79.8612)
+              : const LatLng(6.93, 79.864),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(RoutePlanningScreen.currentLocationKey));
+    await tester.pumpAndSettle();
+    expect(find.text('Start: Current location'), findsOneWidget);
+    expect(find.text('Use my location as end'), findsOneWidget);
+
+    await tester.tap(find.byKey(RoutePlanningScreen.currentLocationKey));
+    await tester.pumpAndSettle();
+    expect(find.text('End: Current location'), findsOneWidget);
+    expect(find.textContaining('Route ready ·'), findsOneWidget);
+  });
+
   testWidgets('selects map endpoints, previews a route and saves its name', (
     tester,
   ) async {
@@ -54,10 +106,10 @@ void main() {
 
     final map = find.byKey(RoutePlanningScreen.mapKey);
     final topLeft = tester.getTopLeft(map);
-    await tester.tapAt(topLeft + const Offset(80, 80));
-    await tester.pump();
-    await tester.tapAt(topLeft + const Offset(180, 140));
-    await tester.pump();
+    await tester.tapAt(topLeft + const Offset(80, 230));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tapAt(topLeft + const Offset(180, 300));
+    await tester.pump(const Duration(milliseconds: 300));
 
     if (find.byKey(RoutePlanningScreen.findKey).evaluate().isNotEmpty) {
       await tester.tap(find.byKey(RoutePlanningScreen.findKey));
@@ -121,9 +173,9 @@ void main() {
 
     final map = find.byKey(RoutePlanningScreen.mapKey);
     final topLeft = tester.getTopLeft(map);
-    await tester.tapAt(topLeft + const Offset(80, 80));
-    await tester.pump();
-    await tester.tapAt(topLeft + const Offset(180, 140));
+    await tester.tapAt(topLeft + const Offset(80, 230));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tapAt(topLeft + const Offset(180, 300));
     await tester.pumpAndSettle();
 
     // Auto-fetched route enables Save & Start run and displays road points.
@@ -205,7 +257,7 @@ void main() {
     // Set start on map first, then search destination and start run.
     final map = find.byKey(RoutePlanningScreen.mapKey);
     final topLeft = tester.getTopLeft(map);
-    await tester.tapAt(topLeft + const Offset(80, 80));
+    await tester.tapAt(topLeft + const Offset(80, 230));
     await tester.pumpAndSettle();
 
     await tester.enterText(

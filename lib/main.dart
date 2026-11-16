@@ -14,8 +14,8 @@ import 'core/theme/app_spacing.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_preference.dart';
 import 'data/goal_repository.dart';
+import 'data/current_location_client.dart';
 import 'data/current_weather_client.dart';
-import 'data/run_weather_client.dart';
 import 'data/run.dart';
 import 'data/run_repository.dart';
 import 'data/planned_route.dart';
@@ -71,6 +71,8 @@ class RoadRunnerApp extends StatefulWidget {
     this.permissionGateway,
     this.accountGateway,
     this.themePreference,
+    this.currentLocationGetter,
+    this.forecastFetcher,
     this.checkStartupState = true,
   });
 
@@ -91,6 +93,8 @@ class RoadRunnerApp extends StatefulWidget {
   /// [FirebaseAccountGateway] when Firebase is initialized.
   final AccountGateway? accountGateway;
   final ThemePreference? themePreference;
+  final Future<LatLng?> Function()? currentLocationGetter;
+  final Future<LocalForecast?> Function(double, double)? forecastFetcher;
 
   /// Whether to query native state, unfinished runs, and saved runs on startup.
   /// Can be disabled in isolated smoke tests.
@@ -100,7 +104,8 @@ class RoadRunnerApp extends StatefulWidget {
   State<RoadRunnerApp> createState() => _RoadRunnerAppState();
 }
 
-class _RoadRunnerAppState extends State<RoadRunnerApp> {
+class _RoadRunnerAppState extends State<RoadRunnerApp>
+    with WidgetsBindingObserver {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   final LiveRunFormatter _formatter = const LiveRunFormatter();
   final ValueNotifier<int> _shellRevision = ValueNotifier<int>(0);
@@ -129,7 +134,11 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   double? _weeklyDistanceKm;
   double? _weeklyGoalKm;
   AchievementsSnapshot? _homeAchievements;
-  RunWeather? _currentWeather;
+  LocalForecast? _localForecast;
+  LatLng? _lastKnownLocation;
+  bool _forecastLoading = false;
+  String? _forecastIssue;
+  DateTime? _lastForecastFetch;
   late bool _startupCompleted = !widget.checkStartupState;
   bool _startupStarted = false;
   bool _isStartingRun = false;
@@ -142,6 +151,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_loadThemeMode());
     _ownsBridge = widget.bridge == null;
     _bridge = widget.bridge ?? NativeTrackingBridge();
@@ -181,6 +191,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
     _shellRevision.dispose();
     _runsRevision.dispose();
@@ -188,6 +199,13 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
       _bridge.dispose();
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _startupCompleted) {
+      unawaited(_refreshLocalForecast());
+    }
   }
 
   void _notifyShell() {
@@ -342,7 +360,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
       _recentRunsStatus = RecentRunsStatus.ready;
       _notifyShell();
       _runsRevision.value++;
-      unawaited(_refreshDashboardDetails(runs));
+      unawaited(_refreshDashboardDetails());
     } catch (_) {
       if (!mounted) return;
       _recentRunsStatus = RecentRunsStatus.error;
@@ -350,7 +368,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     }
   }
 
-  Future<void> _refreshDashboardDetails(List<Run> runs) async {
+  Future<void> _refreshDashboardDetails() async {
     try {
       final snapshot = await _buildAchievementsSnapshot();
       if (!mounted) return;
@@ -359,24 +377,58 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     } catch (_) {
       // Run history remains usable if badge data cannot be read.
     }
-    if (runs.isEmpty) {
-      _currentWeather = null;
-      _notifyShell();
+    unawaited(_refreshLocalForecast());
+  }
+
+  Future<LatLng?> _currentLocation({bool requestPermission = false}) async {
+    if (requestPermission) {
+      final status = await _permissionGateway.check();
+      if (status.location != PermissionAccess.granted) {
+        await _permissionGateway.requestLocation();
+      }
+    }
+    return (widget.currentLocationGetter ??
+        const CurrentLocationClient().currentLocation)();
+  }
+
+  Future<void> _refreshLocalForecast({bool requestPermission = false}) async {
+    if (_forecastLoading) return;
+    final lastFetch = _lastForecastFetch;
+    if (!requestPermission &&
+        lastFetch != null &&
+        DateTime.now().difference(lastFetch) < const Duration(minutes: 10)) {
       return;
     }
+    _forecastLoading = true;
+    _notifyShell();
     try {
-      final points = await _repository.getPoints(runs.first.id);
-      final first = points.where((point) => point.accepted).firstOrNull;
-      if (first == null) return;
-      final weather = await const CurrentWeatherClient().fetch(
-        first.lat,
-        first.lon,
+      final location = await _currentLocation(
+        requestPermission: requestPermission,
       );
-      if (!mounted) return;
-      _currentWeather = weather;
-      _notifyShell();
+      if (location == null) {
+        _forecastIssue = 'Use location for the nearby forecast';
+        _localForecast = null;
+        return;
+      }
+      _lastKnownLocation = location;
+      final fetcher = widget.forecastFetcher;
+      final forecast = fetcher != null
+          ? await fetcher(location.latitude, location.longitude)
+          : await const CurrentWeatherClient().fetchForecast(
+              location.latitude,
+              location.longitude,
+            );
+      _localForecast = forecast;
+      _forecastIssue = forecast == null
+          ? 'Forecast unavailable · Tap to retry'
+          : null;
+      if (forecast != null) _lastForecastFetch = DateTime.now();
     } catch (_) {
-      // Weather is optional and never blocks navigation or recording.
+      _forecastIssue = 'Use location for the nearby forecast';
+      _localForecast = null;
+    } finally {
+      _forecastLoading = false;
+      _notifyShell();
     }
   }
 
@@ -973,11 +1025,11 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   }
 
   Future<void> _openRoutePlanner() async {
-    // A previous run gives the map a useful starting area without requiring
-    // another location permission request before planning.
-    var center = const LatLng(0, 0);
-    var zoom = 2.0;
-    if (_recentRuns.isNotEmpty) {
+    // Use a recent device fix if available; an older run is only a map-center
+    // fallback, never labelled as the current position.
+    var center = _lastKnownLocation ?? const LatLng(0, 0);
+    var zoom = _lastKnownLocation == null ? 2.0 : 14.0;
+    if (_lastKnownLocation == null && _recentRuns.isNotEmpty) {
       try {
         final points = await _repository.getPoints(_recentRuns.first.runId);
         final first = points.where((point) => point.accepted).firstOrNull;
@@ -999,6 +1051,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
           ),
           initialCenter: center,
           initialZoom: zoom,
+          onCurrentLocation: () => _currentLocation(requestPermission: true),
           onStartRun: (plannedRoute) => unawaited(
             _handleStartRun(plannedRoute: plannedRoute, replaceTop: true),
           ),
@@ -1274,7 +1327,11 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
             onOpenGoals: () => unawaited(_openGoals()),
             onOpenProfile: () => unawaited(_openProfile()),
             achievements: _homeAchievements,
-            weather: _currentWeather,
+            forecast: _localForecast,
+            forecastLoading: _forecastLoading,
+            forecastIssue: _forecastIssue,
+            onUseLocation: () =>
+                unawaited(_refreshLocalForecast(requestPermission: true)),
             onToggleTheme: (isDark) =>
                 _changeThemeMode(isDark ? ThemeMode.light : ThemeMode.dark),
             onOpenHistory: () => unawaited(_openHistory()),

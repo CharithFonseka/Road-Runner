@@ -26,6 +26,8 @@ import '../history/history_run.dart';
 import '../history/history_screen.dart';
 import '../run/live_run_formatter.dart';
 import '../shared/app_bottom_navigation.dart';
+import '../shared/badge_icon.dart';
+import '../shared/smooth_progress_bar.dart';
 import 'last_run_summary.dart';
 import 'widgets/recent_runs_card.dart';
 import 'widgets/sky_header.dart';
@@ -51,7 +53,10 @@ class HomeScreen extends StatelessWidget {
     this.onOpenProfile,
     this.onOpenRun,
     this.achievements,
-    this.weather,
+    this.forecast,
+    this.forecastLoading = false,
+    this.forecastIssue,
+    this.onUseLocation,
     this.onToggleTheme,
     this.weeklyDistanceKm,
     this.weeklyGoalKm,
@@ -104,7 +109,10 @@ class HomeScreen extends StatelessWidget {
   final VoidCallback? onOpenProfile;
   final VoidCallback? onOpenRun;
   final AchievementsSnapshot? achievements;
-  final RunWeather? weather;
+  final LocalForecast? forecast;
+  final bool forecastLoading;
+  final String? forecastIssue;
+  final VoidCallback? onUseLocation;
   final ValueChanged<bool>? onToggleTheme;
   final double? weeklyDistanceKm;
   final double? weeklyGoalKm;
@@ -127,6 +135,7 @@ class HomeScreen extends StatelessWidget {
   static const Key planRouteButtonKey = Key('home.planRoute');
   static const Key goalsButtonKey = Key('home.goals');
   static const Key weeklyGoalKey = Key('home.weeklyGoal');
+  static const Key weeklyProgressBarKey = Key('home.weeklyProgressBar');
   static const Key weatherKey = Key('home.weather');
   static const Key badgesKey = Key('home.badges');
   static const Key themeButtonKey = Key('home.theme');
@@ -307,7 +316,13 @@ class HomeScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (onPlanRoute != null) ...[
-                  _RouteWeatherCard(weather: weather, onTap: onPlanRoute!),
+                  _RouteWeatherCard(
+                    forecast: forecast,
+                    loading: forecastLoading,
+                    issue: forecastIssue,
+                    onUseLocation: onUseLocation,
+                    onTap: onPlanRoute!,
+                  ),
                   const SizedBox(height: AppSpacing.itemGap),
                 ],
                 if (weeklyDistanceKm != null &&
@@ -333,8 +348,8 @@ class HomeScreen extends StatelessWidget {
                   height:
                       recentRunsStatus == RecentRunsStatus.ready &&
                           rows.length > 1
-                      ? 214
-                      : 190,
+                      ? 190
+                      : 180,
                   child: RecentRunsCard(
                     key: recentRunsKey,
                     compact: true,
@@ -491,6 +506,7 @@ class _WeeklyGoalCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppPalette palette = context.palette;
     final double progress = (distanceKm / goalKm).clamp(0.0, 1.0);
+    final remaining = (goalKm - distanceKm).clamp(0.0, double.infinity);
     return Semantics(
       key: HomeScreen.weeklyGoalKey,
       button: true,
@@ -507,7 +523,12 @@ class _WeeklyGoalCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.emoji_events_outlined, color: palette.accent),
+                    CircleAvatar(
+                      radius: 17,
+                      backgroundColor: palette.iconTile,
+                      foregroundColor: palette.accent,
+                      child: const Icon(Icons.emoji_events_outlined, size: 19),
+                    ),
                     const SizedBox(width: AppSpacing.small),
                     Expanded(
                       child: Text(
@@ -515,28 +536,42 @@ class _WeeklyGoalCard extends StatelessWidget {
                         style: AppTextStyles.of(context).sectionHeading,
                       ),
                     ),
+                    Text(
+                      '${(progress * 100).round()}%',
+                      style: AppTextStyles.of(context).sectionHeading
+                          .copyWith(color: palette.accent),
+                    ),
+                    const SizedBox(width: 2),
                     Icon(
                       Icons.chevron_right_rounded,
                       color: palette.textSecondary,
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.small),
-                Text(
-                  AppStrings.weeklyGoalProgress(distanceKm, goalKm),
-                  style: AppTextStyles.of(context).body,
-                ),
-                const SizedBox(height: AppSpacing.small),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(99),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 8,
-                    backgroundColor: palette.iconButtonFill,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      palette.primaryFill,
+                const SizedBox(height: 7),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${distanceKm.toStringAsFixed(1)} / ${goalKm.toStringAsFixed(0)} km',
+                        style: AppTextStyles.of(context).body
+                            .copyWith(fontWeight: FontWeight.w700),
+                      ),
                     ),
-                  ),
+                    Text(
+                      remaining == 0
+                          ? 'Goal reached'
+                          : '${remaining.toStringAsFixed(1)} km to go',
+                      style: AppTextStyles.of(context).caption,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SmoothProgressBar(
+                  key: HomeScreen.weeklyProgressBarKey,
+                  value: progress,
+                  height: 12,
+                  label: 'This week progress',
                 ),
                 if (streakDays != null) ...[
                   const SizedBox(height: AppSpacing.small),
@@ -569,55 +604,186 @@ class _WeeklyGoalCard extends StatelessWidget {
 }
 
 class _RouteWeatherCard extends StatelessWidget {
-  const _RouteWeatherCard({required this.weather, required this.onTap});
+  const _RouteWeatherCard({
+    required this.forecast,
+    required this.loading,
+    required this.issue,
+    required this.onUseLocation,
+    required this.onTap,
+  });
 
-  final RunWeather? weather;
+  final LocalForecast? forecast;
+  final bool loading;
+  final String? issue;
+  final VoidCallback? onUseLocation;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final temperature = weather?.temperatureC;
     return Card(
       key: HomeScreen.weatherKey,
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        key: HomeScreen.planRouteButtonKey,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.medium),
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: palette.iconTile,
-                foregroundColor: palette.accent,
-                child: const Icon(Icons.route_rounded),
-              ),
-              const SizedBox(width: AppSpacing.itemGap),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              palette.surface,
+              palette.isDark
+                  ? palette.surface
+                  : Color.lerp(palette.surface, palette.iconTile, 0.35)!,
+            ],
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              key: HomeScreen.planRouteButtonKey,
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
                   children: [
-                    Text(
-                      'Plan your next route',
-                      style: AppTextStyles.of(context).sectionHeading,
+                    Icon(Icons.route_rounded, color: palette.accent, size: 24),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Plan your next route',
+                        style: AppTextStyles.of(context).sectionHeading,
+                      ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      temperature == null
-                          ? 'Choose a route and check conditions'
-                          : '${temperature.round()}°C · ${weatherDescription(weather)} · near your last run',
-                      style: AppTextStyles.of(context).caption,
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: palette.textSecondary,
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, color: palette.textSecondary),
-            ],
-          ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: forecast == null
+                  ? Row(
+                      children: [
+                        Icon(
+                          Icons.my_location_outlined,
+                          size: 17,
+                          color: palette.accent,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            loading
+                                ? 'Checking weather near you…'
+                                : issue ??
+                                      'See weather near your current location',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.of(context).caption,
+                          ),
+                        ),
+                        if (!loading && onUseLocation != null)
+                          TextButton(
+                            onPressed: onUseLocation,
+                            child: const Text('Use location'),
+                          ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              _weatherIcon(forecast!.current?.code),
+                              color: palette.accent,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Near you · Now ${forecast!.current?.temperatureC?.round() ?? '—'}° · ${weatherDescription(forecast!.current)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.of(context).caption,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (forecast!.nextHours.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              for (final hour in forecast!.nextHours)
+                                Expanded(child: _HourTile(hour: hour)),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+IconData _weatherIcon(int? code) => switch (conditionFromCode(code)) {
+  RunCondition.clear => Icons.wb_sunny_outlined,
+  RunCondition.cloudy => Icons.cloud_outlined,
+  RunCondition.fog => Icons.foggy,
+  RunCondition.drizzle || RunCondition.rain => Icons.grain_rounded,
+  RunCondition.snow => Icons.ac_unit_rounded,
+  RunCondition.thunderstorm => Icons.thunderstorm_outlined,
+  RunCondition.unknown => Icons.wb_cloudy_outlined,
+};
+
+class _HourTile extends StatelessWidget {
+  const _HourTile({required this.hour});
+  final HourlyWeather hour;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final time = TimeOfDay.fromDateTime(hour.time).format(context);
+    final condition = switch (conditionFromCode(hour.code)) {
+      RunCondition.clear => 'Clear',
+      RunCondition.cloudy => 'Cloudy',
+      RunCondition.fog => 'Fog',
+      RunCondition.drizzle || RunCondition.rain => 'Rain',
+      RunCondition.snow => 'Snow',
+      RunCondition.thunderstorm => 'Storm',
+      RunCondition.unknown => '—',
+    };
+    return Column(
+      children: [
+        Text(
+          time,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTextStyles.of(context).caption.copyWith(fontSize: 11),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(_weatherIcon(hour.code), size: 14, color: palette.accent),
+            const SizedBox(width: 3),
+            Flexible(
+              child: Text(
+                '${hour.temperatureC?.round() ?? '—'}° · $condition',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.of(context).caption
+                    .copyWith(fontSize: 11, color: palette.textPrimary),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -632,6 +798,10 @@ class _BadgesPreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final earned = achievements?.earnedBadges.keys.toSet() ?? {};
+    final featured = [
+      ...kAllBadges.where((badge) => earned.contains(badge.type)),
+      ...kAllBadges.where((badge) => !earned.contains(badge.type)),
+    ].take(2).toList();
     return Card(
       key: HomeScreen.badgesKey,
       margin: EdgeInsets.zero,
@@ -654,8 +824,11 @@ class _BadgesPreviewCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${earned.length}/${kAllBadges.length}',
-                    style: AppTextStyles.of(context).caption,
+                    '${earned.length} of ${kAllBadges.length} earned',
+                    style: AppTextStyles.of(context).caption.copyWith(
+                      color: palette.accent,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   Icon(
                     Icons.chevron_right_rounded,
@@ -664,29 +837,83 @@ class _BadgesPreviewCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.small),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              Row(
                 children: [
-                  for (final badge in kAllBadges.take(2))
-                    Chip(
-                      avatar: Icon(
-                        earned.contains(badge.type)
-                            ? Icons.stars_rounded
-                            : Icons.lock_outline_rounded,
-                        size: 18,
+                  for (var index = 0; index < featured.length; index++) ...[
+                    if (index > 0) const SizedBox(width: 8),
+                    Expanded(
+                      child: _BadgeMiniTile(
+                        badge: featured[index],
+                        earned: earned.contains(featured[index].type),
                       ),
-                      label: Text(badge.title),
-                      visualDensity: VisualDensity.compact,
-                      backgroundColor: earned.contains(badge.type)
-                          ? palette.iconTile
-                          : palette.surface,
                     ),
+                  ],
                 ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BadgeMiniTile extends StatelessWidget {
+  const _BadgeMiniTile({required this.badge, required this.earned});
+
+  final BadgeInfo badge;
+  final bool earned;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return AnimatedContainer(
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+      decoration: BoxDecoration(
+        color: earned ? palette.iconTile : palette.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: earned
+              ? palette.accent.withValues(alpha: 0.42)
+              : palette.hairline,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            earned ? badgeIcon(badge.type) : Icons.lock_outline_rounded,
+            color: palette.accent,
+            size: 20,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  badge.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.of(context).caption.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: palette.textPrimary,
+                  ),
+                ),
+                Text(
+                  earned ? 'Unlocked' : 'In progress',
+                  maxLines: 1,
+                  style: AppTextStyles.of(context).caption
+                      .copyWith(fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

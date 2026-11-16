@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_spacing.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
+import 'package:road_runner/data/current_weather_client.dart';
+import 'package:road_runner/data/run_weather_client.dart';
 import 'package:road_runner/features/app_strings.dart';
 import 'package:road_runner/features/history/history_run.dart';
 import 'package:road_runner/features/home/home_screen.dart';
@@ -79,6 +81,7 @@ Future<_Calls> _pumpHome(
   double? weeklyDistanceKm,
   double? weeklyGoalKm,
   bool withGoals = false,
+  LocalForecast? forecast,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
@@ -101,6 +104,8 @@ Future<_Calls> _pumpHome(
           recentRunsStatus: status,
           weeklyDistanceKm: weeklyDistanceKm,
           weeklyGoalKm: weeklyGoalKm,
+          forecast: forecast,
+          onPlanRoute: forecast == null ? null : () {},
           onOpenGoals: withGoals ? () => c.goals++ : null,
           onStartRun: () => c.start++,
           onOpenHistory: () => c.history++,
@@ -243,6 +248,58 @@ void main() {
     });
   });
 
+  testWidgets('shows nearby hourly conditions and a visible weekly fill', (
+    tester,
+  ) async {
+    await _pumpHome(
+      tester,
+      weeklyDistanceKm: 8.5,
+      weeklyGoalKm: 15,
+      withGoals: true,
+      forecast: LocalForecast(
+        current: const RunWeather(28, 8, 2),
+        nextHours: [
+          HourlyWeather(
+            time: DateTime(2026, 11, 17, 10),
+            temperatureC: 29,
+            code: 61,
+            rainChancePercent: 40,
+          ),
+        ],
+      ),
+    );
+    expect(find.textContaining('Near you · Now 28°'), findsOneWidget);
+    expect(find.textContaining('29° · Rain'), findsOneWidget);
+    expect(find.text('57%'), findsOneWidget);
+    expect(find.byKey(HomeScreen.weeklyProgressBarKey), findsOneWidget);
+  });
+
+  testWidgets('nearby forecast fits a narrow phone with larger text', (
+    tester,
+  ) async {
+    await _pumpHome(
+      tester,
+      size: const Size(320, 568),
+      textScale: 1.3,
+      weeklyDistanceKm: 8.5,
+      weeklyGoalKm: 15,
+      withGoals: true,
+      forecast: LocalForecast(
+        current: const RunWeather(28, 8, 2),
+        nextHours: [
+          for (var hour = 10; hour < 13; hour++)
+            HourlyWeather(
+              time: DateTime(2026, 11, 17, hour),
+              temperatureC: 29,
+              code: 61,
+              rainChancePercent: 40,
+            ),
+        ],
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   group('Recent runs: loaded', () {
     testWidgets('weekly goal progress opens Goals', (tester) async {
       final _Calls c = await _pumpHome(
@@ -252,7 +309,7 @@ void main() {
         weeklyGoalKm: 10,
         withGoals: true,
       );
-      expect(find.text('4.2 of 10 km goal'), findsOneWidget);
+      expect(find.text('4.2 / 10 km'), findsOneWidget);
       await tester.tap(find.byKey(HomeScreen.weeklyGoalKey));
       await tester.pump();
       expect(c.goals, 1);
@@ -581,7 +638,7 @@ void main() {
     ) async {
       await _pumpHome(tester, runs: _runs, size: const Size(412, 915));
       final Rect card = tester.getRect(find.byKey(HomeScreen.recentRunsKey));
-      expect(card.height, 214);
+      expect(card.height, 190);
     });
 
     testWidgets('respects the status bar and Android navigation bar', (
