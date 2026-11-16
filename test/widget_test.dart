@@ -3,9 +3,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Split;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:road_runner/bridge/tracking_bridge.dart';
 import 'package:road_runner/core/contract/contract.dart';
+import 'package:road_runner/core/theme/app_palette.dart';
+import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/data/run.dart';
 import 'package:road_runner/data/run_repository.dart';
 import 'package:road_runner/domain/stats/stats.dart';
@@ -793,4 +796,64 @@ void main() {
     expect(find.byType(ActiveRunScreen), findsOneWidget);
     bridge.dispose();
   });
+
+  testWidgets(
+    'RoadRunnerApp enables system dark theme and updates Android system bars',
+    (WidgetTester tester) async {
+      _usePhoneViewport(tester);
+      final bridge = _StubTrackingBridge();
+      final repo = _StubRunRepository();
+      final permissions = _StubPermissionGateway();
+
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+
+      await tester.pumpWidget(
+        RoadRunnerApp(
+          bridge: bridge,
+          repository: repo,
+          permissionGateway: permissions,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final MaterialApp app = tester.widget<MaterialApp>(
+        find.byType(MaterialApp),
+      );
+      expect(app.themeMode, AppTheme.themeMode);
+      expect(app.darkTheme?.brightness, Brightness.dark);
+
+      final Iterable<AnnotatedRegion<SystemUiOverlayStyle>> regions = tester
+          .widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(
+            find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+          );
+      expect(
+        regions.any(
+          (r) =>
+              r.value.systemNavigationBarColor == AppPalette.dark.background &&
+              r.value.statusBarIconBrightness == Brightness.light &&
+              r.value.systemNavigationBarIconBrightness == Brightness.light,
+        ),
+        isTrue,
+      );
+
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+      await tester.pumpAndSettle();
+
+      final Iterable<AnnotatedRegion<SystemUiOverlayStyle>> lightRegions =
+          tester.widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(
+            find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+          );
+      expect(
+        lightRegions.any(
+          (r) =>
+              r.value.systemNavigationBarColor == AppPalette.light.background &&
+              r.value.statusBarIconBrightness == Brightness.dark &&
+              r.value.systemNavigationBarIconBrightness == Brightness.dark,
+        ),
+        isTrue,
+      );
+      bridge.dispose();
+    },
+  );
 }
