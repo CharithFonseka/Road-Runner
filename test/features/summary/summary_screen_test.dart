@@ -2,6 +2,8 @@
 // Owner: Tharushi
 // SRS reference: FR-50–52, NFR-09, NFR-14
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:road_runner/core/theme/app_spacing.dart';
@@ -46,6 +48,7 @@ final RunSummary _fullRun = RunSummary(
 class _Calls {
   int home = 0;
   int history = 0;
+  final List<String> deleted = [];
 }
 
 Future<_Calls> _pump(
@@ -53,6 +56,8 @@ Future<_Calls> _pump(
   RunSummary summary, {
   Size size = const Size(360, 800),
   double textScale = 1.0,
+  bool withDelete = false,
+  Future<void> Function(String runId)? onDeleteRun,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
@@ -69,6 +74,9 @@ Future<_Calls> _pump(
           summary: summary,
           onBackToHome: () => calls.home++,
           onOpenHistory: () => calls.history++,
+          onDeleteRun:
+              onDeleteRun ??
+              (withDelete ? (runId) async => calls.deleted.add(runId) : null),
         ),
       ),
     ),
@@ -243,6 +251,96 @@ void main() {
       await tester.ensureVisible(find.byKey(SummaryScreen.historyButtonKey));
       await tester.tap(find.byKey(SummaryScreen.historyButtonKey));
       expect((calls.home, calls.history), (1, 1));
+    });
+
+    group('Delete run', () {
+      Future<void> openConfirmation(WidgetTester tester) async {
+        await tester.ensureVisible(find.byKey(SummaryScreen.deleteButtonKey));
+        await tester.tap(find.byKey(SummaryScreen.deleteButtonKey));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text(AppStrings.summaryDeleteTitle), findsOneWidget);
+        expect(find.text(AppStrings.summaryDeleteMessage), findsOneWidget);
+      }
+
+      testWidgets('delete action is absent without a callback', (tester) async {
+        await _pump(tester, _fullRun);
+        expect(find.byKey(SummaryScreen.deleteButtonKey), findsNothing);
+      });
+
+      testWidgets('confirmation can be cancelled without deleting', (
+        tester,
+      ) async {
+        final _Calls calls = await _pump(tester, _fullRun, withDelete: true);
+        await openConfirmation(tester);
+        expect(find.text(AppStrings.summaryDeleteCancel), findsOneWidget);
+        expect(find.text(AppStrings.summaryDeleteConfirm), findsOneWidget);
+
+        await tester.tap(find.byKey(SummaryScreen.deleteCancelButtonKey));
+        await tester.pumpAndSettle();
+
+        expect(calls.deleted, isEmpty);
+        expect(find.byKey(SummaryScreen.deleteButtonKey), findsOneWidget);
+      });
+
+      testWidgets('confirmation invokes the callback with the run ID', (
+        tester,
+      ) async {
+        final _Calls calls = await _pump(tester, _fullRun, withDelete: true);
+        await openConfirmation(tester);
+        await tester.tap(find.byKey(SummaryScreen.deleteConfirmButtonKey));
+        await tester.pumpAndSettle();
+
+        expect(calls.deleted, ['test-run']);
+        expect(find.text(AppStrings.summaryDeleteFailed), findsNothing);
+      });
+
+      testWidgets('deletion failure is reported and the run stays available', (
+        tester,
+      ) async {
+        await _pump(
+          tester,
+          _fullRun,
+          onDeleteRun: (_) async => throw Exception('storage failure'),
+        );
+        await openConfirmation(tester);
+        await tester.tap(find.byKey(SummaryScreen.deleteConfirmButtonKey));
+        await tester.pumpAndSettle();
+
+        expect(find.text(AppStrings.summaryDeleteFailed), findsOneWidget);
+        expect(find.byKey(SummaryScreen.deleteButtonKey), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('pending deletion disables duplicate submissions', (
+        tester,
+      ) async {
+        final Completer<void> gate = Completer<void>();
+        int calls = 0;
+        await _pump(
+          tester,
+          _fullRun,
+          onDeleteRun: (_) async {
+            calls++;
+            await gate.future;
+          },
+        );
+        await openConfirmation(tester);
+        await tester.tap(find.byKey(SummaryScreen.deleteConfirmButtonKey));
+        await tester.pump();
+
+        final Finder deleteButton = find.byKey(SummaryScreen.deleteButtonKey);
+        expect(tester.widget<OutlinedButton>(deleteButton).onPressed, isNull);
+        await tester.tap(deleteButton, warnIfMissed: false);
+        await tester.pump();
+        expect(calls, 1);
+
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<OutlinedButton>(deleteButton).onPressed,
+          isNotNull,
+        );
+      });
     });
 
     testWidgets('buttons are at least 48dp tall', (tester) async {

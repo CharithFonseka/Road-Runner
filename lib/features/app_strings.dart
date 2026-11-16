@@ -196,12 +196,19 @@ class AppStrings {
       'app permission. Swipe down from the top of the screen, turn on '
       'Location, then tap Check Again.';
   static const String notificationNeededMessage =
-      'Allow notifications so your run stays visible on the lock screen.';
+      'Notifications show live run updates on the lock screen. GPS recording '
+      'works without them, so you can allow notifications or continue without '
+      'them.';
   static const String notificationDeniedMessage =
-      'Notifications were not allowed. Tap Allow Notifications to try again.';
+      'Notifications were not allowed. GPS recording still works, but '
+      'lock-screen live notifications may be unavailable. Try again or '
+      'continue without notifications.';
   static const String notificationBlockedMessage =
-      'Notifications are blocked for Road Runner. Tap Open Settings, choose '
-      'Notifications and turn them on.';
+      'Notifications are blocked. GPS recording still works, but lock-screen '
+      'live notifications are unavailable. Open Settings to allow them, or '
+      'continue without notifications.';
+  static const String continueWithoutNotifications =
+      'Continue without notifications';
   static const String permissionRequestFailed =
       "Couldn't ask for permission. Please try again.";
   static const String settingsOpenFailed =
@@ -251,8 +258,7 @@ class AppStrings {
   static const String settingsPermissionsSection = 'Permissions';
   static const String settingsAboutSection = 'About Road Runner';
   static const String settingsLocationDetail = 'Tracks your route with GPS';
-  static const String settingsNotificationDetail =
-      'Shows your run on the lock screen';
+  static const String settingsNotificationDetail = 'Lock-screen live updates';
   static const String settingsServicesTitle = 'Device Location Services';
   static const String settingsServicesDetail = 'Phone location setting';
   static const String managePermissions = 'Manage permissions';
@@ -260,6 +266,12 @@ class AppStrings {
   static const String settingsBlockedHint =
       'A permission is blocked. Only your phone’s app settings can allow it '
       'again.';
+  static const String settingsNotificationDeniedHint =
+      'GPS runs still work without notifications. Lock-screen live updates '
+      'may be unavailable.';
+  static const String settingsNotificationBlockedHint =
+      'GPS runs still work. Lock-screen live updates are unavailable until '
+      'notifications are allowed in app settings.';
   static const String aboutTrackerDetail =
       'Records distance, pace and route with your phone’s GPS. No internet '
       'connection needed.';
@@ -286,6 +298,15 @@ class AppStrings {
   static const String summaryLoading = 'Loading run summary';
   static const String summaryDateUnavailable = 'Date unavailable';
   static String summaryDateTime(String date, String time) => '$date · $time';
+  static const String summaryDeleteRun = 'Delete Run';
+  static const String summaryDeleteTitle = 'Delete this run?';
+  static const String summaryDeleteMessage =
+      'This run will be permanently deleted. This action cannot be undone.';
+  static const String summaryDeleteCancel = 'Cancel';
+  static const String summaryDeleteConfirm = 'Delete';
+  static const String summaryDeleting = 'Deleting run';
+  static const String summaryDeleteFailed =
+      'Could not delete this run. Please check History and try again.';
 
   static const String statMovingTime = 'Moving time';
   static const String statAverageSpeed = 'Average speed';

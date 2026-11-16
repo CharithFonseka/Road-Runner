@@ -2,7 +2,7 @@
 // Owner: Tharushi
 // SRS reference: Section 8.4, FR-40, FR-41, NFR-09, NFR-14
 //
-// Explains why precise location and notifications are needed BEFORE any
+// Explains precise location and optional live notifications BEFORE any
 // system prompt appears. Prompts only open when the user taps the main
 // button. When the app returns from Settings, the state is read again.
 //
@@ -47,7 +47,7 @@ class PermissionsScreen extends StatefulWidget {
   /// app and a fake in tests.
   final PermissionGateway gateway;
 
-  /// Everything is ready; continue (e.g. back to Home or into a run).
+  /// Location is ready; continue (e.g. back to Home or into a run).
   final VoidCallback onContinue;
 
   /// The user chose not to grant permissions now.
@@ -60,6 +60,9 @@ class PermissionsScreen extends StatefulWidget {
   static const Key notNowButtonKey = Key('permissions.notNow');
   static const Key messageKey = Key('permissions.message');
   static const Key backButtonKey = Key('permissions.back');
+  static const Key continueWithoutNotificationsButtonKey = Key(
+    'permissions.continueWithoutNotifications',
+  );
   static const Key illustrationKey = Key('permissions.illustration');
   static const Key headingKey = Key('permissions.heading');
   static Key stepKey(int n) => Key('permissions.step.$n');
@@ -120,6 +123,9 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
     final PermissionIssue? issue = _controller.issue;
     final PermissionScene scene = PermissionsScreen.sceneFor(step, issue);
     final _Action? primary = _primaryAction(step, issue);
+    final bool canContinueWithoutNotifications =
+        step == PermissionStep.needsNotification ||
+        step == PermissionStep.notificationBlocked;
     final double bottomInset = MediaQuery.paddingOf(context).bottom;
 
     final (String header, String? subtitle) = switch (scene) {
@@ -241,6 +247,21 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                 ),
               if (primary != null && step != PermissionStep.ready)
                 const SizedBox(height: AppSpacing.itemGap),
+              if (canContinueWithoutNotifications) ...[
+                OutlinedButton(
+                  key: PermissionsScreen.continueWithoutNotificationsButtonKey,
+                  onPressed: widget.onContinue,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: AppColors.burntOrangeDeep,
+                      width: 1.5,
+                    ),
+                    backgroundColor: AppColors.sandLight,
+                  ),
+                  child: const Text(AppStrings.continueWithoutNotifications),
+                ),
+                const SizedBox(height: AppSpacing.itemGap),
+              ],
               if (step != PermissionStep.ready)
                 OutlinedButton(
                   key: PermissionsScreen.notNowButtonKey,

@@ -12,6 +12,7 @@ SummaryScreen(
   // Optional (Phase 2B.1):
   onBack: () {},              // header Back; null uses onBackToHome
   isLoading: false,           // true shows static skeletons while loading
+  onDeleteRun: _deleteAndRefreshRun, // absent hides Delete Run
 )
 ```
 
@@ -19,7 +20,24 @@ The screen formats and draws the `RunSummary` it is given. It never calculates d
 
 There is no navigation drawer: Summary is reached from a finished run or from History.
 
-Keys: `backButtonKey`, `dateKey`, `statsCardKey`, `statKey(SummaryStat)`, `routeAreaKey`, `splitsCardKey`, `splitRowKey(km)`, `partialSplitKey`, `loadingKey`, `homeButtonKey`, `historyButtonKey`.
+Keys: `backButtonKey`, `dateKey`, `statsCardKey`, `statKey(SummaryStat)`, `routeAreaKey`, `splitsCardKey`, `splitRowKey(km)`, `partialSplitKey`, `loadingKey`, `homeButtonKey`, `historyButtonKey`, `deleteButtonKey`, `deleteCancelButtonKey`, `deleteConfirmButtonKey`.
+
+When `onDeleteRun` is supplied, Summary offers a confirmed **Delete Run**
+action. The callback receives the run ID and must await persistent deletion,
+then refresh the Home and History data before navigating away. It must throw
+an `Exception` if deletion fails; the screen then stays open and reports the
+failure instead of indicating success. After success, the shell should
+navigate to Home or a newly loaded History route as appropriate (the existing
+History route may contain a stale snapshot). Do not navigate until deletion
+and refresh have succeeded. Summary never accesses the repository directly.
+
+Praveen should wire `onDeleteRun` to `RunRepository.delete(runId)`, then
+refresh Home's last-run data. For a Summary opened from History, reload
+`RunRepository.list()` and replace the stale History route after success; for
+a Summary opened after a run, return to the refreshed Home. Do not swallow
+repository errors. The current shared Summary builder does not distinguish
+these entry points, so the shell must supply the appropriate callback for each
+route.
 
 ## Layout (UI kit Revision 5)
 

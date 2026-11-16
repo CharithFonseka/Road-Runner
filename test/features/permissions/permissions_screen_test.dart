@@ -194,12 +194,23 @@ void main() {
     testWidgets('notification denied explains and allows asking again', (
       tester,
     ) async {
-      final FakePermissionGateway gateway = FakePermissionGateway()
-        ..notificationAnswer = PermissionAccess.denied;
-      await _pump(tester, gateway);
+      final FakePermissionGateway gateway = FakePermissionGateway(
+        location: PermissionAccess.granted,
+      )..notificationAnswer = PermissionAccess.denied;
+      final _Calls calls = await _pump(tester, gateway);
       await _tapPrimary(tester);
       expect(find.text(AppStrings.notificationDeniedMessage), findsOneWidget);
       _expectPrimary(AppStrings.allowNotifications);
+      expect(
+        find.byKey(PermissionsScreen.continueWithoutNotificationsButtonKey),
+        findsOneWidget,
+      );
+      expect(gateway.notificationRequests, 1);
+      await tester.tap(
+        find.byKey(PermissionsScreen.continueWithoutNotificationsButtonKey),
+      );
+      expect(calls.continued, 1);
+      expect(gateway.notificationRequests, 1);
     });
   });
 
@@ -242,14 +253,27 @@ void main() {
       _expectPrimary(AppStrings.openAppSettings);
     });
 
-    testWidgets('notifications blocked offers Open Settings', (tester) async {
+    testWidgets('notifications blocked offers Settings or GPS continuation', (
+      tester,
+    ) async {
       final FakePermissionGateway gateway = FakePermissionGateway(
         location: PermissionAccess.granted,
         notification: PermissionAccess.permanentlyDenied,
       );
-      await _pump(tester, gateway);
+      final _Calls calls = await _pump(tester, gateway);
       expect(find.text(AppStrings.notificationBlockedMessage), findsOneWidget);
       _expectPrimary(AppStrings.openAppSettings);
+      expect(
+        find.byKey(PermissionsScreen.continueWithoutNotificationsButtonKey),
+        findsOneWidget,
+      );
+      await _tapPrimary(tester);
+      expect(gateway.settingsCalls, 1);
+      await tester.tap(
+        find.byKey(PermissionsScreen.continueWithoutNotificationsButtonKey),
+      );
+      expect(calls.continued, 1);
+      expect(gateway.notificationRequests, 0);
     });
 
     testWidgets('returning from Settings re-reads the state', (tester) async {

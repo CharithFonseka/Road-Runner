@@ -131,13 +131,29 @@ void main() {
     testWidgets('offers Start a run only when a callback is supplied', (
       tester,
     ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
       final _Calls calls = await _pump(
         tester,
         const [],
         withStartRunAction: true,
       );
-      await tester.tap(find.text(AppStrings.historyStartRun));
+      final Finder action = find.widgetWithText(
+        FilledButton,
+        AppStrings.historyStartRun,
+      );
+      expect(tester.getSize(action).height, greaterThanOrEqualTo(48));
+      expect(
+        tester.getSemantics(action),
+        containsSemantics(
+          label: AppStrings.historyStartRun,
+          isButton: true,
+          isEnabled: true,
+          hasTapAction: true,
+        ),
+      );
+      await tester.tap(action);
       expect(calls.start, 1);
+      handle.dispose();
     });
 
     testWidgets('shows an empty state for a month with no runs', (
