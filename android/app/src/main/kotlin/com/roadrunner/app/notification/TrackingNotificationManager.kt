@@ -10,6 +10,9 @@ import android.os.Build
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import com.roadrunner.app.MainActivity
+import com.roadrunner.app.tracking.TrackingService
+import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Manages the lock-screen ongoing notification for live run tracking.
@@ -30,17 +33,14 @@ class TrackingNotificationManager(private val context: Context) {
         const val CHANNEL_NAME = "Active Run"
         const val NOTIFICATION_ID = 1001
 
-        const val ACTION_PAUSE = "com.roadrunner.app.ACTION_PAUSE"
-        const val ACTION_RESUME = "com.roadrunner.app.ACTION_RESUME"
-
         private const val MIN_SPEED_UPDATE_INTERVAL_MS = 3000L
     }
 
     private val notificationManager: NotificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+    private var currentRunId: String? = null
     private var lastSpeedUpdateTimeMs: Long = 0L
-    private var lastFormattedSpeed: String = "0.0 km/h"
 
     init {
         createNotificationChannel()
@@ -66,13 +66,14 @@ class TrackingNotificationManager(private val context: Context) {
      * Builds the initial ongoing notification when tracking begins.
      */
     fun buildInitialNotification(runId: String): Notification {
+        currentRunId = runId
         lastSpeedUpdateTimeMs = SystemClock.elapsedRealtime()
-        lastFormattedSpeed = "0.0 km/h"
         return createNotification(
             isRunning = true,
-            elapsedRealtimeBase = SystemClock.elapsedRealtime(),
-            speedText = lastFormattedSpeed,
-            distanceText = "0.00 km"
+            movingMs = 0L,
+            distanceM = 0.0,
+            speedMps = 0.0,
+            paceSecPerKm = null,
         )
     }
 
@@ -80,21 +81,21 @@ class TrackingNotificationManager(private val context: Context) {
      * Updates notification when live metrics change.
      * Throttles speed updates to at most once every 3 seconds per battery rule (C10 / FR-31).
      */
-    fun updateLiveMetrics(movingMs: Long, distanceM: Double, speedMps: Double) {
+    fun updateLiveMetrics(
+        movingMs: Long,
+        distanceM: Double,
+        speedMps: Double,
+        paceSecPerKm: Double? = null,
+    ) {
         val now = SystemClock.elapsedRealtime()
         if (now - lastSpeedUpdateTimeMs >= MIN_SPEED_UPDATE_INTERVAL_MS) {
             lastSpeedUpdateTimeMs = now
-            val speedKmh = speedMps * 3.6
-            lastFormattedSpeed = String.format("%.1f km/h", speedKmh)
-            val distanceKm = distanceM / 1000.0
-            val distanceText = String.format("%.2f km", distanceKm)
-
-            val baseTime = now - movingMs
             val notification = createNotification(
                 isRunning = true,
-                elapsedRealtimeBase = baseTime,
-                speedText = lastFormattedSpeed,
-                distanceText = distanceText
+                movingMs = movingMs,
+                distanceM = distanceM,
+                speedMps = speedMps,
+                paceSecPerKm = paceSecPerKm,
             )
             notificationManager.notify(NOTIFICATION_ID, notification)
         }
@@ -105,18 +106,17 @@ class TrackingNotificationManager(private val context: Context) {
      * Stops the chronometer and displays "Paused" (FR-34).
      */
     fun updatePaused(movingMs: Long, distanceM: Double) {
+        lastSpeedUpdateTimeMs = 0L
         val distanceKm = distanceM / 1000.0
-        val distanceText = String.format("%.2f km", distanceKm)
+        val distanceText = String.format(Locale.US, "%.2f km", distanceKm)
         val movingSec = (movingMs / 1000) % 60
         val movingMin = (movingMs / (1000 * 60))
-        val timeText = String.format("%02d:%02d", movingMin, movingSec)
+        val timeText = String.format(Locale.US, "%02d:%02d", movingMin, movingSec)
 
         val contentText = "Paused • $distanceText • Time: $timeText"
         val notification = createNotification(
             isRunning = false,
-            elapsedRealtimeBase = null,
-            speedText = null,
-            distanceText = contentText
+            pausedText = contentText,
         )
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
@@ -130,19 +130,20 @@ class TrackingNotificationManager(private val context: Context) {
 
     private fun createNotification(
         isRunning: Boolean,
-        elapsedRealtimeBase: Long?,
-        speedText: String?,
-        distanceText: String?
+        movingMs: Long = 0L,
+        distanceM: Double = 0.0,
+        speedMps: Double = 0.0,
+        paceSecPerKm: Double? = null,
+        pausedText: String? = null,
     ): Notification {
         val tapIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("route", "/run")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
         val tapPendingIntent = PendingIntent.getActivity(
             context,
             0,
             tapIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -155,35 +156,47 @@ class TrackingNotificationManager(private val context: Context) {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_WORKOUT)
 
-        if (isRunning && elapsedRealtimeBase != null) {
-            builder.setUsesChronometer(true)
-            builder.setWhen(elapsedRealtimeBase)
-            builder.setContentText("${distanceText ?: "0.00 km"} • Speed: ${speedText ?: "0.0 km/h"}")
+        if (isRunning) {
+            val whenUtcMs = System.currentTimeMillis() - movingMs
+            val speedText = String.format(Locale.US, "%.1f km/h", speedMps * 3.6)
+            val distanceText = String.format(Locale.US, "%.2f km", distanceM / 1000.0)
+            val paceText = paceSecPerKm
+                ?.takeIf { it.isFinite() && it > 0.0 }
+                ?.let {
+                    val seconds = it.roundToInt()
+                    String.format(Locale.US, "%d:%02d/km", seconds / 60, seconds % 60)
+                } ?: "--:--/km"
+
+            builder
+                .setWhen(whenUtcMs)
+                .setUsesChronometer(true)
+                .setContentText("$distanceText • $speedText • $paceText")
         } else {
-            builder.setUsesChronometer(false)
-            builder.setContentText(distanceText ?: "Paused")
+            builder
+                .setUsesChronometer(false)
+                .setContentText(pausedText ?: "Paused")
         }
 
         // Pause / Resume action button (FR-33)
-        if (isRunning) {
-            val pauseIntent = Intent(ACTION_PAUSE).setPackage(context.packageName)
-            val pausePending = PendingIntent.getBroadcast(
-                context,
-                1,
-                pauseIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            builder.addAction(android.R.drawable.ic_media_pause, "Pause", pausePending)
-        } else {
-            val resumeIntent = Intent(ACTION_RESUME).setPackage(context.packageName)
-            val resumePending = PendingIntent.getBroadcast(
-                context,
-                2,
-                resumeIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            builder.addAction(android.R.drawable.ic_media_play, "Resume", resumePending)
+        val actionIntent = Intent(context, TrackingService::class.java).apply {
+            action = if (isRunning) {
+                TrackingService.ACTION_PAUSE
+            } else {
+                TrackingService.ACTION_RESUME
+            }
+            putExtra(TrackingService.EXTRA_RUN_ID, currentRunId)
         }
+        val actionPendingIntent = PendingIntent.getService(
+            context,
+            if (isRunning) 1 else 2,
+            actionIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        builder.addAction(
+            if (isRunning) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+            if (isRunning) "Pause" else "Resume",
+            actionPendingIntent,
+        )
 
         return builder.build()
     }

@@ -2,9 +2,6 @@ package com.roadrunner.app.tracking
 
 import android.Manifest
 import android.app.Activity
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -15,6 +12,14 @@ import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
+import com.roadrunner.app.notification.TrackingNotificationManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
 
@@ -23,6 +28,11 @@ class TrackingService : Service() {
     private var stopping = false
     private var activeRunId: UUID? = null
 
+    private var notificationUi: TrackingNotificationManager? = null
+    private val notificationScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var notificationJob: Job? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(
@@ -30,6 +40,16 @@ class TrackingService : Service() {
         flags: Int,
         startId: Int,
     ): Int {
+        if (intent?.action == ACTION_PAUSE || intent?.action == ACTION_RESUME) {
+            val requestedRunId = intent.getStringExtra(EXTRA_RUN_ID)
+            if (
+                requestedRunId != null &&
+                requestedRunId != activeRunId?.toString()
+            ) {
+                return START_NOT_STICKY
+            }
+        }
+
         when (intent?.action) {
             ACTION_START -> startRun(startId, intent)
             ACTION_STOP -> stopRun()
@@ -53,25 +73,27 @@ class TrackingService : Service() {
                 "Location is turned off"
             }
 
-            // Promote immediately, before file work or future GPS setup.
-            createNotificationChannel()
-            val notification = buildStartingNotification()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
-                )
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
-
             val runId = UUID.fromString(
                 requireNotNull(intent?.getStringExtra(EXTRA_RUN_ID)) {
                     "Missing run ID"
                 }
             )
             activeRunId = runId
+            val ui = TrackingNotificationManager(this)
+            notificationUi = ui
+            val notification = ui.buildInitialNotification(runId.toString())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    TrackingNotificationManager.NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+                )
+            } else {
+                startForeground(
+                    TrackingNotificationManager.NOTIFICATION_ID,
+                    notification,
+                )
+            }
 
             recorder = FusedGpsRecorder(
                 context = this,
@@ -98,7 +120,6 @@ class TrackingService : Service() {
                             TrackingRunState.PAUSED,
                             activeRunId?.toString(),
                         )
-                        updateNotification("Paused")
                     }
                 },
             ).also { it.start() }
@@ -107,6 +128,7 @@ class TrackingService : Service() {
                 TrackingRunState.RUNNING,
                 runId.toString(),
             )
+            observeNotification()
             pendingRunId = null
 
             Log.i(TAG, "Started run $runId")
@@ -114,12 +136,41 @@ class TrackingService : Service() {
             Log.e(TAG, "Could not start tracking", error)
             recorder?.stop(finish = false) { _, _, _ -> }
             recorder = null
+            notificationJob?.cancel()
+            notificationJob = null
+            notificationUi?.cancel()
+            notificationUi = null
             stopForeground(STOP_FOREGROUND_REMOVE)
             reportFailure(error)
             TrackingApi.publishState(TrackingRunState.IDLE, null)
             activeRunId = null
             pendingRunId = null
             stopSelf(startId)
+        }
+    }
+
+    private fun observeNotification() {
+        notificationJob?.cancel()
+        notificationJob = notificationScope.launch {
+            TrackingApi.status.collect { status ->
+                if (status.runId != activeRunId?.toString()) return@collect
+                val snapshot = status.snapshot
+                when (status.state) {
+                    TrackingRunState.RUNNING -> snapshot?.let {
+                        notificationUi?.updateLiveMetrics(
+                            movingMs = it.movingMs,
+                            distanceM = it.distanceM,
+                            speedMps = it.speedMps,
+                            paceSecPerKm = it.paceSecPerKm,
+                        )
+                    }
+                    TrackingRunState.PAUSED -> notificationUi?.updatePaused(
+                        movingMs = snapshot?.movingMs ?: 0L,
+                        distanceM = snapshot?.distanceM ?: 0.0,
+                    )
+                    else -> Unit
+                }
+            }
         }
     }
 
@@ -139,7 +190,6 @@ class TrackingService : Service() {
                     TrackingRunState.PAUSED,
                     activeRunId?.toString(),
                 )
-                updateNotification("Paused")
             }
         }
     }
@@ -173,7 +223,6 @@ class TrackingService : Service() {
                     TrackingRunState.RUNNING,
                     activeRunId?.toString(),
                 )
-                updateNotification("Tracking run")
             }
         }
     }
@@ -207,6 +256,10 @@ class TrackingService : Service() {
     }
 
     private fun finishService() {
+        notificationJob?.cancel()
+        notificationJob = null
+        notificationUi?.cancel()
+        notificationUi = null
         recorder = null
         activeRunId = null
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -218,6 +271,12 @@ class TrackingService : Service() {
             stopping = true
             recorder?.stop(finish = false) { _, _, _ -> }
         }
+
+        notificationJob?.cancel()
+        notificationJob = null
+        notificationScope.cancel()
+        notificationUi?.cancel()
+        notificationUi = null
 
         recorder = null
         activeRunId = null
@@ -233,39 +292,6 @@ class TrackingService : Service() {
         val manager = getSystemService(Context.LOCATION_SERVICE)
             as LocationManager
         return manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
-    }
-
-    private fun createNotificationChannel() {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE)
-            as NotificationManager
-
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Run tracking",
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-        }
-
-        manager.createNotificationChannel(channel)
-    }
-
-    private fun buildStartingNotification(
-        status: String = "Preparing your run",
-    ): Notification =
-        Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentTitle("Road Runner")
-            .setContentText(status)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .build()
-
-    private fun updateNotification(status: String) {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE)
-            as NotificationManager
-        manager.notify(NOTIFICATION_ID, buildStartingNotification(status))
     }
 
     private fun activeRunFilePath(): String? =
@@ -291,13 +317,11 @@ class TrackingService : Service() {
 
     companion object {
         private const val TAG = "TrackingService"
-        private const val CHANNEL_ID = "run_tracking"
-        private const val NOTIFICATION_ID = 1001
         private const val ACTION_START = "com.roadrunner.app.tracking.START"
         private const val ACTION_STOP = "com.roadrunner.app.tracking.STOP"
-        private const val ACTION_PAUSE = "com.roadrunner.app.tracking.PAUSE"
-        private const val ACTION_RESUME = "com.roadrunner.app.tracking.RESUME"
-        private const val EXTRA_RUN_ID =
+        internal const val ACTION_PAUSE = "com.roadrunner.app.tracking.PAUSE"
+        internal const val ACTION_RESUME = "com.roadrunner.app.tracking.RESUME"
+        internal const val EXTRA_RUN_ID =
             "com.roadrunner.app.tracking.RUN_ID"
 
         @Volatile

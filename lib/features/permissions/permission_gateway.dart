@@ -90,8 +90,12 @@ class PermissionHandlerGateway implements PermissionGateway {
   }
 
   @override
-  Future<PermissionAccess> requestLocation() async =>
-      _map(await ph.Permission.location.request());
+  Future<PermissionAccess> requestLocation() async {
+    await ph.Permission.location.request();
+    // Read the actual permission after Android's prompt. The prompt result
+    // alone must not mark approximate access as ready for GPS tracking.
+    return _map(await ph.Permission.location.status);
+  }
 
   @override
   Future<PermissionAccess> requestNotification() async =>
