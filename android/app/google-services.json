@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "827523252477-ibfm7dkc94onk6enldmac7m2a35rq4qi.apps.googleusercontent.com",
+          "client_id": "827523252477-l43mde4scn8t8m7l49nua6kncj8tcd1f.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.roadrunner.app",
-            "certificate_hash": "ea98b564a903a9f8dc4afa1be1062bffc75e5817"
+            "certificate_hash": "5e696b42868328e186796fb4575d0e0f4bbe540f"
           }
         },
         {
