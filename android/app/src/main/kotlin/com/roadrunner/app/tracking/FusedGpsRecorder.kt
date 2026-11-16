@@ -153,6 +153,8 @@ class FusedGpsRecorder(
     }
 
     private fun environmentProblem(): TrackingErrorCode? {
+        if (simulator != null) return null
+
         val hasFineLocation =
             appContext.checkSelfPermission(
                 Manifest.permission.ACCESS_FINE_LOCATION
@@ -266,7 +268,9 @@ class FusedGpsRecorder(
     }
 
     private fun requestUpdates() {
-        if (simulator != null) {
+        val activeSimulator = simulator
+        if (activeSimulator != null) {
+            activeSimulator.prepare()
             worker.post(simTick)
             return
         }
