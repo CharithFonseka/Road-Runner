@@ -102,37 +102,53 @@ class _AppNavigationDrawerState extends State<AppNavigationDrawer> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.horizontal(right: Radius.circular(24)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _DrawerHeader(onClose: _close),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-              children: [
-                for (final AppDestination d in AppDestination.values) ...[
-                  _DestinationTile(
-                    key: AppNavigationDrawer.destinationKey(d),
-                    destination: d,
-                    selected: d == widget.selected,
-                    onTap: () => _onDestination(d),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final bool isShort = constraints.maxHeight < 480;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _DrawerHeader(onClose: _close, isShort: isShort),
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    12,
+                    isShort ? 4 : 12,
+                    12,
+                    isShort ? 4 : 12,
                   ),
-                  const SizedBox(height: 4),
-                ],
-              ],
-            ),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: Text(
-                AppStrings.navRunNote,
-                style: AppTextStyles.of(context).caption,
+                  children: [
+                    for (final AppDestination d in AppDestination.values) ...[
+                      _DestinationTile(
+                        key: AppNavigationDrawer.destinationKey(d),
+                        destination: d,
+                        selected: d == widget.selected,
+                        onTap: () => _onDestination(d),
+                        isShort: isShort,
+                      ),
+                      SizedBox(height: isShort ? 2 : 4),
+                    ],
+                  ],
+                ),
               ),
-            ),
-          ),
-        ],
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    isShort ? 4 : 8,
+                    24,
+                    isShort ? 8 : 24,
+                  ),
+                  child: Text(
+                    AppStrings.navRunNote,
+                    style: AppTextStyles.of(context).caption,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -143,9 +159,10 @@ class _AppNavigationDrawerState extends State<AppNavigationDrawer> {
 /// Sky header: runner icon, name, tagline, close button and a slim desert
 /// strip. Text and artwork use the active [AppPalette] for either sky.
 class _DrawerHeader extends StatelessWidget {
-  const _DrawerHeader({required this.onClose});
+  const _DrawerHeader({required this.onClose, this.isShort = false});
 
   final VoidCallback onClose;
+  final bool isShort;
 
   @override
   Widget build(BuildContext context) {
@@ -157,13 +174,18 @@ class _DrawerHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(20, topInset + 16, 8, 0),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              topInset + (isShort ? 8 : 16),
+              8,
+              0,
+            ),
             child: Row(
               children: [
                 ExcludeSemantics(
                   child: Icon(
                     Icons.directions_run_rounded,
-                    size: 34,
+                    size: isShort ? 28 : 34,
                     color: palette.accent,
                   ),
                 ),
@@ -176,14 +198,16 @@ class _DrawerHeader extends StatelessWidget {
                         header: true,
                         child: Text(
                           AppStrings.appName,
-                          style: AppTextStyles.of(context).heading
-                              .copyWith(fontSize: 22, height: 1.2),
+                          style: AppTextStyles.of(context).heading.copyWith(
+                            fontSize: isShort ? 20 : 22,
+                            height: 1.2,
+                          ),
                         ),
                       ),
                       Text(
                         AppStrings.navTagline,
                         style: AppTextStyles.of(context).body.copyWith(
-                          fontSize: 13,
+                          fontSize: isShort ? 12 : 13,
                           fontWeight: FontWeight.w500,
                           height: 1.4,
                         ),
@@ -201,10 +225,10 @@ class _DrawerHeader extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: isShort ? 4 : 10),
           ExcludeSemantics(
             child: SizedBox(
-              height: 40,
+              height: isShort ? 24 : 40,
               child: CustomPaint(
                 painter: DrawerLandscapePainter(palette: palette),
               ),
@@ -218,7 +242,7 @@ class _DrawerHeader extends StatelessWidget {
 
 // ─── Destination ────────────────────────────────────────────────────────────
 
-/// One 56dp stadium-shaped row.
+/// One 56dp (or 48dp on short screens) stadium-shaped row.
 ///
 /// Selected and unselected states use the corresponding palette roles.
 /// Selection is also exposed to screen readers.
@@ -228,13 +252,16 @@ class _DestinationTile extends StatelessWidget {
     required this.destination,
     required this.selected,
     required this.onTap,
+    this.isShort = false,
   });
 
   final AppDestination destination;
   final bool selected;
   final VoidCallback onTap;
+  final bool isShort;
 
   static const double height = 56;
+  static const double shortHeight = 48;
 
   (String, IconData, IconData) get _content {
     switch (destination) {
@@ -259,6 +286,7 @@ class _DestinationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppPalette palette = AppPalette.of(context);
     final (String label, IconData filled, IconData outlined) = _content;
+    final double minH = isShort ? shortHeight : height;
     return Semantics(
       container: true,
       button: true,
@@ -274,9 +302,12 @@ class _DestinationTile extends StatelessWidget {
           onTap: onTap,
           customBorder: const StadiumBorder(),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: height),
+            constraints: BoxConstraints(minHeight: minH),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+              padding: EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: isShort ? 4 : 8,
+              ),
               child: Row(
                 children: [
                   Icon(

@@ -142,30 +142,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onOpenHistory: widget.onOpenHistory,
         onOpenSettings: () {}, // current page: the drawer only closes
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Builder(
-            builder: (context) => CompactSkyHeader(
-              title: AppStrings.settingsTitle,
-              subtitle: AppStrings.settingsSubtitle,
-              landscapeHeight: 40,
-              landscapePainter: DrawerLandscapePainter(palette: palette),
-              leading: HeaderIconButton(
-                key: SettingsScreen.backButtonKey,
-                icon: Icons.arrow_back_rounded,
-                tooltip: AppStrings.settingsBack,
-                onPressed: widget.onBack,
-              ),
-              trailing: HeaderIconButton(
-                key: SettingsScreen.menuButtonKey,
-                icon: Icons.menu_rounded,
-                tooltip: AppStrings.homeOpenMenu,
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final bool isLandscape =
+              constraints.maxWidth > constraints.maxHeight &&
+              constraints.maxWidth >= 500;
+          if (isLandscape) {
+            return _buildLandscape(context, palette, bottomInset);
+          }
+          return _buildPortrait(context, palette, bottomInset);
+        },
+      ),
+    );
+  }
+
+  Widget _buildPortrait(
+    BuildContext context,
+    AppPalette palette,
+    double bottomInset,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Builder(
+          builder: (context) => CompactSkyHeader(
+            title: AppStrings.settingsTitle,
+            subtitle: AppStrings.settingsSubtitle,
+            landscapeHeight: 40,
+            landscapePainter: DrawerLandscapePainter(palette: palette),
+            leading: HeaderIconButton(
+              key: SettingsScreen.backButtonKey,
+              icon: Icons.arrow_back_rounded,
+              tooltip: AppStrings.settingsBack,
+              onPressed: widget.onBack,
+            ),
+            trailing: HeaderIconButton(
+              key: SettingsScreen.menuButtonKey,
+              icon: Icons.menu_rounded,
+              tooltip: AppStrings.homeOpenMenu,
+              onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           ),
-          Expanded(
+        ),
+        Expanded(
+          child: ListenableBuilder(
+            listenable: _controller,
+            builder: (context, _) => ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.medium,
+                0,
+                AppSpacing.medium,
+                AppSpacing.large + bottomInset,
+              ),
+              children: [
+                const _SectionHeading(AppStrings.settingsPermissionsSection),
+                _permissionsCard(),
+                const _SectionHeading(AppStrings.settingsAboutSection),
+                _AboutCard(version: widget.appVersion),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLandscape(
+    BuildContext context,
+    AppPalette palette,
+    double bottomInset,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Builder(
+          builder: (context) => CompactSkyHeader(
+            title: AppStrings.settingsTitle,
+            subtitle: AppStrings.settingsSubtitle,
+            landscapeHeight: 40,
+            landscapePainter: DrawerLandscapePainter(palette: palette),
+            leading: HeaderIconButton(
+              key: SettingsScreen.backButtonKey,
+              icon: Icons.arrow_back_rounded,
+              tooltip: AppStrings.settingsBack,
+              onPressed: widget.onBack,
+            ),
+            trailing: HeaderIconButton(
+              key: SettingsScreen.menuButtonKey,
+              icon: Icons.menu_rounded,
+              tooltip: AppStrings.homeOpenMenu,
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
+          ),
+        ),
+        Expanded(
+          child: SafeArea(
+            left: true,
+            right: true,
+            top: false,
+            bottom: false,
             child: ListenableBuilder(
               listenable: _controller,
               builder: (context, _) => ListView(
@@ -176,16 +251,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   AppSpacing.large + bottomInset,
                 ),
                 children: [
-                  const _SectionHeading(AppStrings.settingsPermissionsSection),
-                  _permissionsCard(),
-                  const _SectionHeading(AppStrings.settingsAboutSection),
-                  _AboutCard(version: widget.appVersion),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const _SectionHeading(
+                              AppStrings.settingsPermissionsSection,
+                            ),
+                            _permissionsCard(),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.medium),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const _SectionHeading(
+                              AppStrings.settingsAboutSection,
+                            ),
+                            _AboutCard(version: widget.appVersion),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

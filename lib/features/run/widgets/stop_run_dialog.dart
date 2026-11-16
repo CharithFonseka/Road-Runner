@@ -35,6 +35,23 @@ class StopRunDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Size size = MediaQuery.sizeOf(context);
+    final bool isLandscape = size.width > size.height && size.width >= 500;
+
+    final Widget finishBtn = FilledButton.icon(
+      key: finishButtonKey,
+      onPressed: () => Navigator.of(context).pop(true),
+      icon: const Icon(Icons.flag),
+      label: const Text(AppStrings.finishRun),
+    );
+
+    final Widget continueBtn = OutlinedButton.icon(
+      key: continueButtonKey,
+      onPressed: () => Navigator.of(context).pop(false),
+      icon: const Icon(Icons.directions_run),
+      label: const Text(AppStrings.continueRunning),
+    );
+
     return AlertDialog(
       title: Semantics(
         header: true,
@@ -47,19 +64,19 @@ class StopRunDialog extends StatelessWidget {
           children: [
             const Text(AppStrings.stopDialogMessage),
             const SizedBox(height: AppSpacing.large),
-            FilledButton.icon(
-              key: finishButtonKey,
-              onPressed: () => Navigator.of(context).pop(true),
-              icon: const Icon(Icons.flag),
-              label: const Text(AppStrings.finishRun),
-            ),
-            const SizedBox(height: AppSpacing.itemGap),
-            OutlinedButton.icon(
-              key: continueButtonKey,
-              onPressed: () => Navigator.of(context).pop(false),
-              icon: const Icon(Icons.directions_run),
-              label: const Text(AppStrings.continueRunning),
-            ),
+            if (isLandscape)
+              Row(
+                children: [
+                  Expanded(child: continueBtn),
+                  const SizedBox(width: AppSpacing.itemGap),
+                  Expanded(child: finishBtn),
+                ],
+              )
+            else ...[
+              finishBtn,
+              const SizedBox(height: AppSpacing.itemGap),
+              continueBtn,
+            ],
           ],
         ),
       ),

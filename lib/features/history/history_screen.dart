@@ -152,11 +152,195 @@ class _HistoryScreenState extends State<HistoryScreen> {
     HistoryRunFilter.lastMonth => widget.lastMonthSummary,
   };
 
+  /// True when the device is in landscape orientation and width is at least 500dp.
+  static bool _isLandscape(BuildContext context, BoxConstraints c) =>
+      MediaQuery.orientationOf(context) == Orientation.landscape &&
+      c.maxWidth >= 500;
+
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      drawer: AppNavigationDrawer(
+        selected: AppDestination.history,
+        onOpenHome: widget.onOpenHome ?? widget.onBackToHome,
+        onOpenHistory: _doNothing,
+        onOpenSettings: widget.onOpenSettings ?? _doNothing,
+      ),
+      body: Column(
+        children: [
+          Builder(
+            builder: (context) => CompactSkyHeader(
+              title: AppStrings.historyTitle,
+              subtitle: AppStrings.historyHeaderSubtitle,
+              leading: HeaderIconButton(
+                key: HistoryScreen.backButtonKey,
+                icon: Icons.arrow_back_rounded,
+                tooltip: AppStrings.backToHome,
+                onPressed: widget.onBackToHome,
+              ),
+              trailing: HeaderIconButton(
+                key: HistoryScreen.menuButtonKey,
+                icon: Icons.menu_rounded,
+                tooltip: AppStrings.homeOpenMenu,
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
+            ),
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (_isLandscape(context, constraints)) {
+                  return _buildLandscapeBody(context, constraints);
+                }
+                return _buildPortraitBody(context);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Portrait: existing single-column scrollable list.
+  Widget _buildPortraitBody(BuildContext context) {
     final List<HistoryRun> visibleRuns = _visibleRuns();
     final HistoryMonthlySummary? summary = _visibleSummary;
-    final List<Widget> content = [
+    return CustomScrollView(
+      slivers: [
+        SliverSafeArea(
+          top: false,
+          sliver: SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.medium,
+              AppSpacing.small,
+              AppSpacing.medium,
+              AppSpacing.medium,
+            ),
+            sliver: SliverList.list(
+              children: _buildContentList(context, visibleRuns, summary),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Landscape: filters + optional summary on the left; scrollable run list
+  /// on the right. Left column is 42% wide, capped at 320dp.
+  Widget _buildLandscapeBody(BuildContext context, BoxConstraints outer) {
+    final List<HistoryRun> visibleRuns = _visibleRuns();
+    final HistoryMonthlySummary? summary = _visibleSummary;
+    final double bottomInset = MediaQuery.paddingOf(context).bottom;
+    final double leftWidth = (outer.maxWidth * 0.42).clamp(0.0, 320.0);
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.medium,
+          AppSpacing.small,
+          AppSpacing.medium,
+          AppSpacing.medium + bottomInset,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left pane: filter chips + monthly summary card
+            SizedBox(
+              width: leftWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _HistoryFilterBar(
+                    selected: _filter,
+                    onSelected: _selectFilter,
+                  ),
+                  if (summary != null) ...[
+                    const SizedBox(height: AppSpacing.itemGap),
+                    _MonthlySummaryCard(
+                      summary: summary,
+                      formatter: widget.formatter,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.medium),
+            // Right pane: run list / states
+            Expanded(
+              child: _buildLandscapeRunPane(context, visibleRuns, summary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLandscapeRunPane(
+    BuildContext context,
+    List<HistoryRun> visibleRuns,
+    HistoryMonthlySummary? summary,
+  ) {
+    if (widget.isLoading) {
+      return Semantics(
+        key: HistoryScreen.loadingStateKey,
+        container: true,
+        liveRegion: true,
+        label: AppStrings.historyLoading,
+        child: SingleChildScrollView(
+          child: SkeletonShimmer(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (int i = 0; i < 3; i++) ...[
+                  const _HistorySkeletonCard(),
+                  if (i < 2) const SizedBox(height: AppSpacing.itemGap),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    if (widget.hasError) return _HistoryErrorState(onRetry: widget.onRetry);
+    if (visibleRuns.isEmpty) {
+      return SingleChildScrollView(
+        child: _EmptyState(filter: _filter, onStartRun: widget.onStartRun),
+      );
+    }
+    return CustomScrollView(
+      slivers: [
+        SliverList.list(
+          children: [
+            if (summary == null) ...[
+              Text(
+                AppStrings.historyRunCount(visibleRuns.length),
+                style: AppTextStyles.of(context).caption,
+              ),
+              const SizedBox(height: AppSpacing.small),
+            ],
+            for (int i = 0; i < visibleRuns.length; i++) ...[
+              _RunCard(
+                key: HistoryScreen.runTileKey(visibleRuns[i].runId),
+                run: visibleRuns[i],
+                formatter: widget.formatter,
+                onTap: () => widget.onRunSelected(visibleRuns[i].runId),
+              ),
+              if (i != visibleRuns.length - 1)
+                const SizedBox(height: AppSpacing.itemGap),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildContentList(
+    BuildContext context,
+    List<HistoryRun> visibleRuns,
+    HistoryMonthlySummary? summary,
+  ) {
+    return [
       if (widget.isLoading)
         _HistoryLoadingState(selected: _filter, onSelected: _selectFilter)
       else ...[
@@ -191,55 +375,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ],
       ],
     ];
-
-    return Scaffold(
-      drawer: AppNavigationDrawer(
-        selected: AppDestination.history,
-        onOpenHome: widget.onOpenHome ?? widget.onBackToHome,
-        onOpenHistory: _doNothing,
-        onOpenSettings: widget.onOpenSettings ?? _doNothing,
-      ),
-      body: Column(
-        children: [
-          Builder(
-            builder: (context) => CompactSkyHeader(
-              title: AppStrings.historyTitle,
-              subtitle: AppStrings.historyHeaderSubtitle,
-              leading: HeaderIconButton(
-                key: HistoryScreen.backButtonKey,
-                icon: Icons.arrow_back_rounded,
-                tooltip: AppStrings.backToHome,
-                onPressed: widget.onBackToHome,
-              ),
-              trailing: HeaderIconButton(
-                key: HistoryScreen.menuButtonKey,
-                icon: Icons.menu_rounded,
-                tooltip: AppStrings.homeOpenMenu,
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
-            ),
-          ),
-          Expanded(
-            child: CustomScrollView(
-              slivers: [
-                SliverSafeArea(
-                  top: false,
-                  sliver: SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.medium,
-                      AppSpacing.small,
-                      AppSpacing.medium,
-                      AppSpacing.medium,
-                    ),
-                    sliver: SliverList.list(children: content),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 

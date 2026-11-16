@@ -133,76 +133,198 @@ class _SummaryScreenState extends State<SummaryScreen> {
             onBack: widget.onBack ?? widget.onBackToHome,
           ),
           Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.medium,
-                4,
-                AppSpacing.medium,
-                AppSpacing.medium + bottomInset,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (widget.isLoading)
-                    const _LoadingBody(key: SummaryScreen.loadingKey)
-                  else ...[
-                    _StatsCard(
-                      summary: widget.summary,
-                      formatter: widget.formatter,
-                    ),
-                    const SizedBox(height: 10),
-                    _RouteCard(route: widget.summary.route),
-                    const SizedBox(height: 10),
-                    _SplitsCard(
-                      summary: widget.summary,
-                      formatter: widget.formatter,
-                    ),
-                  ],
-                  const SizedBox(height: AppSpacing.large),
-                  FilledButton.icon(
-                    key: SummaryScreen.homeButtonKey,
-                    onPressed: widget.onBackToHome,
-                    icon: const Icon(Icons.home_outlined),
-                    label: const Text(AppStrings.backToHome),
-                  ),
-                  const SizedBox(height: AppSpacing.itemGap),
-                  OutlinedButton.icon(
-                    key: SummaryScreen.historyButtonKey,
-                    onPressed: widget.onOpenHistory,
-                    icon: const Icon(Icons.bar_chart),
-                    label: const Text(AppStrings.viewHistory),
-                  ),
-                  if (widget.onDeleteRun != null) ...[
-                    const SizedBox(height: AppSpacing.itemGap),
-                    OutlinedButton.icon(
-                      key: SummaryScreen.deleteButtonKey,
-                      onPressed: _deletionPending ? null : _confirmDelete,
-                      icon: _deletionPending
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.delete_outline_rounded),
-                      label: Text(
-                        _deletionPending
-                            ? AppStrings.summaryDeleting
-                            : AppStrings.summaryDeleteRun,
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        // Day #B3261E; night #FFB4AB (readable on navy).
-                        foregroundColor: palette.error,
-                        side: BorderSide(color: palette.error),
-                        minimumSize: const Size.fromHeight(
-                          AppSpacing.minTouchTarget,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final bool isLandscape =
+                    MediaQuery.orientationOf(context) ==
+                        Orientation.landscape &&
+                    constraints.maxWidth >= 500;
+                if (isLandscape) {
+                  return _buildLandscapeBody(
+                    context,
+                    constraints,
+                    bottomInset,
+                    palette,
+                  );
+                }
+                return _buildPortraitBody(context, bottomInset, palette);
+              },
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Portrait: existing single-column scrollable layout.
+  Widget _buildPortraitBody(
+    BuildContext context,
+    double bottomInset,
+    AppPalette palette,
+  ) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.medium,
+        4,
+        AppSpacing.medium,
+        AppSpacing.medium + bottomInset,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.isLoading)
+            const _LoadingBody(key: SummaryScreen.loadingKey)
+          else ...[
+            _StatsCard(summary: widget.summary, formatter: widget.formatter),
+            const SizedBox(height: 10),
+            _RouteCard(route: widget.summary.route),
+            const SizedBox(height: 10),
+            _SplitsCard(summary: widget.summary, formatter: widget.formatter),
+          ],
+          const SizedBox(height: AppSpacing.large),
+          FilledButton.icon(
+            key: SummaryScreen.homeButtonKey,
+            onPressed: widget.onBackToHome,
+            icon: const Icon(Icons.home_outlined),
+            label: const Text(AppStrings.backToHome),
+          ),
+          const SizedBox(height: AppSpacing.itemGap),
+          OutlinedButton.icon(
+            key: SummaryScreen.historyButtonKey,
+            onPressed: widget.onOpenHistory,
+            icon: const Icon(Icons.bar_chart),
+            label: const Text(AppStrings.viewHistory),
+          ),
+          if (widget.onDeleteRun != null) ...[
+            const SizedBox(height: AppSpacing.itemGap),
+            OutlinedButton.icon(
+              key: SummaryScreen.deleteButtonKey,
+              onPressed: _deletionPending ? null : _confirmDelete,
+              icon: _deletionPending
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.delete_outline_rounded),
+              label: Text(
+                _deletionPending
+                    ? AppStrings.summaryDeleting
+                    : AppStrings.summaryDeleteRun,
+              ),
+              style: OutlinedButton.styleFrom(
+                // Day #B3261E; night #FFB4AB (readable on navy).
+                foregroundColor: palette.error,
+                side: BorderSide(color: palette.error),
+                minimumSize: const Size.fromHeight(AppSpacing.minTouchTarget),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Landscape: route map on the left, stats + splits + actions on the right.
+  Widget _buildLandscapeBody(
+    BuildContext context,
+    BoxConstraints outer,
+    double bottomInset,
+    AppPalette palette,
+  ) {
+    // Left column: 44% wide, capped at 360dp.
+    final double leftWidth = (outer.maxWidth * 0.44).clamp(0.0, 360.0);
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.medium,
+          AppSpacing.small,
+          AppSpacing.medium,
+          AppSpacing.medium + bottomInset,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left pane: route card (map)
+            SizedBox(
+              width: leftWidth,
+              child: SingleChildScrollView(
+                child: widget.isLoading
+                    ? _SummaryLoadingRoutePane(leftWidth: leftWidth)
+                    : _LandscapeRouteCard(
+                        route: widget.summary.route,
+                        maxHeight: outer.maxHeight,
+                      ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.medium),
+            // Right pane: stats, splits and action buttons
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (widget.isLoading)
+                      const _LoadingBody(key: SummaryScreen.loadingKey)
+                    else ...[
+                      _StatsCard(
+                        summary: widget.summary,
+                        formatter: widget.formatter,
+                      ),
+                      const SizedBox(height: 10),
+                      _SplitsCard(
+                        summary: widget.summary,
+                        formatter: widget.formatter,
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.large),
+                    FilledButton.icon(
+                      key: SummaryScreen.homeButtonKey,
+                      onPressed: widget.onBackToHome,
+                      icon: const Icon(Icons.home_outlined),
+                      label: const Text(AppStrings.backToHome),
+                    ),
+                    const SizedBox(height: AppSpacing.itemGap),
+                    OutlinedButton.icon(
+                      key: SummaryScreen.historyButtonKey,
+                      onPressed: widget.onOpenHistory,
+                      icon: const Icon(Icons.bar_chart),
+                      label: const Text(AppStrings.viewHistory),
+                    ),
+                    if (widget.onDeleteRun != null) ...[
+                      const SizedBox(height: AppSpacing.itemGap),
+                      OutlinedButton.icon(
+                        key: SummaryScreen.deleteButtonKey,
+                        onPressed: _deletionPending ? null : _confirmDelete,
+                        icon: _deletionPending
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.delete_outline_rounded),
+                        label: Text(
+                          _deletionPending
+                              ? AppStrings.summaryDeleting
+                              : AppStrings.summaryDeleteRun,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: palette.error,
+                          side: BorderSide(color: palette.error),
+                          minimumSize: const Size.fromHeight(
+                            AppSpacing.minTouchTarget,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -629,6 +751,87 @@ class _RouteCard extends StatelessWidget {
                         ? _RouteMap(
                             route: route,
                             size: Size(c.maxWidth, height),
+                            speed: speed,
+                          )
+                        : const _RouteTooShort(),
+                  ),
+                );
+              },
+            ),
+            if (drawable) ...[
+              const SizedBox(height: AppSpacing.itemGap),
+              _RouteLegend(speed: speed, gaps: gaps),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A compact variant of [_RouteCard] for the landscape left pane.
+///
+/// Accepts [maxHeight] (the available height from the outer [LayoutBuilder])
+/// and clamps the map height to fit — avoiding overflows on small phones.
+class _LandscapeRouteCard extends StatelessWidget {
+  const _LandscapeRouteCard({required this.route, required this.maxHeight});
+
+  final List<RoutePoint> route;
+
+  /// Maximum height available from the landscape [LayoutBuilder].
+  final double maxHeight;
+
+  static const double _mapAspect = 232 / 328;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool drawable = RouteGeometry.canDraw(route);
+    final bool speed = drawable && RouteGeometry.hasSpeed(route);
+    final bool gaps =
+        drawable && RouteGeometry.gapSegments(route).contains(true);
+    final AppPalette palette = AppPalette.of(context);
+    final AppThemedTextStyles text = AppTextStyles.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: AppSpacing.small,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    AppStrings.routeTitle,
+                    style: text.sectionHeading,
+                  ),
+                ),
+                Text(AppStrings.routeSubtitle, style: text.caption),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.itemGap),
+            LayoutBuilder(
+              builder: (context, c) {
+                // Reserve ~90dp for the card header + legend + card padding.
+                final double mapHeight = (c.maxWidth * _mapAspect).clamp(
+                  80.0,
+                  maxHeight - 90.0,
+                );
+                return ClipRRect(
+                  borderRadius: const BorderRadius.all(Radius.circular(14)),
+                  child: Container(
+                    key: SummaryScreen.routeAreaKey,
+                    height: mapHeight,
+                    color: palette.mapBackground,
+                    child: drawable
+                        ? _RouteMap(
+                            route: route,
+                            size: Size(c.maxWidth, mapHeight),
                             speed: speed,
                           )
                         : const _RouteTooShort(),
@@ -1328,6 +1531,43 @@ class _LoadingBody extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Landscape loading pane ──────────────────────────────────────────────────
+
+/// Left-pane skeleton shown in landscape mode while the run is loading.
+class _SummaryLoadingRoutePane extends StatelessWidget {
+  const _SummaryLoadingRoutePane({required this.leftWidth});
+
+  final double leftWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final double mapHeight = (leftWidth * _RouteCard._mapAspect).clamp(
+      160.0,
+      280.0,
+    );
+    return SkeletonShimmer(
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.medium),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _LoadingBody._block(110, 18),
+              const SizedBox(height: AppSpacing.itemGap),
+              _LoadingBody._block(
+                leftWidth - AppSpacing.medium * 2,
+                mapHeight,
+                radius: 14,
+              ),
+            ],
+          ),
         ),
       ),
     );

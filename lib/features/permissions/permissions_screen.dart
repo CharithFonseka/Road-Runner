@@ -18,6 +18,7 @@
 // Back button (falls back to onNotNow). No drawer here.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -155,6 +156,60 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
       ),
     };
 
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isLandscape =
+            constraints.maxWidth > constraints.maxHeight &&
+            constraints.maxWidth >= 500;
+        if (isLandscape) {
+          return _buildLandscapeContent(
+            context,
+            palette,
+            step,
+            issue,
+            scene,
+            primary,
+            canContinueWithoutNotifications,
+            header,
+            subtitle,
+            heading,
+            body,
+            bottomInset,
+            constraints,
+          );
+        }
+        return _buildPortraitContent(
+          context,
+          palette,
+          step,
+          issue,
+          scene,
+          primary,
+          canContinueWithoutNotifications,
+          header,
+          subtitle,
+          heading,
+          body,
+          bottomInset,
+        );
+      },
+    );
+  }
+
+  Widget _buildPortraitContent(
+    BuildContext context,
+    AppPalette palette,
+    PermissionStep step,
+    PermissionIssue? issue,
+    PermissionScene scene,
+    _Action? primary,
+    bool canContinueWithoutNotifications,
+    String header,
+    String? subtitle,
+    String heading,
+    String body,
+    double bottomInset,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -274,6 +329,223 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                   child: const Text(AppStrings.notNow),
                 ),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLandscapeContent(
+    BuildContext context,
+    AppPalette palette,
+    PermissionStep step,
+    PermissionIssue? issue,
+    PermissionScene scene,
+    _Action? primary,
+    bool canContinueWithoutNotifications,
+    String header,
+    String? subtitle,
+    String heading,
+    String body,
+    double bottomInset,
+    BoxConstraints constraints,
+  ) {
+    final double leftWidth = math.min(
+      320.0,
+      (constraints.maxWidth - AppSpacing.medium * 3) * 0.44,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CompactSkyHeader(
+          title: header,
+          subtitle: subtitle,
+          landscapeHeight: 40,
+          landscapePainter: const DrawerLandscapePainter(),
+          leading: HeaderIconButton(
+            key: PermissionsScreen.backButtonKey,
+            icon: Icons.arrow_back_rounded,
+            tooltip: AppStrings.permissionsBack,
+            onPressed: widget.onBack ?? widget.onNotNow,
+          ),
+        ),
+        Expanded(
+          child: SafeArea(
+            left: true,
+            right: true,
+            top: false,
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.medium,
+                AppSpacing.small,
+                AppSpacing.medium,
+                0,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Left Column: Illustration + Explanatory Text
+                  SizedBox(
+                    width: leftWidth,
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.only(
+                        bottom: AppSpacing.medium + bottomInset,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          PermissionIllustration(
+                            key: PermissionsScreen.illustrationKey,
+                            scene: scene,
+                          ),
+                          const SizedBox(height: AppSpacing.small),
+                          Semantics(
+                            header: true,
+                            child: Text(
+                              heading,
+                              key: PermissionsScreen.headingKey,
+                              textAlign: TextAlign.center,
+                              style: AppTextStyles.of(context).heading
+                                  .copyWith(fontSize: 20, height: 1.2),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Text(
+                              body,
+                              textAlign: TextAlign.center,
+                              style: AppTextStyles.of(context).body.copyWith(
+                                fontSize: 14,
+                                height: 20 / 14,
+                                color: palette.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.medium),
+                  // Right Column: Card + Status Message + Action Buttons + Footer
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.only(
+                        bottom: AppSpacing.medium + bottomInset,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _card(scene, step),
+                          if (_showMessage(step, issue)) ...[
+                            const SizedBox(height: AppSpacing.itemGap),
+                            _StatusMessage(
+                              key: PermissionsScreen.messageKey,
+                              step: step,
+                              issue: issue,
+                            ),
+                          ],
+                          const SizedBox(height: AppSpacing.itemGap),
+                          if (canContinueWithoutNotifications) ...[
+                            OutlinedButton(
+                              key: PermissionsScreen
+                                  .continueWithoutNotificationsButtonKey,
+                              onPressed: widget.onContinue,
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                  color: palette.buttonOutline,
+                                  width: 1.5,
+                                ),
+                                foregroundColor: palette.textPrimary,
+                                backgroundColor: palette.isDark
+                                    ? Colors.transparent
+                                    : palette.surface,
+                                minimumSize: const Size.fromHeight(
+                                  AppSpacing.buttonHeight,
+                                ),
+                              ),
+                              child: const Text(
+                                AppStrings.continueWithoutNotifications,
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.itemGap),
+                          ],
+                          if (step != PermissionStep.ready)
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    key: PermissionsScreen.notNowButtonKey,
+                                    onPressed: widget.onNotNow,
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(
+                                        color: palette.buttonOutline,
+                                        width: 1.5,
+                                      ),
+                                      foregroundColor: palette.textPrimary,
+                                      backgroundColor: palette.isDark
+                                          ? Colors.transparent
+                                          : palette.surface,
+                                      minimumSize: const Size.fromHeight(
+                                        AppSpacing.buttonHeight,
+                                      ),
+                                    ),
+                                    child: const Text(AppStrings.notNow),
+                                  ),
+                                ),
+                                if (primary != null) ...[
+                                  const SizedBox(width: AppSpacing.itemGap),
+                                  Expanded(
+                                    child: FilledButton.icon(
+                                      key: PermissionsScreen.primaryButtonKey,
+                                      onPressed: _controller.busy
+                                          ? null
+                                          : primary.onPressed,
+                                      icon: Icon(primary.icon),
+                                      label: Text(primary.label),
+                                      style: FilledButton.styleFrom(
+                                        minimumSize: const Size.fromHeight(
+                                          AppSpacing.buttonHeight,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            )
+                          else if (primary != null)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 320,
+                                ),
+                                child: FilledButton.icon(
+                                  key: PermissionsScreen.primaryButtonKey,
+                                  onPressed: _controller.busy
+                                      ? null
+                                      : primary.onPressed,
+                                  icon: Icon(primary.icon),
+                                  label: Text(primary.label),
+                                  style: FilledButton.styleFrom(
+                                    minimumSize: const Size.fromHeight(
+                                      AppSpacing.buttonHeight,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: AppSpacing.small),
+                          const _Footer(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ],

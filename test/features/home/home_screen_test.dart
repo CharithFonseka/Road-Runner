@@ -587,7 +587,6 @@ void main() {
 
             final Rect slider = tester.getRect(_slider);
             expect(slider.height, AppSpacing.heroButtonHeight);
-            expect(slider.width, size.width - 2 * AppSpacing.medium);
             expect(
               slider.bottom,
               closeTo(size.height - AppSpacing.medium, 0.5),
@@ -596,7 +595,16 @@ void main() {
               find.byKey(HomeScreen.recentRunsKey),
             );
             expect(card.height, greaterThan(0));
-            expect(card.bottom, lessThanOrEqualTo(slider.top));
+            if (size.width > size.height) {
+              expect(
+                slider.width,
+                lessThanOrEqualTo(HomeScreen.maxLandscapeSliderWidth),
+              );
+              expect(card.left, greaterThan(slider.right));
+            } else {
+              expect(slider.width, size.width - 2 * AppSpacing.medium);
+              expect(card.bottom, lessThanOrEqualTo(slider.top));
+            }
           });
         }
       }

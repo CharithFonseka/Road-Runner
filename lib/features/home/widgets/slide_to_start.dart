@@ -37,6 +37,7 @@ class SlideToStart extends StatefulWidget {
     this.enabled = true,
     this.starting = false,
     this.holdDuration = defaultHoldDuration,
+    this.maxWidth,
   });
 
   /// Called once per activation. The parent checks permissions and opens
@@ -53,12 +54,19 @@ class SlideToStart extends StatefulWidget {
   /// How long a press must be held to start.
   final Duration holdDuration;
 
+  /// Optional maximum width constraint. When provided, the track does not
+  /// stretch beyond this width, ensuring comfortable thumb travel distance.
+  final double? maxWidth;
+
   static const double height = AppSpacing.heroButtonHeight; // 72
   static const double handleSize = 64;
   static const double inset = (height - handleSize) / 2; // 4
 
   /// Share of the travel the handle must reach before release starts a run.
   static const double threshold = 0.7;
+
+  /// Recommended upper bound for landscape/wide screens.
+  static const double defaultLandscapeMaxWidth = 340;
 
   static const Duration defaultHoldDuration = Duration(seconds: 1);
   static const Duration snapBackDuration = Duration(milliseconds: 200);
@@ -269,40 +277,51 @@ class _SlideToStartState extends State<SlideToStart>
             },
           ),
         },
-        child: Listener(
-          onPointerDown: _onPointerDown,
-          onPointerMove: _onPointerMove,
-          onPointerUp: _onPointerEnd,
-          onPointerCancel: _onPointerEnd,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            dragStartBehavior: DragStartBehavior.down,
-            onHorizontalDragStart: _canInteract ? _onDragStart : null,
-            onHorizontalDragUpdate: _canInteract ? _onDragUpdate : null,
-            onHorizontalDragEnd: _canInteract ? _onDragEnd : null,
-            onHorizontalDragCancel: _canInteract ? _onDragEnd : null,
-            child: SizedBox(
-              height: SlideToStart.height,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  _travel = math.max(
-                    1,
-                    constraints.maxWidth -
-                        SlideToStart.handleSize -
-                        2 * SlideToStart.inset,
-                  );
-                  return AnimatedBuilder(
-                    animation: Listenable.merge([_position, _hold]),
-                    builder: (context, _) => Opacity(
-                      opacity: widget.enabled || starting ? 1 : 0.5,
-                      child: _buildTrack(starting, palette),
-                    ),
-                  );
-                },
+        child: () {
+          Widget control = Listener(
+            onPointerDown: _onPointerDown,
+            onPointerMove: _onPointerMove,
+            onPointerUp: _onPointerEnd,
+            onPointerCancel: _onPointerEnd,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              dragStartBehavior: DragStartBehavior.down,
+              onHorizontalDragStart: _canInteract ? _onDragStart : null,
+              onHorizontalDragUpdate: _canInteract ? _onDragUpdate : null,
+              onHorizontalDragEnd: _canInteract ? _onDragEnd : null,
+              onHorizontalDragCancel: _canInteract ? _onDragEnd : null,
+              child: SizedBox(
+                height: SlideToStart.height,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    _travel = math.max(
+                      1,
+                      constraints.maxWidth -
+                          SlideToStart.handleSize -
+                          2 * SlideToStart.inset,
+                    );
+                    return AnimatedBuilder(
+                      animation: Listenable.merge([_position, _hold]),
+                      builder: (context, _) => Opacity(
+                        opacity: widget.enabled || starting ? 1 : 0.5,
+                        child: _buildTrack(starting, palette),
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-        ),
+          );
+          if (widget.maxWidth != null) {
+            control = Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: widget.maxWidth!),
+                child: control,
+              ),
+            );
+          }
+          return control;
+        }(),
       ),
     );
   }

@@ -44,11 +44,17 @@ class SplashScreen extends StatelessWidget {
         decoration: BoxDecoration(gradient: palette.splashGradient),
         child: LayoutBuilder(
           builder: (context, constraints) {
+            final bool isLandscape =
+                constraints.maxWidth > constraints.maxHeight &&
+                constraints.maxWidth >= 500;
+            final double share = isLandscape
+                ? (constraints.maxHeight < 340 ? 0.20 : 0.24)
+                : _maxLandscapeShare;
             final double landscapeHeight = math.min(
               SplashLandscapePainter.designHeight *
                   constraints.maxWidth /
                   SplashLandscapePainter.designWidth,
-              constraints.maxHeight * _maxLandscapeShare,
+              constraints.maxHeight * share,
             );
             return Stack(
               fit: StackFit.expand,
