@@ -29,12 +29,14 @@ class HistoryMonthlySummary {
     required this.totalRuns,
     required this.totalDistanceM,
     required this.totalMovingMs,
+    this.averagePaceSecPerKm,
   });
 
   final String monthLabel;
   final int totalRuns;
   final double totalDistanceM;
   final int totalMovingMs;
+  final double? averagePaceSecPerKm;
 }
 
 class HistoryScreen extends StatefulWidget {
@@ -362,6 +364,11 @@ class _MonthlySummaryCard extends StatelessWidget {
                         ),
                         style: text.caption,
                       ),
+                      if (summary.averagePaceSecPerKm != null)
+                        Text(
+                          '${AppStrings.statAveragePace} ${formatter.pace(summary.averagePaceSecPerKm)}/km',
+                          style: AppTextStyles.caption,
+                        ),
                     ],
                   ),
                   Column(
