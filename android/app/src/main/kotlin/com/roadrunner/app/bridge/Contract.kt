@@ -26,6 +26,8 @@ object Contract {
     const val METHOD_GET_UNFINISHED_RUN = "getUnfinishedRun"
     const val METHOD_DISCARD_RUN = "discardRun"
 
+    const val BRIDGE_CONTRACT_VERSION = 2
+
     // ─── Run states (SRS §4.2, §4.3, §4.5) ────────────────────────────────────
 
     const val STATE_IDLE = "idle"
@@ -39,6 +41,7 @@ object Contract {
     const val EVENT_TYPE_STATE = "state"
     const val EVENT_TYPE_GPS = "gps"
     const val EVENT_TYPE_SNAPSHOT = "snapshot"
+    const val EVENT_TYPE_POINT = "point"
     const val EVENT_TYPE_ERROR = "error"
 
     // ─── GPS quality values (SRS §4.5) ────────────────────────────────────────
@@ -66,6 +69,9 @@ object Contract {
     const val KEY_DISTANCE_M = "distanceM"
     const val KEY_SPEED_MPS = "speedMps"
     const val KEY_PACE_SEC_PER_KM = "paceSecPerKm"
+    const val KEY_LAT = "lat"
+    const val KEY_LON = "lon"
+    const val KEY_SEQ = "seq"
     const val KEY_CODE = "code"
     const val KEY_MESSAGE = "message"
 

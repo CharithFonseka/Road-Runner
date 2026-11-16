@@ -30,6 +30,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
 import 'active_run_controller.dart';
 import 'live_run_formatter.dart';
+import 'live_run_map.dart';
 import 'widgets/live_stat.dart';
 import 'widgets/run_control_button.dart';
 import 'widgets/status_chips.dart';
@@ -226,10 +227,19 @@ class _ActiveRunScreenState extends State<ActiveRunScreen> {
               LayoutId(
                 id: _BodySlot.stats,
                 child: SingleChildScrollView(
-                  child: _StatsCard(
-                    snapshot: state.snapshot,
-                    paused: paused,
-                    formatter: widget.formatter,
+                  child: Column(
+                    children: [
+                      LiveRunMap(route: state.route, snapshot: state.snapshot),
+                      if (state.route.isNotEmpty ||
+                          (state.snapshot?.lat != null &&
+                              state.snapshot?.lon != null))
+                        const SizedBox(height: AppSpacing.itemGap),
+                      _StatsCard(
+                        snapshot: state.snapshot,
+                        paused: paused,
+                        formatter: widget.formatter,
+                      ),
+                    ],
                   ),
                 ),
               ),

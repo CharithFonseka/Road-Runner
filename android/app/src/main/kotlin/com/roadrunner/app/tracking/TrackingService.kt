@@ -127,6 +127,7 @@ class TrackingService : Service() {
             TrackingApi.publishState(
                 TrackingRunState.RUNNING,
                 runId.toString(),
+                activeRunFilePath(),
             )
             observeNotification()
             pendingRunId = null

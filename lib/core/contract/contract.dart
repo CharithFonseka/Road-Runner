@@ -25,6 +25,9 @@ const String kMethodGetState = 'getState';
 const String kMethodGetUnfinishedRun = 'getUnfinishedRun';
 const String kMethodDiscardRun = 'discardRun';
 
+/// Bridge payload version for live position and route point support.
+const int kBridgeContractVersion = 2;
+
 // ─── Run states (SRS §4.2, §4.3, §4.5) ────────────────────────────────────────
 
 const String kStateIdle = 'idle';
@@ -38,6 +41,7 @@ const String kStateSaved = 'saved';
 const String kEventTypeState = 'state';
 const String kEventTypeGps = 'gps';
 const String kEventTypeSnapshot = 'snapshot';
+const String kEventTypePoint = 'point';
 const String kEventTypeError = 'error';
 
 // ─── GPS quality values (SRS §4.5) ────────────────────────────────────────────
@@ -65,6 +69,9 @@ const String kKeyMovingMs = 'movingMs';
 const String kKeyDistanceM = 'distanceM';
 const String kKeySpeedMps = 'speedMps';
 const String kKeyPaceSecPerKm = 'paceSecPerKm';
+const String kKeyLat = 'lat';
+const String kKeyLon = 'lon';
+const String kKeySeq = 'seq';
 const String kKeyCode = 'code';
 const String kKeyMessage = 'message';
 

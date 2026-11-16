@@ -74,6 +74,7 @@ check "METHOD_STOP_RUN"           "$(extract_dart kMethodStopRun)"              
 check "METHOD_GET_STATE"          "$(extract_dart kMethodGetState)"               "$(extract_kotlin METHOD_GET_STATE)"
 check "METHOD_GET_UNFINISHED_RUN" "$(extract_dart kMethodGetUnfinishedRun)"       "$(extract_kotlin METHOD_GET_UNFINISHED_RUN)"
 check "METHOD_DISCARD_RUN"        "$(extract_dart kMethodDiscardRun)"             "$(extract_kotlin METHOD_DISCARD_RUN)"
+check "BRIDGE_CONTRACT_VERSION"    "$(extract_dart kBridgeContractVersion)"        "$(extract_kotlin BRIDGE_CONTRACT_VERSION)"
 
 # 3. Run states
 check "STATE_IDLE"                "$(extract_dart kStateIdle)"                    "$(extract_kotlin STATE_IDLE)"
@@ -86,6 +87,7 @@ check "STATE_SAVED"               "$(extract_dart kStateSaved)"                 
 check "EVENT_TYPE_STATE"          "$(extract_dart kEventTypeState)"               "$(extract_kotlin EVENT_TYPE_STATE)"
 check "EVENT_TYPE_GPS"            "$(extract_dart kEventTypeGps)"                 "$(extract_kotlin EVENT_TYPE_GPS)"
 check "EVENT_TYPE_SNAPSHOT"       "$(extract_dart kEventTypeSnapshot)"            "$(extract_kotlin EVENT_TYPE_SNAPSHOT)"
+check "EVENT_TYPE_POINT"          "$(extract_dart kEventTypePoint)"               "$(extract_kotlin EVENT_TYPE_POINT)"
 check "EVENT_TYPE_ERROR"          "$(extract_dart kEventTypeError)"               "$(extract_kotlin EVENT_TYPE_ERROR)"
 
 # 5. GPS quality
@@ -110,6 +112,9 @@ check "KEY_MOVING_MS"             "$(extract_dart kKeyMovingMs)"                
 check "KEY_DISTANCE_M"            "$(extract_dart kKeyDistanceM)"                 "$(extract_kotlin KEY_DISTANCE_M)"
 check "KEY_SPEED_MPS"             "$(extract_dart kKeySpeedMps)"                  "$(extract_kotlin KEY_SPEED_MPS)"
 check "KEY_PACE_SEC_PER_KM"       "$(extract_dart kKeyPaceSecPerKm)"              "$(extract_kotlin KEY_PACE_SEC_PER_KM)"
+check "KEY_LAT"                   "$(extract_dart kKeyLat)"                       "$(extract_kotlin KEY_LAT)"
+check "KEY_LON"                   "$(extract_dart kKeyLon)"                       "$(extract_kotlin KEY_LON)"
+check "KEY_SEQ"                   "$(extract_dart kKeySeq)"                       "$(extract_kotlin KEY_SEQ)"
 check "KEY_CODE"                  "$(extract_dart kKeyCode)"                      "$(extract_kotlin KEY_CODE)"
 check "KEY_MESSAGE"               "$(extract_dart kKeyMessage)"                   "$(extract_kotlin KEY_MESSAGE)"
 

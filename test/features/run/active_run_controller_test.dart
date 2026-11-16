@@ -2,6 +2,7 @@
 // Owner: Tharushi
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:road_runner/bridge/tracking_bridge.dart';
@@ -36,6 +37,45 @@ void main() {
   });
 
   group('start', () {
+    test(
+      'restores the full route and merges new point events by sequence',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'road-runner-route-',
+        );
+        addTearDown(() => directory.delete(recursive: true));
+        final file = File(
+          '${directory.path}${Platform.pathSeparator}run.jsonl',
+        );
+        await file.writeAsString(
+          '''
+{"v":1,"runId":"existing","startedAtUtcMs":1000}
+{"k":"p","seq":0,"lat":-33.86,"lon":151.2,"ok":true}
+{"k":"p","seq":1,"lat":-33.87,"lon":151.3,"ok":true}
+'''
+              .trimLeft(),
+        );
+        bridge.initialStatus = TrackingStatus(
+          state: kStateRunning,
+          runId: 'existing',
+          filePath: file.path,
+        );
+        await controller.start();
+        expect(controller.state.route.map((point) => point.seq), [0, 1]);
+        bridge.emit(
+          const TrackingPointEvent(
+            point: TrackingPoint(seq: 2, lat: -33.88, lon: 151.4),
+          ),
+        );
+        bridge.emit(
+          const TrackingPointEvent(
+            point: TrackingPoint(seq: 1, lat: -33.87, lon: 151.3),
+          ),
+        );
+        expect(controller.state.route.map((point) => point.seq), [0, 1, 2]);
+      },
+    );
+
     test('subscribes, starts a run and becomes running', () async {
       await controller.start();
       expect(bridge.hasListener, isTrue);

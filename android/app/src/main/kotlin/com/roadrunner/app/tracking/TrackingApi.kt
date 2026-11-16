@@ -34,6 +34,9 @@ data class LiveSnapshot(
     val distanceM: Double,
     val speedMps: Double,
     val paceSecPerKm: Double?,
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val seq: Int? = null,
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
         "elapsedMs" to elapsedMs,
@@ -41,6 +44,9 @@ data class LiveSnapshot(
         "distanceM" to distanceM,
         "speedMps" to speedMps,
         "paceSecPerKm" to paceSecPerKm,
+        "lat" to lat,
+        "lon" to lon,
+        "seq" to seq,
     )
 }
 
@@ -55,9 +61,7 @@ data class TrackingStatus(
         put("state", state.wireValue)
         runId?.let { put("runId", it) }
         snapshot?.let { put("snapshot", it.toMap()) }
-        if (state == TrackingRunState.STOPPED) {
-            filePath?.let { put("filePath", it) }
-        }
+        filePath?.let { put("filePath", it) }
     }
 }
 
@@ -90,7 +94,7 @@ object TrackingApi {
                 runId = runId,
                 snapshot =
                     if (runId == previous.runId) previous.snapshot else null,
-                filePath = filePath,
+                filePath = filePath ?: if (runId == previous.runId) previous.filePath else null,
             )
         }
 
@@ -121,6 +125,17 @@ object TrackingApi {
         mutableEvents.tryEmit(event)
     }
 
+    fun publishPoint(seq: Int, lat: Double, lon: Double) {
+        mutableEvents.tryEmit(
+            mapOf(
+                "type" to "point",
+                "seq" to seq,
+                "lat" to lat,
+                "lon" to lon,
+            )
+        )
+    }
+
     fun publishError(code: TrackingErrorCode, message: String) {
         mutableEvents.tryEmit(
             mapOf(
@@ -130,4 +145,4 @@ object TrackingApi {
             )
         )
     }
-}   
+}
