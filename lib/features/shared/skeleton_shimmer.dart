@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_palette.dart';
+
 /// Adds a subtle, horizontally sweeping highlight to loading placeholders.
 ///
 /// The child remains visible without animation when reduced motion is enabled.
@@ -65,6 +67,7 @@ class SkeletonShimmerBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final Animation<double>? animation = _SkeletonShimmerScope.of(context);
     if (animation == null) return child;
+    final Color highlight = AppPalette.of(context).shimmerHighlight;
 
     return AnimatedBuilder(
       animation: animation,
@@ -78,7 +81,7 @@ class SkeletonShimmerBlock extends StatelessWidget {
             end: Alignment(-1 + offset, 0),
             colors: [
               Colors.transparent,
-              Colors.white.withValues(alpha: 0.45),
+              highlight,
               Colors.transparent,
             ],
             stops: const [0, 0.5, 1],

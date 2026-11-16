@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
+import 'app_palette.dart';
 
 /// Text styles for the Road Runner design system.
 class AppTextStyles {
@@ -128,4 +129,58 @@ class AppTextStyles {
     bodySmall: caption,
     labelLarge: button,
   );
+
+  /// [textTheme] recoloured for [palette], so the same sizes and weights
+  /// read correctly on the day or night background.
+  ///
+  /// Role mapping: headings and body → `textPrimary`, caption →
+  /// `textSecondary`, statLarge / statMedium → `stat`. `labelLarge` keeps no
+  /// colour so buttons supply their own foreground. For the light palette
+  /// the result equals [textTheme].
+  static TextTheme textThemeFor(AppPalette palette) => TextTheme(
+    displayLarge: statLarge.copyWith(color: palette.stat),
+    displayMedium: statMedium.copyWith(color: palette.stat),
+    headlineMedium: heading.copyWith(color: palette.textPrimary),
+    titleLarge: sectionHeading.copyWith(color: palette.textPrimary),
+    bodyLarge: body.copyWith(color: palette.textPrimary),
+    bodyMedium: body.copyWith(color: palette.textPrimary),
+    bodySmall: caption.copyWith(color: palette.textSecondary),
+    labelLarge: button,
+  );
+
+  /// The UI kit's named styles recoloured for [palette]. Screens migrating
+  /// from the `const` styles above can swap `AppTextStyles.caption` for
+  /// `AppTextStyles.of(context).caption` without changing sizes.
+  static AppThemedTextStyles of(BuildContext context) =>
+      AppThemedTextStyles(AppPalette.of(context));
+}
+
+/// The [AppTextStyles] set with colours taken from an [AppPalette].
+///
+/// Live styles use `statLive`, saved stats use `stat`, text uses
+/// `textPrimary` / `textSecondary`.
+@immutable
+class AppThemedTextStyles {
+  const AppThemedTextStyles(this.palette);
+
+  final AppPalette palette;
+
+  TextStyle get heading =>
+      AppTextStyles.heading.copyWith(color: palette.textPrimary);
+  TextStyle get sectionHeading =>
+      AppTextStyles.sectionHeading.copyWith(color: palette.textPrimary);
+  TextStyle get body => AppTextStyles.body.copyWith(color: palette.textPrimary);
+  TextStyle get caption =>
+      AppTextStyles.caption.copyWith(color: palette.textSecondary);
+  TextStyle get button => AppTextStyles.button;
+  TextStyle get statLarge =>
+      AppTextStyles.statLarge.copyWith(color: palette.stat);
+  TextStyle get statMedium =>
+      AppTextStyles.statMedium.copyWith(color: palette.stat);
+  TextStyle get liveTimer =>
+      AppTextStyles.liveTimer.copyWith(color: palette.statLive);
+  TextStyle get livePace =>
+      AppTextStyles.livePace.copyWith(color: palette.statLive);
+  TextStyle get statValue =>
+      AppTextStyles.statValue.copyWith(color: palette.stat);
 }

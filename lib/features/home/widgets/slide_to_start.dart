@@ -26,6 +26,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../app_strings.dart';
 
@@ -238,6 +239,7 @@ class _SlideToStartState extends State<SlideToStart>
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     final bool starting = _isStarting;
     return Semantics(
       container: true,
@@ -293,7 +295,7 @@ class _SlideToStartState extends State<SlideToStart>
                     animation: Listenable.merge([_position, _hold]),
                     builder: (context, _) => Opacity(
                       opacity: widget.enabled || starting ? 1 : 0.5,
-                      child: _buildTrack(starting),
+                      child: _buildTrack(starting, palette),
                     ),
                   );
                 },
@@ -305,7 +307,7 @@ class _SlideToStartState extends State<SlideToStart>
     );
   }
 
-  Widget _buildTrack(bool starting) {
+  Widget _buildTrack(bool starting, AppPalette palette) {
     const double inset = SlideToStart.inset;
     const double handle = SlideToStart.handleSize;
     final double t = widget.starting && !_fired ? 1 : _position.value;
@@ -321,9 +323,7 @@ class _SlideToStartState extends State<SlideToStart>
         Positioned.fill(
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: starting
-                  ? SlideToStart.startingTrackColor
-                  : AppColors.burntOrangeDeep,
+              color: starting ? palette.primaryFillActive : palette.primaryFill,
               borderRadius: const BorderRadius.all(
                 Radius.circular(SlideToStart.height / 2),
               ),
@@ -335,7 +335,12 @@ class _SlideToStartState extends State<SlideToStart>
                 ),
               ],
               border: _focusHighlight
-                  ? Border.all(color: AppColors.canyonBrownDeep, width: 3)
+                  ? Border.all(
+                      color: palette.isDark
+                          ? palette.accent
+                          : AppColors.canyonBrownDeep,
+                      width: 3,
+                    )
                   : null,
             ),
           ),
@@ -367,7 +372,10 @@ class _SlideToStartState extends State<SlideToStart>
                 fit: BoxFit.scaleDown,
                 child: starting
                     ? const _StartingLabel()
-                    : _GuidanceLabel(holding: _hold.value > 0),
+                    : _GuidanceLabel(
+                        holding: _hold.value > 0,
+                        color: palette.onPrimaryFill,
+                      ),
               ),
             ),
           ),
@@ -389,16 +397,16 @@ class _SlideToStartState extends State<SlideToStart>
           top: inset,
           width: handle,
           height: handle,
-          child: const DecoratedBox(
+          child: DecoratedBox(
             key: SlideToStart.handleKey,
             decoration: BoxDecoration(
-              color: AppColors.white,
+              color: palette.onPrimaryFill,
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.directions_run_rounded,
               size: 30,
-              color: AppColors.burntOrangeDeep,
+              color: palette.primaryFill,
             ),
           ),
         ),
@@ -415,36 +423,40 @@ const TextStyle _mainLabelStyle = TextStyle(
 );
 
 class _GuidanceLabel extends StatelessWidget {
-  const _GuidanceLabel({required this.holding});
+  const _GuidanceLabel({required this.holding, required this.color});
 
   final bool holding;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text.rich(
+        Text.rich(
           TextSpan(
             text: '${AppStrings.slideToStart} ',
             children: [
               TextSpan(
                 text: AppStrings.slideToStartArrows,
-                style: TextStyle(letterSpacing: -2, color: Color(0xBFFFFFFF)),
+                style: TextStyle(
+                  letterSpacing: -2,
+                  color: color.withValues(alpha: 0.75),
+                ),
               ),
             ],
           ),
           maxLines: 1,
-          style: _mainLabelStyle,
+          style: _mainLabelStyle.copyWith(color: color),
         ),
         Text(
           holding ? AppStrings.slideKeepHolding : AppStrings.slideOrHold,
           maxLines: 1,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
             height: 1.15,
-            color: Color(0xE6FFFFFF),
+            color: color.withValues(alpha: 230 / 255),
           ),
         ),
       ],
@@ -457,10 +469,11 @@ class _StartingLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Text(
+    final Color color = AppPalette.of(context).onPrimaryFill;
+    return Text(
       AppStrings.slideStarting,
       maxLines: 1,
-      style: _mainLabelStyle,
+      style: _mainLabelStyle.copyWith(color: color),
     );
   }
 }

@@ -94,3 +94,142 @@ class AppColors {
   /// Decoration only — never a text colour.
   static const Color divider = Color(0x1F5B3A29);
 }
+
+/// Raw "moonlit desert" (night) colour tokens from the Road Runner UI kit
+/// Revision 5 (Components and tokens sheet, night column, and the dark
+/// screens).
+///
+/// Screens should not read these directly. Use the semantic roles in
+/// `AppPalette` (app_palette.dart) through `context.palette`, which picks the
+/// day or night value for the current theme. These constants exist so every
+/// night value has one named, tested source.
+///
+/// Values marked "a11y" are deliberate deviations from the kit; the reason is
+/// written next to each and checked in test/core/theme/dark_contrast_test.dart.
+class AppDarkColors {
+  AppDarkColors._();
+
+  // ─── Surfaces ───────────────────────────────────────────────────────────────
+
+  /// Screen background (kit `bg`).
+  static const Color background = Color(0xFF171D2B);
+
+  /// Cards, drawer, dialogs (kit `surface`).
+  static const Color surface = Color(0xFF293247);
+
+  /// 1px card border so cards separate from the background (kit `--border`).
+  static const Color cardBorder = Color(0x0FF3E7D6); // textPrimary 6%
+
+  /// Hairline dividers in lists and stat grids (kit `--hair`).
+  static const Color hairline = Color(0x24D4C5B7); // textSecondary 14%
+
+  /// Modal scrim behind the drawer and dialogs (kit dark screens: .76).
+  static const Color scrim = Color(0xC2080A12);
+
+  /// Round header icon-button fill (kit `.iconbtn`).
+  static const Color iconButtonFill = Color(0xB8293247); // surface 72%
+
+  // ─── Text ───────────────────────────────────────────────────────────────────
+
+  /// Main text (kit `text.primary`). 13.80:1 on [background].
+  static const Color textPrimary = Color(0xFFF3E7D6);
+
+  /// Captions, labels, paused timer (kit `text.secondary`). 7.60:1 on
+  /// [surface].
+  static const Color textSecondary = Color(0xFFD4C5B7);
+
+  // ─── Accents ────────────────────────────────────────────────────────────────
+
+  /// Icons, links ("View all"), selected drawer icon, Pause border
+  /// (kit `icon`). 5.49:1 on [surface].
+  static const Color accent = Color(0xFFE8957A);
+
+  /// a11y: text on an [iconTile] (selected drawer label, numbered steps).
+  /// The kit uses [accent] there, which is only 4.16:1 on the tile over
+  /// [surface]. This slightly lighter tint of the same hue is 4.83:1.
+  static const Color accentOnTile = Color(0xFFF0A58D);
+
+  /// Rounded square behind icons (kit `tile`: [accent] at 16%).
+  static const Color iconTile = Color(0x29E8957A);
+
+  /// Outlined (secondary) button border and inactive chip border
+  /// (kit `outline`). Non-text: 3.02:1 on [surface], 3.97:1 on [background].
+  static const Color outline = Color(0xFF8C7768);
+
+  /// Saved-run statistics (kit `stat`, mint). 8.36:1 on [surface].
+  static const Color stat = Color(0xFF8FE0CF);
+
+  /// Live running information (kit `stat.live`). 6.19:1 on [surface].
+  static const Color statLive = Color(0xFF91B4FE);
+
+  /// Fastest-split row highlight (kit `highlight`: mint 12%).
+  static const Color highlight = Color(0x1F8FE0CF);
+
+  /// Weak GPS badge text and icon (kit `gps.weak`).
+  static const Color gpsWeak = Color(0xFFFFCE29);
+
+  /// a11y: error text and icons. The kit has no night error colour; the
+  /// light [AppColors.error] is unreadable on navy, so this is Material 3's
+  /// dark-scheme error. 7.53:1 on [surface].
+  static const Color error = Color(0xFFFFB4AB);
+
+  /// Text on an [error] fill (Material 3 dark `onError`).
+  static const Color onError = Color(0xFF690005);
+
+  // ─── Route map (Summary) ────────────────────────────────────────────────────
+
+  /// Slower-pace band (kit `route.slow`). 7.30:1 on [mapBackground].
+  static const Color routeSlow = Color(0xFF91B4FE);
+
+  /// Steady-pace band (kit `route.steady`). 10.13:1 on [mapBackground].
+  static const Color routeSteady = Color(0xFFFFCE29);
+
+  /// Faster-pace band (kit `route.fast`). 5.35:1 on [mapBackground].
+  static const Color routeFast = Color(0xFFFF6D0F);
+
+  /// Neutral map background (kit `map.parchment`).
+  static const Color mapBackground = Color(0xFF1F2638);
+
+  /// Scale grid lines (kit `--grid`: textPrimary 6%).
+  static const Color mapGrid = Color(0x0FF3E7D6);
+
+  /// a11y: finish marker. The kit draws it in the primary fill `#A34A20`,
+  /// which is only 2.55:1 on [mapBackground] (graphics need 3:1). The night
+  /// [accent] (same hue family) is used instead.
+  static const Color routeFinish = accent;
+
+  // ─── Loading ────────────────────────────────────────────────────────────────
+
+  /// Skeleton block fill (kit `skeleton`: textPrimary 9%).
+  static const Color skeleton = Color(0x17F3E7D6);
+
+  /// Shimmer sweep highlight (kit `.sk::after`: white 7%).
+  static const Color shimmerHighlight = Color(0x12FFFFFF);
+
+  // ─── Moonlit desert artwork ─────────────────────────────────────────────────
+
+  /// Header sky gradient: [skyTop] → [skyMid] (55%) → [background].
+  static const Color skyTop = Color(0xFF0E1430);
+  static const Color skyMid = Color(0xFF1D2546);
+
+  /// Splash sky: [splashTop] → [skyMid] → [mesa] → [background].
+  static const Color splashTop = Color(0xFF0B1028);
+
+  /// Moon disc and its crater shading.
+  static const Color moon = Color(0xFFEEE1CB);
+  static const Color moonCrater = Color(0xFFD8C9B2);
+
+  /// Moon glow and stars ([textPrimary] at low opacity).
+  static const Color moonGlow = Color(0x12F3E7D6); // 7%
+  static const Color star = Color(0xB3F3E7D6); // 70%
+
+  /// Landscape layers, back to front.
+  static const Color mesa = Color(0xFF3E3B66);
+  static const Color hills = Color(0xFF5C3E36);
+  static const Color dunes = Color(0xFF2C3347);
+  static const Color sandDune = Color(0xFF232A3B);
+
+  /// Permission illustration: phone body and its map grid.
+  static const Color phone = Color(0xFF222A3D);
+  static const Color phoneGrid = Color(0xFF303A52);
+}

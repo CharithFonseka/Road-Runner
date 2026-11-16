@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_palette.dart';
 import '../app_strings.dart';
 import '../permissions/permission_gateway.dart';
 
@@ -85,9 +86,22 @@ enum PermissionChipStatus {
     }
   }
 
-  /// Text and icon colour. Contrast on [background] over
-  /// [AppColors.sandLight] is checked in the Settings tests (4.5:1+).
-  Color get foreground {
+  /// Text and icon colour for the active palette.
+  Color foregroundFor(AppPalette palette) {
+    if (palette.isDark) {
+      switch (this) {
+        case allowed:
+        case on:
+          return palette.statLive;
+        case notAllowed:
+        case blocked:
+        case off:
+          return palette.error;
+        case checking:
+        case unavailable:
+          return palette.textSecondary;
+      }
+    }
     switch (this) {
       case allowed:
       case on:
@@ -104,7 +118,21 @@ enum PermissionChipStatus {
   }
 
   /// Fill drawn over the card colour.
-  Color get background {
+  Color backgroundFor(AppPalette palette) {
+    if (palette.isDark) {
+      switch (this) {
+        case allowed:
+        case on:
+          return palette.statLiveTint;
+        case notAllowed:
+        case blocked:
+        case off:
+          return palette.errorTint;
+        case checking:
+        case unavailable:
+          return palette.hairline;
+      }
+    }
     switch (this) {
       case allowed:
       case on:
@@ -119,6 +147,10 @@ enum PermissionChipStatus {
         return AppColors.divider;
     }
   }
+
+  /// Light-mode colours retained for existing callers.
+  Color get foreground => foregroundFor(AppPalette.light);
+  Color get background => backgroundFor(AppPalette.light);
 }
 
 class PermissionStatusChip extends StatelessWidget {
@@ -155,6 +187,7 @@ class PermissionStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return Semantics(
       label: status.label,
       excludeSemantics: true,
@@ -165,18 +198,18 @@ class PermissionStatusChip extends StatelessWidget {
           vertical: 4,
         ),
         decoration: ShapeDecoration(
-          color: status.background,
+          color: status.backgroundFor(palette),
           shape: const StadiumBorder(),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(status.icon, size: iconSize, color: status.foreground),
+            Icon(status.icon, size: iconSize, color: status.foregroundFor(palette)),
             const SizedBox(width: gap),
             Flexible(
               child: Text(
                 status.label,
-                style: textStyle.copyWith(color: status.foreground),
+                style: textStyle.copyWith(color: status.foregroundFor(palette)),
               ),
             ),
           ],

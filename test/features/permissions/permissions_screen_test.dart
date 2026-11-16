@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_spacing.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/features/app_strings.dart';
@@ -27,6 +28,7 @@ Future<_Calls> _pump(
   Size size = const Size(360, 800),
   double textScale = 1.0,
   bool withBack = false,
+  bool dark = false,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
@@ -35,7 +37,7 @@ Future<_Calls> _pump(
   final _Calls calls = _Calls();
   await tester.pumpWidget(
     MaterialApp(
-      theme: AppTheme.light(),
+      theme: dark ? AppTheme.dark() : AppTheme.light(),
       home: MediaQuery.withClampedTextScaling(
         minScaleFactor: textScale,
         maxScaleFactor: textScale,
@@ -385,6 +387,82 @@ void main() {
       await _pump(tester, gateway);
       await _tapPrimary(tester);
       expect(find.text(AppStrings.settingsOpenFailed), findsOneWidget);
+    });
+  });
+
+  group('Dark theme', () {
+    testWidgets(
+      'denied notifications retain lock-screen guidance and run access',
+      (tester) async {
+        final FakePermissionGateway gateway = FakePermissionGateway(
+          location: PermissionAccess.granted,
+        )..notificationAnswer = PermissionAccess.denied;
+        final _Calls calls = await _pump(tester, gateway, dark: true);
+        final AppPalette palette = AppPalette.dark;
+
+        expect(
+          tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+          palette.background,
+        );
+        expect(
+          tester
+              .widget<Text>(find.byKey(PermissionsScreen.headingKey))
+              .style!
+              .color,
+          palette.textPrimary,
+        );
+        expect(
+          Theme.of(tester.element(_primary)).cardTheme.color,
+          palette.surface,
+        );
+
+        await _tapPrimary(tester);
+        expect(find.text(AppStrings.notificationDeniedMessage), findsOneWidget);
+        expect(
+          find.byKey(PermissionsScreen.continueWithoutNotificationsButtonKey),
+          findsOneWidget,
+        );
+        expect(gateway.notificationRequests, 1);
+        await tester.tap(
+          find.byKey(PermissionsScreen.continueWithoutNotificationsButtonKey),
+        );
+        expect(calls.continued, 1);
+      },
+    );
+
+    testWidgets(
+      'blocked location uses night styling and still opens Settings',
+      (tester) async {
+        final FakePermissionGateway gateway = FakePermissionGateway(
+          location: PermissionAccess.permanentlyDenied,
+        );
+        await _pump(tester, gateway, dark: true);
+
+        expect(find.text(AppStrings.locationBlockedBody), findsOneWidget);
+        expect(find.byKey(PermissionsScreen.stepKey(1)), findsOneWidget);
+        _expectPrimary(AppStrings.openAppSettings);
+        await _tapPrimary(tester);
+        expect(gateway.settingsCalls, 1);
+      },
+    );
+
+    testWidgets('dark layout fits narrow and large-text screens', (
+      tester,
+    ) async {
+      for (final (Size size, double scale) in [
+        (const Size(320, 568), 1.0),
+        (const Size(360, 800), 1.3),
+      ]) {
+        await _pump(
+          tester,
+          FakePermissionGateway(location: PermissionAccess.permanentlyDenied),
+          size: size,
+          textScale: scale,
+          dark: true,
+        );
+        expect(tester.takeException(), isNull);
+        expect(_primary.hitTestable(), findsOneWidget);
+      }
     });
   });
 

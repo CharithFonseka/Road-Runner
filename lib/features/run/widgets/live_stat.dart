@@ -70,15 +70,13 @@ TextSpan _statSpan(
   TextStyle style,
   String? unit, {
   bool unitOnNewLine = false,
+  TextStyle unitStyle = liveUnitStyle,
 }) {
   return TextSpan(
     children: [
       TextSpan(text: value, style: style),
       if (unit != null)
-        TextSpan(
-          text: unitOnNewLine ? '\n$unit' : ' $unit',
-          style: liveUnitStyle,
-        ),
+        TextSpan(text: unitOnNewLine ? '\n$unit' : ' $unit', style: unitStyle),
     ],
   );
 }
@@ -149,7 +147,7 @@ class LiveStat extends StatelessWidget {
                 runSpacing: 4,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(label, style: AppTextStyles.caption),
+                  Text(label, style: AppTextStyles.of(context).caption),
                   ?labelTrailing,
                 ],
               ),
@@ -160,6 +158,8 @@ class LiveStat extends StatelessWidget {
                   valueStyle,
                   unit,
                   unitOnNewLine: unitOnNewLine,
+                  unitStyle: AppTextStyles.of(context).caption
+                      .copyWith(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 key: valueKey,
               ),

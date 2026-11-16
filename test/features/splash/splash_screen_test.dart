@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/features/app_strings.dart';
 import 'package:road_runner/features/splash/splash_screen.dart';
@@ -30,6 +31,7 @@ Future<void> _pump(
   Size size = const Size(360, 800),
   double textScale = 1.0,
   bool reduceMotion = false,
+  ThemeData? theme,
   NavigatorObserver? observer,
 }) async {
   tester.view.devicePixelRatio = 3.0;
@@ -41,7 +43,7 @@ Future<void> _pump(
 
   await tester.pumpWidget(
     MaterialApp(
-      theme: AppTheme.light(),
+      theme: theme ?? AppTheme.light(),
       navigatorObservers: [?observer],
       home: MediaQuery.withClampedTextScaling(
         minScaleFactor: textScale,
@@ -62,6 +64,43 @@ double _spinnerTurns(WidgetTester tester) => tester
     .value;
 
 void main() {
+  testWidgets('dark Splash uses the moonlit palette and artwork', (
+    tester,
+  ) async {
+    await _pump(tester, theme: AppTheme.dark());
+    final AppPalette palette = AppPalette.dark;
+
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+      palette.background,
+    );
+    final BoxDecoration sky = tester
+        .widget<DecoratedBox>(find.byType(DecoratedBox).first)
+        .decoration as BoxDecoration;
+    expect(sky.gradient, palette.splashGradient);
+    final Text name = tester.widget<Text>(find.text(AppStrings.appName));
+    expect(name.style!.color, palette.textPrimary);
+    final Icon runner = tester.widget<Icon>(
+      find.byIcon(Icons.directions_run_rounded),
+    );
+    expect(runner.color, palette.accent);
+    final CircularProgressIndicator spinner = _indicator(tester);
+    expect(spinner.color, palette.accent);
+    expect(spinner.backgroundColor, palette.hairline);
+
+    final CustomPaint stars = tester.widget<CustomPaint>(
+      find.byKey(SplashScreen.skyKey),
+    );
+    expect((stars.painter as SplashSkyPainter).palette, same(palette));
+    final CustomPaint landscape = tester.widget<CustomPaint>(
+      find.byKey(SplashScreen.landscapeKey),
+    );
+    expect(
+      (landscape.painter as SplashLandscapePainter).palette,
+      same(palette),
+    );
+  });
+
   group('Branding', () {
     testWidgets('shows the runner icon, the name and the landscape', (
       tester,
@@ -99,7 +138,11 @@ void main() {
     testWidgets('reduced motion keeps rotating at a slower speed', (
       tester,
     ) async {
-      await _pump(tester, reduceMotion: true);
+      await _pump(
+        tester,
+        reduceMotion: true,
+        theme: AppTheme.dark(),
+      );
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(_indicator(tester).value, 0.25);
       expect(tester.binding.hasScheduledFrame, isTrue);
@@ -238,6 +281,18 @@ void main() {
       await _pump(tester, size: const Size(320, 568), textScale: 1.3);
       final Rect brand = tester.getRect(find.byKey(SplashScreen.brandKey));
       expect(brand.top, greaterThanOrEqualTo(statusBar));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('dark theme fits a narrow screen with larger text', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        size: const Size(320, 568),
+        textScale: 1.3,
+        theme: AppTheme.dark(),
+      );
       expect(tester.takeException(), isNull);
     });
   });
