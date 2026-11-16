@@ -24,6 +24,8 @@ Optional inputs:
   values supplied by the integration/domain layer. All Runs never shows a
   month-specific summary.
 - `isLoading`, `hasError`, and `onRetry` provide loading and error states.
+  Loading skeletons use a 1.4-second horizontal shimmer, disabled under
+  reduced motion while static placeholders remain visible.
 - `onStartRun`, `onOpenHome`, and `onOpenSettings` enable the corresponding
   actions when the caller supports them. Home falls back to `onBackToHome`.
 
@@ -65,4 +67,6 @@ empty filtered month; it does not change run selection or filtering.
 `onRunSelected(runId)` remains responsible for loading the run and its points,
 then opening Summary. Loading/errors and retry behavior likewise belong to the
 integration layer; pass `isLoading` or `hasError` and the relevant callback
-when available.
+when available. Praveen should start reads immediately and only report a
+loading state if it remains pending for approximately 300 milliseconds; cancel
+that UI-only pending indicator on completion rather than delaying the read.

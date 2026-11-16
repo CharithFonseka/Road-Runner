@@ -34,7 +34,12 @@ HomeScreen(
 | New keys | `menuButtonKey`, `settingsButtonKey`, `recentRunsKey`; `RecentRunsCard.viewAllKey`, `retryKey`, `rowKey(i)`, state keys; `SlideToStart.handleKey`. |
 | `AppSpacing.heroButtonHeight` | 64 → 72 (Revision 5 slider height). Only Home used it. |
 
-Home never reads the repository or TrackingBridge. The shell loads runs and passes them in. Show `RecentRunsStatus.loading` only while a read is really in progress; never add a delay.
+Home never reads the repository or TrackingBridge. The shell loads runs and passes them in. Its loading skeleton uses a 1.4-second horizontal shimmer, disabled when reduced motion is enabled; static placeholders remain visible. Show `RecentRunsStatus.loading` only while a read is really in progress; never add a delay.
+
+For quick reads, Praveen should start the operation immediately and report the
+loading state only if it remains pending for approximately 300 milliseconds.
+Cancel the UI-only pending indicator when the read completes; do not delay the
+read or its result to show a skeleton.
 
 ## Slide to Start
 

@@ -17,6 +17,7 @@ import '../app_strings.dart';
 import '../home/widgets/sky_header.dart' show HeaderIconButton;
 import '../run/live_run_formatter.dart';
 import '../shared/app_navigation_drawer.dart' show DrawerLandscapePainter;
+import '../shared/skeleton_shimmer.dart';
 import 'run_summary.dart';
 import 'widgets/route_painter.dart';
 
@@ -1203,19 +1204,19 @@ class _PartialSplitRow extends StatelessWidget {
 
 // ─── Loading ────────────────────────────────────────────────────────────────
 
-/// Static skeletons the size of the real cards. No shimmer, so nothing
-/// moves for users who asked for reduced motion. Read as "Loading run
-/// summary".
+/// Skeletons the size of the real cards. Read as "Loading run summary".
 class _LoadingBody extends StatelessWidget {
   const _LoadingBody({super.key});
 
   static Widget _block(double width, double height, {double radius = 8}) =>
-      Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: const Color(0x1A5B3A29), // canyonBrown 10%
-          borderRadius: BorderRadius.all(Radius.circular(radius)),
+      SkeletonShimmerBlock(
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: const Color(0x1A5B3A29), // canyonBrown 10%
+            borderRadius: BorderRadius.all(Radius.circular(radius)),
+          ),
         ),
       );
 
@@ -1226,74 +1227,82 @@ class _LoadingBody extends StatelessWidget {
       liveRegion: true,
       label: AppStrings.summaryLoading,
       excludeSemantics: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-              child: Row(
-                children: [
-                  for (int i = 0; i < 4; i++)
-                    Expanded(
-                      child: Column(
-                        children: [
-                          _block(48, 18),
-                          const SizedBox(height: 7),
-                          _block(36, 10),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.medium),
-              child: LayoutBuilder(
-                builder: (context, c) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      child: SkeletonShimmer(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 14,
+                  horizontal: 10,
+                ),
+                child: Row(
                   children: [
-                    _block(110, 18),
-                    const SizedBox(height: AppSpacing.itemGap),
-                    // Same size as the real map, so nothing jumps on load.
-                    _block(
-                      c.maxWidth,
-                      (c.maxWidth * _RouteCard._mapAspect).clamp(220.0, 360.0),
-                      radius: 14,
-                    ),
+                    for (int i = 0; i < 4; i++)
+                      Expanded(
+                        child: Column(
+                          children: [
+                            _block(48, 18),
+                            const SizedBox(height: 7),
+                            _block(36, 10),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.medium),
-              child: Column(
-                children: [
-                  for (int i = 0; i < 3; i++)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      child: Row(
-                        children: [
-                          _block(46, 14),
-                          const Spacer(),
-                          _block(40, 14),
-                        ],
+            const SizedBox(height: 10),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.medium),
+                child: LayoutBuilder(
+                  builder: (context, c) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _block(110, 18),
+                      const SizedBox(height: AppSpacing.itemGap),
+                      // Same size as the real map, so nothing jumps on load.
+                      _block(
+                        c.maxWidth,
+                        (c.maxWidth * _RouteCard._mapAspect).clamp(
+                          220.0,
+                          360.0,
+                        ),
+                        radius: 14,
                       ),
-                    ),
-                ],
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 10),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.medium),
+                child: Column(
+                  children: [
+                    for (int i = 0; i < 3; i++)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        child: Row(
+                          children: [
+                            _block(46, 14),
+                            const Spacer(),
+                            _block(40, 14),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -69,12 +69,16 @@ Future<_Calls> _pumpHome(
   bool withRetry = true,
   bool isStartingRun = false,
   bool startRunEnabled = true,
+  bool reduceMotion = false,
   Size size = const Size(360, 800),
   double textScale = 1.0,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
   addTearDown(tester.view.reset);
+  tester.platformDispatcher.accessibilityFeaturesTestValue =
+      FakeAccessibilityFeatures(disableAnimations: reduceMotion);
+  addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
 
   final _Calls c = _Calls();
   await tester.pumpWidget(
@@ -325,7 +329,9 @@ void main() {
   });
 
   group('Recent runs: other states', () {
-    testWidgets('loading shows skeletons announced as loading', (tester) async {
+    testWidgets('loading skeletons shimmer and are announced as loading', (
+      tester,
+    ) async {
       final SemanticsHandle handle = tester.ensureSemantics();
       await _pumpHome(tester, status: RecentRunsStatus.loading, runs: _runs);
       expect(find.byKey(RecentRunsCard.loadingKey), findsOneWidget);
@@ -335,10 +341,26 @@ void main() {
         tester.getSemantics(find.byKey(RecentRunsCard.loadingKey)),
         containsSemantics(label: AppStrings.recentRunsLoading),
       );
-      // Nothing animates: no shimmer.
-      await tester.pump(const Duration(seconds: 1));
-      expect(tester.binding.hasScheduledFrame, isFalse);
+      expect(find.byType(ShaderMask), findsWidgets);
+      expect(tester.binding.hasScheduledFrame, isTrue);
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(tester.binding.hasScheduledFrame, isTrue);
       handle.dispose();
+    });
+
+    testWidgets('reduced motion keeps loading skeletons visible and static', (
+      tester,
+    ) async {
+      await _pumpHome(
+        tester,
+        status: RecentRunsStatus.loading,
+        reduceMotion: true,
+      );
+      expect(find.byKey(RecentRunsCard.loadingKey), findsOneWidget);
+      expect(find.byType(ShaderMask), findsNothing);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byKey(RecentRunsCard.loadingKey), findsOneWidget);
+      expect(tester.binding.hasScheduledFrame, isFalse);
     });
 
     testWidgets('empty shows the empty message and no View all', (
@@ -397,7 +419,7 @@ void main() {
         status: RecentRunsStatus.loading,
       );
       await tester.drag(_handle, const Offset(230, 0));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 250));
       expect(c.start, 1);
     });
 

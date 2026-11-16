@@ -14,7 +14,7 @@ const SplashScreen()
   - It has no timer and no fixed delay.
   - It does not navigate and does not decide when start-up has finished.
   - It stays on screen until the parent replaces it.
-- **Reduced motion:** when Android's *Remove animations* setting is on (`MediaQuery.disableAnimations`), the indicator is drawn as a still arc instead of spinning.
+- **Motion:** the loading arc continuously rotates once per second. When the platform or Flutter accessibility settings request reduced motion (`MediaQuery.disableAnimations`), it continues at one revolution every 2.4 seconds.
 - **Screen readers:** the indicator is announced as "Loading Road Runner" and the name is a heading. The artwork is hidden from screen readers.
 - **Ancestors:** it needs a `MaterialApp` (or `Theme`, `MediaQuery` and `Directionality`) above it, like every other screen.
 
@@ -62,7 +62,17 @@ Notes:
 
 - **Create the future once,** for example in `initState` or a `late final` field, so rebuilds do not restart start-up.
 - **Fast start-ups:** if start-up finishes within a frame or two, the splash may barely appear. That is intended.
+- Do not hold completed start-up work open to make the splash visible for a minimum time.
 - **When there is nothing to load:** if the shell has no real work at start-up, skip `SplashScreen` and open Home directly.
+
+## Loading-state timing (Praveen, app shell)
+
+The splash and feature screens only render the loading state reported by their
+parent. For database or other fast reads, start the operation immediately and
+show a feature skeleton only if it is still pending after approximately
+300 milliseconds. Cancel that pending UI timer when the operation completes;
+never delay the operation or hold a completed result just to show a loader.
+The screen itself adds no startup or loading delay.
 
 ## Android 12+ native splash (not changed here)
 

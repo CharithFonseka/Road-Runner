@@ -11,7 +11,7 @@ SummaryScreen(
   onOpenHistory: () {},
   // Optional (Phase 2B.1):
   onBack: () {},              // header Back; null uses onBackToHome
-  isLoading: false,           // true shows static skeletons while loading
+  isLoading: false,           // true shows loading skeletons, static with reduced motion
   onDeleteRun: _deleteAndRefreshRun, // absent hides Delete Run
 )
 ```
@@ -51,7 +51,9 @@ route.
   - the split flagged `isFastest` gets a tinted row and a FASTEST label;
   - an optional final partial row such as "0.02 km partial 0:08", which is never highlighted.
   - With no splits: "Run under 1 km" when the distance is known to be under 1 km; otherwise "No splits to show".
-- **Loading:** static skeletons the size of the cards, with no shimmer. The header and buttons stay usable.
+- **Loading:** skeletons the size of the cards, with a 1.4-second horizontal
+  shimmer disabled under reduced motion. Static placeholders remain visible,
+  and the header and buttons stay usable.
 
 ## Where each field comes from (as integrated in `main.dart`)
 
@@ -85,6 +87,10 @@ partialSplit: partial == null
 Two more optional steps:
 - `isLoading: true` can be used if the Summary route is pushed before the repository read completes. Today it is pushed after the read, so this isn't needed.
 - `onBack` can be passed for a different Back target. Without it, Back behaves like Back to Home, matching the current flow.
+- Only set `isLoading` for a pending read; the integrator should avoid showing
+  a skeleton for operations that finish in approximately 300 milliseconds.
+  Start the read immediately and never delay its result to keep a skeleton
+  visible.
 
 ## Route drawing
 
