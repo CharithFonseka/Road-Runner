@@ -70,8 +70,14 @@ Two more optional steps:
 
 ## Route drawing
 
+Revision 5 "Your route" card: parchment map (kit ratio 328 × 232, 220–360 dp tall), scale grid, route on a white underlay, scale pill, then a legend (Start, Finish, "Grid shows scale only"; Slower pace, Steady, Faster).
+
 - Only the points it is given are drawn. Nothing is added, smoothed or snapped to roads.
-- **Projection:** longitude is scaled by cos(mean latitude), then one uniform scale fits the route in the box, centred, with north up.
-- **Too short:** fewer than two distinct points shows "Route too short to map".
-- **Speed colour:** each segment uses the speed at its end point (or its start point if the end has none), on this run's own slowest-to-fastest range, from orange (slower) to teal (faster). Segments with no speed are drawn muted brown. If there is no speed at all, the route is plain brown and a note says so.
+- **Projection:** equirectangular around the mean latitude (east = Δlon · cos(mean lat), north = Δlat), converted to metres with a mean Earth radius of 6 371 008.8 m. One uniform scale fits the route, centred, north up, so the aspect ratio is true. Error versus WGS84 is under about 0.6%, which is fine for run-sized areas. Routes shorter than a few metres are never zoomed past 0.25 m per pixel.
+- **Scale bar and grid:** `RouteLayout.metresPerPixel` comes from the same fit the painter uses. The bar is the largest "nice" length (1, 2, 2.5, 5 × 10ⁿ m) that is at most 110 px long, drawn at its exact pixel length and labelled with that value ("250 m", "1 km"). Grid squares are the same size, aligned to the start point. Nothing is hardcoded to 500 m.
+- **Pace bands:** each segment uses the speed at its end point (or at its start point if the end has none). Bands are terciles of this run's own recorded point speeds: the slowest third is Slower pace (blue `#5182D5`), the fastest third is Faster (dark red `#87211C`), and the rest is Steady (orange `#D9581A`). Steady is slightly deeper than the kit's `#EB6621` so every band is at least 3:1 on the parchment. A constant-speed run is all Steady. Segments without speed are muted brown. If there is no speed at all, the route is plain brown and a note replaces the band legend. The bands are relative to the run, not absolute paces.
+- **GPS gaps:** a segment longer than both 100 m and 8 × the run's median segment (it needs at least 3 moving segments) is treated as lost signal. It is drawn as a thin, dashed, uncoloured line, and a "GPS gap" legend entry appears. This is a drawing heuristic only. It does not change distance or stats.
+- **Markers:** Start is a blue circle with a white ring and centre. Finish is an orange rounded square, drawn on top. The legend uses the same shapes and colours.
+- **Too short:** empty, single-point or all-identical routes show "Route too short to map".
+- **Split colour dots** are not shown. `SplitSummary` has no link to route points, so they cannot be matched without inventing data.
 - Routes that cross the ±180° meridian are not handled.

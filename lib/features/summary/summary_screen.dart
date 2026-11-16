@@ -16,7 +16,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
-import '../home/widgets/icon_tile.dart';
 import '../home/widgets/sky_header.dart' show HeaderIconButton;
 import '../run/live_run_formatter.dart';
 import '../shared/app_navigation_drawer.dart' show DrawerLandscapePainter;
@@ -466,48 +465,24 @@ class _StatLine extends StatelessWidget {
   }
 }
 
-// ─── Route (unchanged until Phase 2B.2) ─────────────────────────────────────
+// ─── Route ──────────────────────────────────────────────────────────────────
 
-class _CardHeader extends StatelessWidget {
-  const _CardHeader({required this.icon, required this.title, this.subtitle});
-
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final String? sub = subtitle;
-    return Row(
-      children: [
-        IconTile(icon: icon),
-        const SizedBox(width: AppSpacing.itemGap),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Semantics(
-                header: true,
-                child: Text(title, style: AppTextStyles.sectionHeading),
-              ),
-              if (sub != null) Text(sub, style: AppTextStyles.caption),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
+/// UI kit "Your route" card: header, parchment map with scale grid, the
+/// route on a white underlay, a scale pill, then the legend.
 class _RouteCard extends StatelessWidget {
   const _RouteCard({required this.route});
 
   final List<RoutePoint> route;
 
+  /// Kit map is 328 × 232.
+  static const double _mapAspect = 232 / 328;
+
   @override
   Widget build(BuildContext context) {
     final bool drawable = RouteGeometry.canDraw(route);
     final bool speed = drawable && RouteGeometry.hasSpeed(route);
+    final bool gaps =
+        drawable && RouteGeometry.gapSegments(route).contains(true);
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -515,35 +490,42 @@ class _RouteCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _CardHeader(
-              icon: Icons.route_outlined,
-              title: AppStrings.routeTitle,
-              subtitle: AppStrings.routeSubtitle,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: AppSpacing.small,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    AppStrings.routeTitle,
+                    style: AppTextStyles.sectionHeading,
+                  ),
+                ),
+                const Text(
+                  AppStrings.routeSubtitle,
+                  style: AppTextStyles.caption,
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.itemGap),
             LayoutBuilder(
               builder: (context, c) {
-                // Large and close to square, so the route stays readable.
-                final double height = (c.maxWidth * 0.85).clamp(220.0, 360.0);
+                final double height = (c.maxWidth * _mapAspect).clamp(
+                  220.0,
+                  360.0,
+                );
                 return ClipRRect(
-                  borderRadius: const BorderRadius.all(
-                    Radius.circular(AppSpacing.radiusTile),
-                  ),
+                  borderRadius: const BorderRadius.all(Radius.circular(14)),
                   child: Container(
                     key: SummaryScreen.routeAreaKey,
                     height: height,
-                    color: AppColors.sand,
+                    color: RouteGeometry.mapColor,
                     child: drawable
-                        ? Semantics(
-                            image: true,
-                            label: speed
-                                ? '${AppStrings.routeSemantics} '
-                                      '${AppStrings.routeSemanticsSpeed}'
-                                : AppStrings.routeSemantics,
-                            child: CustomPaint(
-                              painter: RoutePainter(points: route),
-                              size: Size.infinite,
-                            ),
+                        ? _RouteMap(
+                            route: route,
+                            size: Size(c.maxWidth, height),
+                            speed: speed,
                           )
                         : const _RouteTooShort(),
                   ),
@@ -552,10 +534,100 @@ class _RouteCard extends StatelessWidget {
             ),
             if (drawable) ...[
               const SizedBox(height: AppSpacing.itemGap),
-              _RouteLegend(speed: speed),
+              _RouteLegend(speed: speed, gaps: gaps),
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The drawn route plus its scale pill. The pill's bar length comes from
+/// the same layout the painter uses, so it is true to the drawing.
+class _RouteMap extends StatelessWidget {
+  const _RouteMap({
+    required this.route,
+    required this.size,
+    required this.speed,
+  });
+
+  final List<RoutePoint> route;
+  final Size size;
+  final bool speed;
+
+  @override
+  Widget build(BuildContext context) {
+    final RouteScale? scale = RouteGeometry.layout(route, size)?.scaleBar();
+    final StringBuffer label = StringBuffer(AppStrings.routeSemantics);
+    if (speed) label.write(' ${AppStrings.routeSemanticsSpeed}');
+    if (scale != null) {
+      label.write(' ${AppStrings.routeSemanticsScale(scale.label)}');
+    }
+    return Semantics(
+      image: true,
+      label: label.toString(),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CustomPaint(
+            painter: RoutePainter(points: route),
+            size: Size.infinite,
+          ),
+          if (scale != null)
+            Positioned(
+              left: 10,
+              bottom: 10,
+              child: ExcludeSemantics(child: _ScalePill(scale: scale)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScalePill extends StatelessWidget {
+  const _ScalePill({required this.scale});
+
+  final RouteScale scale;
+
+  static const Key barKey = Key('summary.route.scaleBar');
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: const BoxDecoration(
+        color: Color(0xF0FBF3E6),
+        borderRadius: BorderRadius.all(Radius.circular(999)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Bar with end ticks, exactly scale.pixels long.
+          SizedBox(
+            key: barKey,
+            width: scale.pixels,
+            height: 8,
+            child: const DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(color: AppColors.canyonBrown, width: 2),
+                  right: BorderSide(color: AppColors.canyonBrown, width: 2),
+                  bottom: BorderSide(color: AppColors.canyonBrown, width: 2),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            scale.label,
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.canyonBrown,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -602,10 +674,13 @@ class _RouteTooShort extends StatelessWidget {
   }
 }
 
+/// Kit legend: Start / Finish / grid note, then the three pace bands. The
+/// swatch colours are the exact [RouteGeometry] band colours.
 class _RouteLegend extends StatelessWidget {
-  const _RouteLegend({required this.speed});
+  const _RouteLegend({required this.speed, required this.gaps});
 
   final bool speed;
+  final bool gaps;
 
   @override
   Widget build(BuildContext context) {
@@ -613,49 +688,69 @@ class _RouteLegend extends StatelessWidget {
       color: AppColors.canyonBrown,
     );
     return ExcludeSemantics(
-      child: Wrap(
-        spacing: AppSpacing.medium,
-        runSpacing: AppSpacing.small,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _LegendItem(
-            marker: const _Marker(color: AppColors.tealDeep, circle: true),
-            label: AppStrings.routeStart,
-            style: style,
-          ),
-          _LegendItem(
-            marker: const _Marker(
-              color: AppColors.burntOrangeDeep,
-              circle: false,
-            ),
-            label: AppStrings.routeFinish,
-            style: style,
-          ),
-          if (speed)
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(AppStrings.routeSlower, style: style),
-                Container(
-                  width: 56,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    borderRadius: BorderRadius.all(Radius.circular(4)),
-                    gradient: LinearGradient(
-                      colors: [
-                        RouteGeometry.slowColor,
-                        RouteGeometry.fastColor,
-                      ],
-                    ),
-                  ),
+          Wrap(
+            spacing: AppSpacing.medium,
+            runSpacing: AppSpacing.small,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _LegendItem(
+                marker: const _Marker(
+                  color: RouteGeometry.startColor,
+                  circle: true,
                 ),
-                Text(AppStrings.routeFaster, style: style),
-              ],
-            )
-          else
-            Text(AppStrings.routeNoSpeed, style: AppTextStyles.caption),
+                label: AppStrings.routeStart,
+                style: style,
+              ),
+              _LegendItem(
+                marker: const _Marker(
+                  color: RouteGeometry.finishColor,
+                  circle: false,
+                ),
+                label: AppStrings.routeFinish,
+                style: style,
+              ),
+              const Text(
+                AppStrings.routeGridNote,
+                style: AppTextStyles.caption,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.small),
+          Wrap(
+            spacing: AppSpacing.medium,
+            runSpacing: AppSpacing.small,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (speed)
+                for (final RouteBand band in RouteBand.values)
+                  _LegendItem(
+                    marker: _Swatch(color: RouteGeometry.bandColor(band)),
+                    label: switch (band) {
+                      RouteBand.slower => AppStrings.routeSlower,
+                      RouteBand.steady => AppStrings.routeSteady,
+                      RouteBand.faster => AppStrings.routeFaster,
+                    },
+                    style: style,
+                  )
+              else
+                const Text(
+                  AppStrings.routeNoSpeed,
+                  style: AppTextStyles.caption,
+                ),
+              if (gaps)
+                _LegendItem(
+                  marker: const _Swatch(
+                    color: RouteGeometry.noSpeedColor,
+                    dashed: true,
+                  ),
+                  label: AppStrings.routeGap,
+                  style: style,
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -686,6 +781,7 @@ class _LegendItem extends StatelessWidget {
   }
 }
 
+/// Start (circle with white centre) or finish (rounded square), as drawn.
 class _Marker extends StatelessWidget {
   const _Marker({required this.color, required this.circle});
 
@@ -695,14 +791,58 @@ class _Marker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 12,
-      height: 12,
+      width: 14,
+      height: 14,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: color,
         shape: circle ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: circle
             ? null
             : const BorderRadius.all(Radius.circular(2)),
+      ),
+      child: circle
+          ? Container(
+              width: 4,
+              height: 4,
+              decoration: const BoxDecoration(
+                color: AppColors.white,
+                shape: BoxShape.circle,
+              ),
+            )
+          : null,
+    );
+  }
+}
+
+/// 18 × 5 band swatch (kit), or a dashed one for GPS gaps.
+class _Swatch extends StatelessWidget {
+  const _Swatch({required this.color, this.dashed = false});
+
+  final Color color;
+  final bool dashed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (dashed) {
+      return SizedBox(
+        width: 18,
+        height: 5,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            for (int i = 0; i < 3; i++)
+              Container(width: 4, height: 2, color: color),
+          ],
+        ),
+      );
+    }
+    return Container(
+      width: 18,
+      height: 5,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: const BorderRadius.all(Radius.circular(3)),
       ),
     );
   }

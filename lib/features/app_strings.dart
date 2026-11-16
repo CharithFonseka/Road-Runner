@@ -294,20 +294,29 @@ class AppStrings {
   /// Spoken instead of a placeholder such as "--.- km/h".
   static const String statUnavailable = 'not available';
 
-  static const String routeTitle = 'Route';
-  static const String routeSubtitle = 'Your run path, north up';
+  static const String unitM = 'm';
+
+  static const String routeTitle = 'Your route';
+  static const String routeSubtitle = 'Top-down view';
   static const String routeTooShort = 'Route too short to map';
   static const String routeTooShortDetail =
       'Fewer than two distinct GPS points were recorded.';
   static const String routeStart = 'Start';
   static const String routeFinish = 'Finish';
-  static const String routeSlower = 'Slower';
+  static const String routeSlower = 'Slower pace';
+  static const String routeSteady = 'Steady';
   static const String routeFaster = 'Faster';
+  static const String routeGridNote = 'Grid shows scale only';
+  static String routeGridSquare(String distance) =>
+      'Grid squares are $distance';
+  static const String routeGap = 'GPS gap';
   static const String routeNoSpeed = 'Speed colours unavailable for this run';
   static const String routeSemantics =
       'Route map of your run, from the start circle to the finish square.';
   static const String routeSemanticsSpeed =
-      'Colours show speed, from orange for slower to teal for faster.';
+      'Colours show pace compared with the rest of this run: blue for the '
+      'slower third, orange for steady, dark red for the faster third.';
+  static String routeSemanticsScale(String distance) => 'Scale bar: $distance.';
 
   static const String splitsTitle = 'Splits';
   static String splitKm(int km) => '$km km';
