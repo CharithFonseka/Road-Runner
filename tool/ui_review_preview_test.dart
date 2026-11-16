@@ -16,8 +16,12 @@ import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/core/theme/app_text_styles.dart';
 import 'package:road_runner/data/planned_route.dart';
 import 'package:road_runner/data/planned_route_repository.dart';
+import 'package:road_runner/data/run_weather_client.dart';
+import 'package:road_runner/domain/achievements/achievements.dart';
+import 'package:road_runner/domain/achievements/goals_summary.dart';
 import 'package:road_runner/features/history/history_run.dart';
 import 'package:road_runner/features/home/home_screen.dart';
+import 'package:road_runner/features/profile/profile_screen.dart';
 import 'package:road_runner/features/route_planning/ors_directions_client.dart';
 import 'package:road_runner/features/route_planning/route_planning_screen.dart';
 import 'package:road_runner/features/run/active_run_screen.dart';
@@ -47,8 +51,8 @@ class _PreviewRoutes extends PlannedRouteRepository {
   Future<void> save(PlannedRoute route) async {}
 }
 
-ThemeData reviewTheme() {
-  final base = AppTheme.light();
+ThemeData reviewTheme({bool dark = false}) {
+  final base = dark ? AppTheme.dark() : AppTheme.light();
   final buttonText = WidgetStatePropertyAll<TextStyle>(
     AppTextStyles.button.copyWith(fontFamily: 'Roboto'),
   );
@@ -69,6 +73,51 @@ ThemeData reviewTheme() {
     ),
   );
 }
+
+final previewAchievements = AchievementsSnapshot(
+  weeklyDistanceKm: 8.5,
+  weeklyGoalKm: 15,
+  weeklyRuns: 2,
+  currentStreakDays: 3,
+  longestStreakDays: 5,
+  longestRunKm: 5.02,
+  earnedBadges: {
+    BadgeType.firstRun: const BadgeAward('morning', BadgeType.firstRun),
+    BadgeType.first5Km: const BadgeAward('morning', BadgeType.first5Km),
+  },
+);
+
+Widget previewHome() => HomeScreen(
+  recentRuns: [
+    HistoryRun(
+      runId: 'morning',
+      runName: 'Morning run',
+      startedAt: DateTime(2026, 11, 17, 7, 10),
+      distanceM: 5020,
+      movingMs: 1935000,
+      averagePaceSecPerKm: 385,
+    ),
+    HistoryRun(
+      runId: 'sunday',
+      runName: 'Sunday loop',
+      startedAt: DateTime(2026, 11, 15, 6, 55),
+      distanceM: 3480,
+      movingMs: 1265000,
+      averagePaceSecPerKm: 363,
+    ),
+  ],
+  weeklyDistanceKm: 8.5,
+  weeklyGoalKm: 15,
+  achievements: previewAchievements,
+  weather: const RunWeather(28, 8, 2),
+  onStartRun: () {},
+  onOpenHistory: () {},
+  onOpenPermissions: () {},
+  onOpenGoals: () {},
+  onOpenProfile: () {},
+  onToggleTheme: (_) {},
+  onPlanRoute: () {},
+);
 
 void phoneSize(WidgetTester tester) {
   tester.view.devicePixelRatio = 1;
@@ -113,39 +162,55 @@ void main() {
       RepaintBoundary(
         key: previewKey,
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: reviewTheme(),
-          home: HomeScreen(
-            recentRuns: [
-              HistoryRun(
-                runId: 'morning',
-                runName: 'Morning run',
-                startedAt: DateTime(2026, 11, 17, 7, 10),
-                distanceM: 5020,
-                movingMs: 1935000,
-                averagePaceSecPerKm: 385,
-              ),
-              HistoryRun(
-                runId: 'sunday',
-                runName: 'Sunday loop',
-                startedAt: DateTime(2026, 11, 15, 6, 55),
-                distanceM: 3480,
-                movingMs: 1265000,
-                averagePaceSecPerKm: 363,
-              ),
-            ],
-            weeklyDistanceKm: 8.5,
-            weeklyGoalKm: 15,
-            onStartRun: () {},
-            onOpenHistory: () {},
-            onOpenPermissions: () {},
-            onOpenGoals: () {},
-            onPlanRoute: () {},
-          ),
+          home: previewHome(),
         ),
       ),
     );
     await tester.pump(const Duration(milliseconds: 300));
     await savePreview(tester, 'home');
+  });
+
+  testWidgets('Home dark preview', (tester) async {
+    phoneSize(tester);
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: previewKey,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: reviewTheme(dark: true),
+          home: previewHome(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await savePreview(tester, 'home-dark');
+  });
+
+  testWidgets('Profile preview', (tester) async {
+    phoneSize(tester);
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: previewKey,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: reviewTheme(),
+          home: ProfileScreen(
+            snapshot: previewAchievements,
+            onHome: () {},
+            onRoutes: () {},
+            onRun: () {},
+            onHistory: () {},
+            onGoals: () {},
+            onSettings: () {},
+            onSignIn: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await savePreview(tester, 'profile');
   });
 
   testWidgets('Active Run preview', (tester) async {
@@ -156,6 +221,7 @@ void main() {
       RepaintBoundary(
         key: previewKey,
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: reviewTheme(),
           home: ActiveRunScreen(
             bridge: bridge,
@@ -179,6 +245,7 @@ void main() {
       RepaintBoundary(
         key: previewKey,
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: reviewTheme(),
           home: SummaryScreen(
             summary: RunSummary(
@@ -218,6 +285,7 @@ void main() {
       RepaintBoundary(
         key: previewKey,
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: reviewTheme(),
           home: RoutePlanningScreen(
             repository: _PreviewRoutes(),
@@ -240,6 +308,8 @@ void main() {
             ),
             initialCenter: const LatLng(6.9271, 79.8612),
             styleFuture: style.future,
+            weatherFetcher: (_) async => const RunWeather(28, 8, 2),
+            onStartRun: () {},
           ),
         ),
       ),

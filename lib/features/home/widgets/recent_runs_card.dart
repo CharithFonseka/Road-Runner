@@ -48,6 +48,7 @@ class RecentRunsCard extends StatelessWidget {
     required this.onViewAll,
     required this.onRowSelected,
     this.onRetry,
+    this.compact = false,
   });
 
   final RecentRunsStatus status;
@@ -60,6 +61,7 @@ class RecentRunsCard extends StatelessWidget {
 
   /// Shown as "Try again" in the error state; null hides the button.
   final VoidCallback? onRetry;
+  final bool compact;
 
   static const Key viewAllKey = Key('recentRuns.viewAll');
   static const Key listKey = Key('recentRuns.list');
@@ -177,6 +179,7 @@ class RecentRunsCard extends StatelessWidget {
           itemBuilder: (context, i) => _RunRow(
             key: rowKey(i),
             row: rows[i],
+            compact: compact,
             onTap: () => onRowSelected(rows[i]),
           ),
         );
@@ -187,9 +190,15 @@ class RecentRunsCard extends StatelessWidget {
 // ─── Run row ────────────────────────────────────────────────────────────────
 
 class _RunRow extends StatelessWidget {
-  const _RunRow({super.key, required this.row, required this.onTap});
+  const _RunRow({
+    super.key,
+    required this.row,
+    required this.compact,
+    required this.onTap,
+  });
 
   final RecentRunRow row;
+  final bool compact;
   final VoidCallback onTap;
 
   @override
@@ -243,6 +252,7 @@ class _RunRow extends StatelessWidget {
                   Text(row.dateLabel, style: AppTextStyles.of(context).caption),
                 const SizedBox(height: 6),
                 _Trio(
+                  compact: compact,
                   stats: [
                     (row.distance, AppStrings.statDistance),
                     (row.duration, AppStrings.statDuration),
@@ -261,12 +271,43 @@ class _RunRow extends StatelessWidget {
 /// Three left-aligned value/label pairs; stacked as "label  value" lines
 /// when a value would not fit (narrow phones, large text).
 class _Trio extends StatelessWidget {
-  const _Trio({required this.stats});
+  const _Trio({required this.stats, required this.compact});
 
   final List<(String, String)> stats;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      final valueStyle = AppTextStyles.of(context).statValue
+          .copyWith(fontSize: 16);
+      final labelStyle = AppTextStyles.of(context).caption
+          .copyWith(fontSize: 11);
+      return Row(
+        children: [
+          for (final (value, label) in stats)
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: valueStyle,
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: labelStyle,
+                  ),
+                ],
+              ),
+            ),
+        ],
+      );
+    }
     final TextScaler scaler = MediaQuery.textScalerOf(context);
     final TextStyle valueStyle = AppTextStyles.of(context).statValue
         .copyWith(fontSize: 18);

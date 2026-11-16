@@ -14,6 +14,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
 import '../home/widgets/icon_tile.dart';
 import '../home/widgets/sky_header.dart';
+import '../shared/app_bottom_navigation.dart';
 import '../shared/app_navigation_drawer.dart';
 import '../shared/skeleton_shimmer.dart';
 import '../run/live_run_formatter.dart';
@@ -57,6 +58,9 @@ class HistoryScreen extends StatefulWidget {
     this.onOpenHome,
     this.onOpenSettings,
     this.onOpenGoals,
+    this.onPlanRoute,
+    this.onOpenProfile,
+    this.onOpenRun,
   });
 
   /// Saved runs in any order; shown newest first.
@@ -91,6 +95,9 @@ class HistoryScreen extends StatefulWidget {
   final VoidCallback? onOpenHome;
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenGoals;
+  final VoidCallback? onPlanRoute;
+  final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenRun;
 
   static const Key backButtonKey = Key('history.back');
   static const Key menuButtonKey = Key('history.menu');
@@ -169,6 +176,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
         onOpenSettings: widget.onOpenSettings ?? _doNothing,
         onOpenGoals: widget.onOpenGoals,
       ),
+      bottomNavigationBar:
+          widget.onPlanRoute != null && widget.onOpenProfile != null
+          ? AppBottomNavigation(
+              selected: MainDestination.history,
+              onHome: widget.onOpenHome ?? widget.onBackToHome,
+              onRoutes: widget.onPlanRoute!,
+              onRun: widget.onOpenRun ?? widget.onStartRun ?? _doNothing,
+              onHistory: _doNothing,
+              onProfile: widget.onOpenProfile!,
+            )
+          : null,
       body: Column(
         children: [
           Builder(

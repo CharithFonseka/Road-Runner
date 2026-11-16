@@ -1,15 +1,20 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_vector_tiles/flutter_map_vector_tiles.dart' as vt;
 import 'package:latlong2/latlong.dart';
+import 'package:http/http.dart' as http;
 
 import '../../core/theme/app_palette.dart';
 import '../../data/planned_route.dart';
 import '../../data/planned_route_repository.dart';
+import '../../data/current_weather_client.dart';
+import '../../data/run_weather_client.dart';
 import '../app_strings.dart';
 import 'ors_directions_client.dart';
 
-/// Pick two map points, preview the walking route, then save it locally.
+/// Search an area, check current weather, pick map points and save or start.
 class RoutePlanningScreen extends StatefulWidget {
   const RoutePlanningScreen({
     super.key,
@@ -18,6 +23,8 @@ class RoutePlanningScreen extends StatefulWidget {
     required this.initialCenter,
     this.initialZoom = 13,
     this.styleFuture,
+    this.onStartRun,
+    this.weatherFetcher,
   });
 
   final PlannedRouteRepository repository;
@@ -25,10 +32,15 @@ class RoutePlanningScreen extends StatefulWidget {
   final LatLng initialCenter;
   final double initialZoom;
   final Future<vt.Style>? styleFuture;
+  final VoidCallback? onStartRun;
+  final Future<RunWeather?> Function(LatLng)? weatherFetcher;
 
   static const Key mapKey = Key('routePlanning.map');
   static const Key findKey = Key('routePlanning.find');
   static const Key saveKey = Key('routePlanning.save');
+  static const Key searchKey = Key('routePlanning.search');
+  static const Key nameKey = Key('routePlanning.name');
+  static const Key startRunKey = Key('routePlanning.startRun');
 
   @override
   State<RoutePlanningScreen> createState() => _RoutePlanningScreenState();
@@ -39,6 +51,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
   final TextEditingController _name = TextEditingController(
     text: 'Planned route',
   );
+  final TextEditingController _search = TextEditingController();
   late final Future<vt.Style> _style =
       widget.styleFuture ??
       vt.StyleReader(uri: 'https://tiles.openfreemap.org/styles/liberty')
@@ -49,11 +62,26 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
   List<PlannedRoutePoint>? _preview;
   bool _busy = false;
   bool _mapReady = false;
+  bool _searchBusy = false;
+  String? _areaName;
+  RunWeather? _weather;
+  int _weatherRequest = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialCenter.latitude != 0 ||
+        widget.initialCenter.longitude != 0) {
+      _areaName = 'Near your last run';
+      _loadWeather(widget.initialCenter);
+    }
+  }
 
   @override
   void dispose() {
     _controller.dispose();
     _name.dispose();
+    _search.dispose();
     _style.then((style) => style.dispose()).ignore();
     super.dispose();
   }
@@ -68,6 +96,65 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
       }
       _preview = null;
     });
+    if (_finish == null) {
+      _areaName = 'Selected start';
+      _loadWeather(point);
+    }
+  }
+
+  Future<void> _loadWeather(LatLng point) async {
+    final request = ++_weatherRequest;
+    final weather =
+        await (widget.weatherFetcher?.call(point) ??
+            const CurrentWeatherClient().fetch(
+              point.latitude,
+              point.longitude,
+            ));
+    if (mounted && request == _weatherRequest) {
+      setState(() => _weather = weather);
+    }
+  }
+
+  Future<void> _searchPlace() async {
+    final query = _search.text.trim();
+    if (query.length < 2 || _searchBusy) return;
+    setState(() => _searchBusy = true);
+    try {
+      final uri = Uri.https('geocoding-api.open-meteo.com', '/v1/search', {
+        'name': query,
+        'count': '1',
+        'language': 'en',
+      });
+      final response = await http.get(uri).timeout(const Duration(seconds: 6));
+      if (response.statusCode != 200) {
+        throw const FormatException('Search unavailable');
+      }
+      final result =
+          (jsonDecode(response.body) as Map<String, dynamic>)['results'];
+      if (result is! List || result.isEmpty) {
+        throw const FormatException('No places found');
+      }
+      final place = result.first as Map<String, dynamic>;
+      final center = LatLng(
+        (place['latitude'] as num).toDouble(),
+        (place['longitude'] as num).toDouble(),
+      );
+      if (!mounted) return;
+      setState(() => _areaName = place['name'] as String? ?? query);
+      if (_mapReady) _controller.move(center, 14);
+      _loadWeather(center);
+      FocusManager.instance.primaryFocus?.unfocus();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Place not found. Try a nearby city or town.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _searchBusy = false);
+    }
   }
 
   Future<void> _findRoute() async {
@@ -97,7 +184,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
     }
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool startAfter = false}) async {
     final points = _preview;
     if (points == null || _busy) return;
     setState(() => _busy = true);
@@ -111,7 +198,10 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
           points: points,
         ),
       );
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pop();
+        if (startAfter) widget.onStartRun?.call();
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -120,6 +210,16 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
       }
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _startRun() async {
+    if (_busy || widget.onStartRun == null) return;
+    if (_preview != null) {
+      await _save(startAfter: true);
+    } else {
+      Navigator.of(context).pop();
+      widget.onStartRun?.call();
     }
   }
 
@@ -235,6 +335,78 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                       ),
                     ),
                   ),
+                  Positioned(
+                    top: 8,
+                    left: 12,
+                    right: 12,
+                    child: SafeArea(
+                      bottom: false,
+                      child: Column(
+                        children: [
+                          Material(
+                            color: palette.surface,
+                            elevation: 3,
+                            borderRadius: BorderRadius.circular(14),
+                            child: TextField(
+                              key: RoutePlanningScreen.searchKey,
+                              controller: _search,
+                              textInputAction: TextInputAction.search,
+                              onSubmitted: (_) => _searchPlace(),
+                              decoration: InputDecoration(
+                                hintText: 'Search city or place',
+                                prefixIcon: const Icon(Icons.search_rounded),
+                                suffixIcon: IconButton(
+                                  tooltip: 'Find place',
+                                  onPressed: _searchBusy ? null : _searchPlace,
+                                  icon: _searchBusy
+                                      ? const SizedBox.square(
+                                          dimension: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.arrow_forward_rounded),
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (_weather != null) ...[
+                            const SizedBox(height: 8),
+                            Material(
+                              color: palette.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.wb_cloudy_outlined,
+                                      color: palette.accent,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        '${_areaName ?? 'Selected area'} · ${_weather!.temperatureC?.round() ?? '—'}°C · ${weatherDescription(_weather)}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -281,6 +453,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                     if (preview != null) ...[
                       const SizedBox(height: 8),
                       TextField(
+                        key: RoutePlanningScreen.nameKey,
                         controller: _name,
                         textInputAction: TextInputAction.done,
                         decoration: const InputDecoration(
@@ -325,7 +498,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                                         )
                                       : const Text(AppStrings.routeFind),
                                 )
-                              : FilledButton(
+                              : OutlinedButton(
                                   key: RoutePlanningScreen.saveKey,
                                   onPressed: _busy ? null : _save,
                                   child: _busy
@@ -340,6 +513,17 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                         ),
                       ],
                     ),
+                    if (widget.onStartRun != null) ...[
+                      const SizedBox(height: 8),
+                      FilledButton.icon(
+                        key: RoutePlanningScreen.startRunKey,
+                        onPressed: _busy ? null : _startRun,
+                        icon: const Icon(Icons.directions_run_rounded),
+                        label: Text(
+                          preview == null ? 'Start run' : 'Save & start run',
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

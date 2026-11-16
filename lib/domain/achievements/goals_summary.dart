@@ -84,11 +84,9 @@ int weeklyRunCount(List<Run> runs, {DateTime? now}) {
 /// Computes the longest consecutive-day streak across all saved runs.
 int longestDailyStreak(List<Run> runs) {
   if (runs.isEmpty) return 0;
-  final List<int> sortedDays = runs
-      .map((r) => dayNumber(resolveLocalStartDay(r)))
-      .toSet()
-      .toList()
-    ..sort();
+  final List<int> sortedDays =
+      runs.map((r) => dayNumber(resolveLocalStartDay(r))).toSet().toList()
+        ..sort();
 
   int best = 1;
   int current = 1;
@@ -113,6 +111,7 @@ class AchievementsSnapshot {
     required this.currentStreakDays,
     required this.longestStreakDays,
     required this.earnedBadges,
+    this.longestRunKm = 0,
   });
 
   final double weeklyDistanceKm;
@@ -121,6 +120,7 @@ class AchievementsSnapshot {
   final int currentStreakDays;
   final int longestStreakDays;
   final Map<BadgeType, BadgeAward> earnedBadges;
+  final double longestRunKm;
 
   double get progressFraction => weeklyGoalKm > 0
       ? (weeklyDistanceKm / weeklyGoalKm).clamp(0.0, 1.0)

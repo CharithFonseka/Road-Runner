@@ -46,6 +46,8 @@ Future<_Calls> _pump(
   Size size = const Size(360, 800),
   double textScale = 1.0,
   bool settle = true,
+  ThemeMode themeMode = ThemeMode.system,
+  ValueChanged<ThemeMode>? onThemeModeChanged,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
@@ -65,6 +67,8 @@ Future<_Calls> _pump(
           onOpenHome: () => c.home++,
           onOpenHistory: () => c.history++,
           onManagePermissions: () => c.manage++,
+          themeMode: themeMode,
+          onThemeModeChanged: onThemeModeChanged,
         ),
       ),
     ),
@@ -131,6 +135,26 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
+  testWidgets('appearance selector offers system, light and dark', (
+    tester,
+  ) async {
+    ThemeMode? chosen;
+    await _pump(
+      tester,
+      FakePermissionGateway(),
+      onThemeModeChanged: (mode) => chosen = mode,
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(SettingsScreen.appearanceKey),
+      300,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Auto'), findsOneWidget);
+    expect(find.text('Light'), findsOneWidget);
+    await tester.tap(find.text('Dark'));
+    expect(chosen, ThemeMode.dark);
+  });
+
   group('Theme', () {
     testWidgets('dark Settings uses night surfaces and permission colors', (
       tester,

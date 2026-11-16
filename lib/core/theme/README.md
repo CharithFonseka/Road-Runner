@@ -49,7 +49,7 @@ WCAG AA: 4.5:1 for normal text, 3:1 for large text (≥ 18sp regular or ≥ 14sp
 | Raw tokens | `app_colors.dart` | `AppColors` (day, unchanged) and `AppDarkColors` (night, from the kit) |
 | Semantic roles | `app_palette.dart` | `AppPalette` `ThemeExtension`: `AppPalette.light` / `AppPalette.dark` |
 | Text | `app_text_styles.dart` | `const` styles (unchanged), `textThemeFor(palette)`, `AppTextStyles.of(context)` |
-| Material themes | `app_theme.dart` | `AppTheme.light()`, `AppTheme.dark()`, `AppTheme.themeMode` (system) |
+| Material themes | `app_theme.dart`, `theme_preference.dart` | `AppTheme.light()`, `AppTheme.dark()`; system by default, manual choice saved on device |
 
 Both themes are built by one builder, so every component theme exists in both modes.
 `AppPalette` is registered on both themes and lerps, so a system light/dark change cross-fades.

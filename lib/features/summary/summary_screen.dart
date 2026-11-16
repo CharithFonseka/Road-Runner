@@ -144,6 +144,41 @@ class _SummaryScreenState extends State<SummaryScreen> {
             startedAt: widget.summary.startedAt,
             onBack: widget.onBack ?? widget.onBackToHome,
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.medium,
+              8,
+              AppSpacing.medium,
+              8,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    key: SummaryScreen.homeButtonKey,
+                    onPressed: widget.onBackToHome,
+                    child: const Text(
+                      AppStrings.backToHome,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.itemGap),
+                Expanded(
+                  child: OutlinedButton(
+                    key: SummaryScreen.historyButtonKey,
+                    onPressed: widget.onOpenHistory,
+                    child: const Text(
+                      AppStrings.viewHistory,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -203,19 +238,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
             _SplitsCard(summary: widget.summary, formatter: widget.formatter),
           ],
           const SizedBox(height: AppSpacing.large),
-          FilledButton.icon(
-            key: SummaryScreen.homeButtonKey,
-            onPressed: widget.onBackToHome,
-            icon: const Icon(Icons.home_outlined),
-            label: const Text(AppStrings.backToHome),
-          ),
-          const SizedBox(height: AppSpacing.itemGap),
-          OutlinedButton.icon(
-            key: SummaryScreen.historyButtonKey,
-            onPressed: widget.onOpenHistory,
-            icon: const Icon(Icons.bar_chart),
-            label: const Text(AppStrings.viewHistory),
-          ),
           if (widget.onDeleteRun != null) ...[
             const SizedBox(height: AppSpacing.itemGap),
             Align(
@@ -312,19 +334,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       ),
                     ],
                     const SizedBox(height: AppSpacing.large),
-                    FilledButton.icon(
-                      key: SummaryScreen.homeButtonKey,
-                      onPressed: widget.onBackToHome,
-                      icon: const Icon(Icons.home_outlined),
-                      label: const Text(AppStrings.backToHome),
-                    ),
-                    const SizedBox(height: AppSpacing.itemGap),
-                    OutlinedButton.icon(
-                      key: SummaryScreen.historyButtonKey,
-                      onPressed: widget.onOpenHistory,
-                      icon: const Icon(Icons.bar_chart),
-                      label: const Text(AppStrings.viewHistory),
-                    ),
                     if (widget.onDeleteRun != null) ...[
                       const SizedBox(height: AppSpacing.itemGap),
                       Align(

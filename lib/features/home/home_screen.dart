@@ -3,11 +3,9 @@
 // SRS reference: Section 8.4, FR-01 (trigger), FR-61, FR-71, NFR-09, NFR-14
 //
 // Layout, top to bottom:
-//   * compact sky header: menu button (opens the navigation drawer), name,
-//     tagline and a Settings shortcut, all 48dp targets;
-//   * "Recent runs" card filling the free space, with its own scrolling
-//     list and loading, empty and error states;
-//   * a fixed 72dp Slide to Start control above the system navigation bar.
+//   * compact sky header with menu, appearance and Settings shortcuts;
+//   * route/weather, weekly goal/streak, badge and two-run preview cards;
+//   * a fixed 72dp Slide to Start control and five-destination bottom bar.
 //
 // Home only displays data and reports actions. It never starts a run, reads
 // the repository or talks to TrackingBridge: the app shell supplies the runs
@@ -20,10 +18,14 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../data/current_weather_client.dart';
+import '../../data/run_weather_client.dart';
+import '../../domain/achievements/goals_summary.dart';
 import '../app_strings.dart';
 import '../history/history_run.dart';
 import '../history/history_screen.dart';
 import '../run/live_run_formatter.dart';
+import '../shared/app_bottom_navigation.dart';
 import '../shared/app_navigation_drawer.dart';
 import 'last_run_summary.dart';
 import 'widgets/recent_runs_card.dart';
@@ -47,6 +49,11 @@ class HomeScreen extends StatelessWidget {
     this.onOpenSettings,
     this.onPlanRoute,
     this.onOpenGoals,
+    this.onOpenProfile,
+    this.onOpenRun,
+    this.achievements,
+    this.weather,
+    this.onToggleTheme,
     this.weeklyDistanceKm,
     this.weeklyGoalKm,
     this.isStartingRun = false,
@@ -95,6 +102,11 @@ class HomeScreen extends StatelessWidget {
   /// Opens the walking route planner when available.
   final VoidCallback? onPlanRoute;
   final VoidCallback? onOpenGoals;
+  final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenRun;
+  final AchievementsSnapshot? achievements;
+  final RunWeather? weather;
+  final ValueChanged<bool>? onToggleTheme;
   final double? weeklyDistanceKm;
   final double? weeklyGoalKm;
 
@@ -116,8 +128,10 @@ class HomeScreen extends StatelessWidget {
   static const Key recentRunsKey = Key('home.recentRuns');
   static const Key planRouteButtonKey = Key('home.planRoute');
   static const Key goalsButtonKey = Key('home.goals');
-  static const Key latestRunKey = Key('home.latestRun');
   static const Key weeklyGoalKey = Key('home.weeklyGoal');
+  static const Key weatherKey = Key('home.weather');
+  static const Key badgesKey = Key('home.badges');
+  static const Key themeButtonKey = Key('home.theme');
 
   /// Below this height (phone in landscape) the desert strip is left out
   /// so the Recent runs card keeps usable space.
@@ -142,6 +156,31 @@ class HomeScreen extends StatelessWidget {
   }
 
   VoidCallback get _openSettings => onOpenSettings ?? onOpenPermissions;
+
+  Widget _headerActions(AppPalette palette) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (onToggleTheme != null) ...[
+        HeaderIconButton(
+          key: themeButtonKey,
+          icon: palette.isDark
+              ? Icons.light_mode_outlined
+              : Icons.dark_mode_outlined,
+          tooltip: palette.isDark
+              ? 'Switch to light mode'
+              : 'Switch to dark mode',
+          onPressed: () => onToggleTheme!(palette.isDark),
+        ),
+        const SizedBox(width: 4),
+      ],
+      HeaderIconButton(
+        key: settingsButtonKey,
+        icon: Icons.settings_outlined,
+        tooltip: AppStrings.homeSettings,
+        onPressed: _openSettings,
+      ),
+    ],
+  );
 
   List<RecentRunRow> _rows() {
     if (recentRuns.isNotEmpty) {
@@ -192,11 +231,21 @@ class HomeScreen extends StatelessWidget {
       backgroundColor: palette.background,
       drawer: AppNavigationDrawer(
         selected: AppDestination.home,
-        onOpenHome: () {}, // Home is the current page: the drawer only closes.
+        onOpenHome: () {},
         onOpenHistory: onOpenHistory,
         onOpenSettings: _openSettings,
         onOpenGoals: onOpenGoals,
       ),
+      bottomNavigationBar: onPlanRoute != null && onOpenProfile != null
+          ? AppBottomNavigation(
+              selected: MainDestination.home,
+              onHome: () {},
+              onRoutes: onPlanRoute!,
+              onRun: onOpenRun ?? onStartRun,
+              onHistory: onOpenHistory,
+              onProfile: onOpenProfile!,
+            )
+          : null,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final bool isLandscape =
@@ -249,24 +298,17 @@ class HomeScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Builder(
-          builder: (context) => CompactSkyHeader(
-            title: AppStrings.appName,
-            subtitle: AppStrings.homeTagline,
-            showLandscape: tall,
-            leading: HeaderIconButton(
-              key: menuButtonKey,
-              icon: Icons.menu_rounded,
-              tooltip: AppStrings.homeOpenMenu,
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
-            trailing: HeaderIconButton(
-              key: settingsButtonKey,
-              icon: Icons.settings_outlined,
-              tooltip: AppStrings.homeSettings,
-              onPressed: _openSettings,
-            ),
+        CompactSkyHeader(
+          title: AppStrings.appName,
+          subtitle: AppStrings.homeTagline,
+          showLandscape: tall,
+          leading: HeaderIconButton(
+            key: menuButtonKey,
+            icon: Icons.menu_rounded,
+            tooltip: AppStrings.homeOpenMenu,
+            onPressed: () => Scaffold.of(context).openDrawer(),
           ),
+          trailing: _headerActions(palette),
         ),
         Expanded(
           child: SingleChildScrollView(
@@ -279,12 +321,8 @@ class HomeScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (recentRunsStatus == RecentRunsStatus.ready &&
-                    rows.isNotEmpty) ...[
-                  _LatestRunCard(
-                    row: rows.first,
-                    onTap: () => _onRowSelected(rows.first),
-                  ),
+                if (onPlanRoute != null) ...[
+                  _RouteWeatherCard(weather: weather, onTap: onPlanRoute!),
                   const SizedBox(height: AppSpacing.itemGap),
                 ],
                 if (weeklyDistanceKm != null &&
@@ -295,37 +333,34 @@ class HomeScreen extends StatelessWidget {
                     distanceKm: weeklyDistanceKm!,
                     goalKm: weeklyGoalKm!,
                     onTap: onOpenGoals!,
+                    streakDays: achievements?.currentStreakDays,
                   ),
                   const SizedBox(height: AppSpacing.itemGap),
                 ],
-                if (onPlanRoute != null)
-                  OutlinedButton.icon(
-                    key: planRouteButtonKey,
-                    onPressed: onPlanRoute,
-                    icon: const Icon(Icons.route_outlined),
-                    label: const Text(AppStrings.planRoute),
+                if (onOpenProfile != null) ...[
+                  _BadgesPreviewCard(
+                    achievements: achievements,
+                    onTap: onOpenProfile!,
                   ),
-                if (onPlanRoute != null)
                   const SizedBox(height: AppSpacing.itemGap),
-                if (recentRunsStatus != RecentRunsStatus.ready ||
-                    rows.length != 1)
-                  SizedBox(
-                    height: recentRunsStatus == RecentRunsStatus.ready
-                        ? (rows.length > 2
-                              ? 352
-                              : (rows.length > 1 ? 205 : 190))
-                        : 190,
-                    child: RecentRunsCard(
-                      key: recentRunsKey,
-                      status: recentRunsStatus,
-                      rows: rows.length > 1
-                          ? rows.skip(1).take(2).toList()
-                          : rows,
-                      onViewAll: onOpenHistory,
-                      onRowSelected: _onRowSelected,
-                      onRetry: onRetry,
-                    ),
+                ],
+                SizedBox(
+                  height:
+                      recentRunsStatus == RecentRunsStatus.ready &&
+                          rows.length > 1
+                      ? 264
+                      : 190,
+                  child: RecentRunsCard(
+                    key: recentRunsKey,
+                    compact: true,
+                    status: recentRunsStatus,
+                    rows: rows.take(2).toList(),
+                    onViewAll: onOpenHistory,
+                    onRowSelected: _onRowSelected,
+                    onRetry: onRetry,
                   ),
+                ),
+                const SizedBox(height: AppSpacing.medium),
               ],
             ),
           ),
@@ -377,29 +412,22 @@ class HomeScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Builder(
-                  builder: (context) => ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      bottom: Radius.circular(16),
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(16),
+                  ),
+                  child: CompactSkyHeader(
+                    title: AppStrings.appName,
+                    subtitle: AppStrings.homeTagline,
+                    showLandscape: showArtwork,
+                    landscapeHeight: artworkHeight,
+                    leading: HeaderIconButton(
+                      key: menuButtonKey,
+                      icon: Icons.menu_rounded,
+                      tooltip: AppStrings.homeOpenMenu,
+                      onPressed: () => Scaffold.of(context).openDrawer(),
                     ),
-                    child: CompactSkyHeader(
-                      title: AppStrings.appName,
-                      subtitle: AppStrings.homeTagline,
-                      showLandscape: showArtwork,
-                      landscapeHeight: artworkHeight,
-                      leading: HeaderIconButton(
-                        key: menuButtonKey,
-                        icon: Icons.menu_rounded,
-                        tooltip: AppStrings.homeOpenMenu,
-                        onPressed: () => Scaffold.of(context).openDrawer(),
-                      ),
-                      trailing: HeaderIconButton(
-                        key: settingsButtonKey,
-                        icon: Icons.settings_outlined,
-                        tooltip: AppStrings.homeSettings,
-                        onPressed: _openSettings,
-                      ),
-                    ),
+                    trailing: _headerActions(palette),
                   ),
                 ),
                 const Spacer(),
@@ -467,88 +495,18 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-class _LatestRunCard extends StatelessWidget {
-  const _LatestRunCard({required this.row, required this.onTap});
-
-  final RecentRunRow row;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppPalette palette = context.palette;
-    return Semantics(
-      key: HomeScreen.latestRunKey,
-      button: true,
-      label: AppStrings.recentRunSemantics(
-        row.dateLabel,
-        row.distance,
-        row.duration,
-        row.pace,
-      ),
-      onTap: onTap,
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.medium),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.directions_run_rounded, color: palette.accent),
-                    const SizedBox(width: AppSpacing.small),
-                    Expanded(
-                      child: Text(
-                        AppStrings.lastRunTitle,
-                        style: AppTextStyles.of(context).sectionHeading,
-                      ),
-                    ),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      color: palette.textSecondary,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.small),
-                Text(
-                  row.distance,
-                  style: AppTextStyles.of(context).statValue
-                      .copyWith(fontSize: 32, color: palette.stat),
-                ),
-                Text(
-                  row.runName ?? row.dateLabel,
-                  style: AppTextStyles.of(context).body
-                      .copyWith(fontWeight: FontWeight.w700),
-                ),
-                if (row.runName != null)
-                  Text(row.dateLabel, style: AppTextStyles.of(context).caption),
-                const SizedBox(height: AppSpacing.small),
-                Text(
-                  '${AppStrings.statDuration}: ${row.duration}  •  '
-                  '${AppStrings.statAveragePace}: ${row.pace}',
-                  style: AppTextStyles.of(context).caption,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _WeeklyGoalCard extends StatelessWidget {
   const _WeeklyGoalCard({
     required this.distanceKm,
     required this.goalKm,
     required this.onTap,
+    this.streakDays,
   });
 
   final double distanceKm;
   final double goalKm;
   final VoidCallback onTap;
+  final int? streakDays;
 
   @override
   Widget build(BuildContext context) {
@@ -601,8 +559,153 @@ class _WeeklyGoalCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (streakDays != null) ...[
+                  const SizedBox(height: AppSpacing.small),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.local_fire_department_rounded,
+                        size: 17,
+                        color: palette.accent,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '$streakDays day streak  ·  View goals',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.of(context).caption,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteWeatherCard extends StatelessWidget {
+  const _RouteWeatherCard({required this.weather, required this.onTap});
+
+  final RunWeather? weather;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final temperature = weather?.temperatureC;
+    return Card(
+      key: HomeScreen.weatherKey,
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: HomeScreen.planRouteButtonKey,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.medium),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: palette.iconTile,
+                foregroundColor: palette.accent,
+                child: const Icon(Icons.route_rounded),
+              ),
+              const SizedBox(width: AppSpacing.itemGap),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Plan your next route',
+                      style: AppTextStyles.of(context).sectionHeading,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      temperature == null
+                          ? 'Choose a route and check conditions'
+                          : '${temperature.round()}°C · ${weatherDescription(weather)} · near your last run',
+                      style: AppTextStyles.of(context).caption,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: palette.textSecondary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BadgesPreviewCard extends StatelessWidget {
+  const _BadgesPreviewCard({required this.achievements, required this.onTap});
+
+  final AchievementsSnapshot? achievements;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final earned = achievements?.earnedBadges.keys.toSet() ?? {};
+    return Card(
+      key: HomeScreen.badgesKey,
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.medium),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.workspace_premium_outlined, color: palette.accent),
+                  const SizedBox(width: AppSpacing.small),
+                  Expanded(
+                    child: Text(
+                      'Your badges',
+                      style: AppTextStyles.of(context).sectionHeading,
+                    ),
+                  ),
+                  Text(
+                    '${earned.length}/${kAllBadges.length}',
+                    style: AppTextStyles.of(context).caption,
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: palette.textSecondary,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.small),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final badge in kAllBadges.take(2))
+                    Chip(
+                      avatar: Icon(
+                        earned.contains(badge.type)
+                            ? Icons.stars_rounded
+                            : Icons.lock_outline_rounded,
+                        size: 18,
+                      ),
+                      label: Text(badge.title),
+                      visualDensity: VisualDensity.compact,
+                      backgroundColor: earned.contains(badge.type)
+                          ? palette.iconTile
+                          : palette.surface,
+                    ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

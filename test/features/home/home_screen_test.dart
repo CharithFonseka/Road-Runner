@@ -356,37 +356,12 @@ void main() {
     testWidgets('rows are newest first with formatted values', (tester) async {
       await _pumpHome(tester, runs: _runs);
       expect(find.text(AppStrings.recentRunsTitle), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.byKey(HomeScreen.latestRunKey),
-          matching: find.text('14 Nov 2026'),
-        ),
-        findsOneWidget,
-      );
-      expect(_inRow(0, '11 Nov 2026'), findsOneWidget);
-      expect(_inRow(1, '08 Nov 2026'), findsOneWidget);
+      expect(_inRow(0, '14 Nov 2026'), findsOneWidget);
+      expect(_inRow(1, '11 Nov 2026'), findsOneWidget);
       expect(_inRow(2, '08 Nov 2026'), findsNothing);
-      expect(
-        find.descendant(
-          of: find.byKey(HomeScreen.latestRunKey),
-          matching: find.text('5.02 km'),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: find.byKey(HomeScreen.latestRunKey),
-          matching: find.textContaining('32:15'),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: find.byKey(HomeScreen.latestRunKey),
-          matching: find.textContaining('6:25/km'),
-        ),
-        findsOneWidget,
-      );
+      expect(_inRow(0, '5.02 km'), findsOneWidget);
+      expect(_inRow(0, '32:15'), findsOneWidget);
+      expect(_inRow(0, '6:25/km'), findsOneWidget);
       expect(_inRow(0, AppStrings.statPace), findsOneWidget);
       expect(find.byKey(RecentRunsCard.viewAllKey), findsOneWidget);
     });
@@ -395,7 +370,7 @@ void main() {
       final _Calls c = await _pumpHome(tester, runs: _runs);
       await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
       await tester.pump();
-      expect(c.selected, ['middle']);
+      expect(c.selected, ['newest']);
       expect((c.history, c.start), (0, 0));
     });
 
@@ -426,10 +401,10 @@ void main() {
         tester.getSemantics(find.byKey(RecentRunsCard.rowKey(0))),
         containsSemantics(
           label: AppStrings.recentRunSemantics(
-            '11 Nov 2026',
-            '3.48 km',
-            '21:05',
-            '6:03/km',
+            '14 Nov 2026',
+            '5.02 km',
+            '32:15',
+            '6:25/km',
           ),
           isButton: true,
           hasTapAction: true,
@@ -447,15 +422,15 @@ void main() {
       );
       expect(
         find.descendant(
-          of: find.byKey(HomeScreen.latestRunKey),
+          of: find.byKey(RecentRunsCard.rowKey(0)),
           matching: find.text('-.-- km'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: find.byKey(HomeScreen.latestRunKey),
-          matching: find.textContaining('--:--'),
+          of: find.byKey(RecentRunsCard.rowKey(0)),
+          matching: find.text('--:--'),
         ),
         findsOneWidget,
       );
@@ -473,19 +448,19 @@ void main() {
       );
       expect(
         find.descendant(
-          of: find.byKey(HomeScreen.latestRunKey),
+          of: find.byKey(RecentRunsCard.rowKey(0)),
           matching: find.text('Test date'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: find.byKey(HomeScreen.latestRunKey),
+          of: find.byKey(RecentRunsCard.rowKey(0)),
           matching: find.textContaining('7:65/km'),
         ),
         findsOneWidget,
       );
-      await tester.tap(find.byKey(HomeScreen.latestRunKey));
+      await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
       await tester.pump();
       expect(c.history, 1);
       expect(c.selected, isEmpty);
@@ -611,30 +586,18 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('stays fixed while the Recent runs list scrolls', (
+    testWidgets('stays fixed while two recent runs remain accessible', (
       tester,
     ) async {
       await _pumpHome(tester, runs: _manyRuns(30));
       final Rect sliderBefore = tester.getRect(_slider);
       final Rect headerBefore = tester.getRect(find.text(AppStrings.appName));
-      final Rect firstRow = tester.getRect(
-        find.byKey(RecentRunsCard.rowKey(0)),
-      );
-
-      await tester.drag(
-        find.byKey(RecentRunsCard.listKey),
-        const Offset(0, -400),
-      );
-      await tester.pumpAndSettle();
+      expect(find.byKey(RecentRunsCard.rowKey(0)), findsOneWidget);
+      expect(find.byKey(RecentRunsCard.rowKey(1)), findsOneWidget);
+      expect(find.byKey(RecentRunsCard.rowKey(2)), findsNothing);
 
       expect(tester.getRect(_slider), sliderBefore);
       expect(tester.getRect(find.text(AppStrings.appName)), headerBefore);
-      // The list itself moved.
-      final Finder row0 = find.byKey(RecentRunsCard.rowKey(0));
-      expect(
-        row0.evaluate().isEmpty || tester.getRect(row0).top < firstRow.top,
-        isTrue,
-      );
       // The list stays inside the card, above the slider.
       final Rect card = tester.getRect(find.byKey(HomeScreen.recentRunsKey));
       expect(card.bottom, lessThanOrEqualTo(sliderBefore.top));
@@ -701,7 +664,7 @@ void main() {
     ) async {
       await _pumpHome(tester, runs: _runs, size: const Size(412, 915));
       final Rect card = tester.getRect(find.byKey(HomeScreen.recentRunsKey));
-      expect(card.height, 352);
+      expect(card.height, 264);
     });
 
     testWidgets('respects the status bar and Android navigation bar', (

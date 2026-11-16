@@ -39,7 +39,9 @@ Actions:
 - "Stored on this phone";
 - Version, only when `appVersion` is a non-blank string.
 
-There are no preference switches, accounts or sync.
+Appearance offers Auto, Light and Dark. The app shell saves this choice in its
+application support directory. Google account sign-in and sync appear when the
+Firebase account gateway is available.
 
 ## Permission behaviour
 

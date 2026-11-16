@@ -9,6 +9,7 @@ import 'package:road_runner/bridge/tracking_bridge.dart';
 import 'package:road_runner/core/contract/contract.dart';
 import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
+import 'package:road_runner/core/theme/theme_preference.dart';
 import 'package:road_runner/data/run.dart';
 import 'package:road_runner/data/run_repository.dart';
 import 'package:road_runner/domain/stats/stats.dart';
@@ -19,13 +20,25 @@ import 'package:road_runner/features/home/widgets/recent_runs_card.dart';
 import 'package:road_runner/features/home/widgets/slide_to_start.dart';
 import 'package:road_runner/features/permissions/permission_gateway.dart';
 import 'package:road_runner/features/permissions/permissions_screen.dart';
+import 'package:road_runner/features/profile/profile_screen.dart';
 import 'package:road_runner/features/run/active_run_screen.dart';
 import 'package:road_runner/features/run/widgets/stop_run_dialog.dart';
 import 'package:road_runner/features/settings/settings_screen.dart';
 import 'package:road_runner/features/shared/app_navigation_drawer.dart';
+import 'package:road_runner/features/shared/app_bottom_navigation.dart';
 import 'package:road_runner/features/splash/splash_screen.dart';
 import 'package:road_runner/features/summary/summary_screen.dart';
 import 'package:road_runner/main.dart';
+
+class _MemoryThemePreference extends ThemePreference {
+  ThemeMode stored = ThemeMode.system;
+
+  @override
+  Future<ThemeMode> load() async => stored;
+
+  @override
+  Future<void> save(ThemeMode mode) async => stored = mode;
+}
 
 class _StubTrackingBridge implements TrackingBridge {
   final StreamController<TrackingEvent> _controller =
@@ -242,6 +255,72 @@ Future<void> _slideToStart(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('bottom bar opens profile and a deliberate Run start sheet', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final bridge = _StubTrackingBridge();
+    addTearDown(bridge.dispose);
+    await tester.pumpWidget(
+      RoadRunnerApp(
+        bridge: bridge,
+        repository: _StubRunRepository(),
+        permissionGateway: _StubPermissionGateway(),
+        themePreference: _MemoryThemePreference(),
+        checkStartupState: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(AppBottomNavigation.destinationKey(MainDestination.profile)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileScreen), findsOneWidget);
+    await tester.tap(
+      find.byKey(AppBottomNavigation.destinationKey(MainDestination.home)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(AppBottomNavigation.destinationKey(MainDestination.run)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Ready to run?'), findsOneWidget);
+    expect(find.byType(ActiveRunScreen), findsNothing);
+  });
+
+  testWidgets('home appearance button switches and saves both themes', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final preference = _MemoryThemePreference();
+    final bridge = _StubTrackingBridge();
+    addTearDown(bridge.dispose);
+    await tester.pumpWidget(
+      RoadRunnerApp(
+        bridge: bridge,
+        repository: _StubRunRepository(),
+        permissionGateway: _StubPermissionGateway(),
+        themePreference: preference,
+        checkStartupState: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(HomeScreen.themeButtonKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
+    expect(preference.stored, ThemeMode.dark);
+    await tester.tap(find.byKey(HomeScreen.themeButtonKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.light,
+    );
+    expect(preference.stored, ThemeMode.light);
+  });
+
   testWidgets('RoadRunnerApp shows SplashScreen until startup completes', (
     WidgetTester tester,
   ) async {
@@ -336,12 +415,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(HomeScreen.latestRunKey), findsOneWidget);
+      expect(find.byKey(RecentRunsCard.rowKey(0)), findsOneWidget);
       expect(find.byKey(RecentRunsCard.rowKey(0)), findsOneWidget);
       expect(find.text('1.50 km'), findsOneWidget);
       expect(find.text('5.00 km'), findsOneWidget);
 
-      await tester.tap(find.byKey(HomeScreen.latestRunKey));
+      await tester.ensureVisible(find.byKey(RecentRunsCard.rowKey(0)));
+      await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
       await tester.pumpAndSettle();
 
       expect(find.byType(SummaryScreen), findsOneWidget);
@@ -401,7 +481,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(HomeScreen.latestRunKey));
+      await tester.ensureVisible(find.byKey(RecentRunsCard.rowKey(0)));
+      await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
       await tester.pumpAndSettle();
 
       expect(find.byType(SummaryScreen), findsOneWidget);
@@ -549,7 +630,9 @@ void main() {
       expect(find.byType(HistoryScreen), findsNothing);
 
       // Delete a run from Summary -> returns to History and refreshes list.
-      await tester.tap(find.byKey(RecentRunsCard.viewAllKey));
+      await tester.tap(
+        find.byKey(AppBottomNavigation.destinationKey(MainDestination.history)),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(HistoryScreen.runTileKey('run-42')));
       await tester.pumpAndSettle();
@@ -616,7 +699,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open History from Home
-      await tester.tap(find.byKey(RecentRunsCard.viewAllKey));
+      await tester.tap(
+        find.byKey(AppBottomNavigation.destinationKey(MainDestination.history)),
+      );
       await tester.pumpAndSettle();
       expect(find.byType(HistoryScreen), findsOneWidget);
 

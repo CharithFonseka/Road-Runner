@@ -65,7 +65,10 @@ void main() {
     );
     await tester.tap(find.byKey(RoutePlanningScreen.findKey));
     await tester.pump();
-    await tester.enterText(find.byType(TextField), 'Morning loop');
+    await tester.enterText(
+      find.byKey(RoutePlanningScreen.nameKey),
+      'Morning loop',
+    );
     await tester.tap(find.byKey(RoutePlanningScreen.saveKey));
     await tester.pump();
 
@@ -97,5 +100,25 @@ void main() {
           .onPressed,
       isNull,
     );
+  });
+
+  testWidgets('Start run remains available when route service is unavailable', (
+    tester,
+  ) async {
+    var starts = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RoutePlanningScreen(
+          repository: _RecordingRoutes(),
+          directions: OrsDirectionsClient(apiKey: ''),
+          initialCenter: const LatLng(0, 0),
+          styleFuture: Completer<vt.Style>().future,
+          onStartRun: () => starts++,
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(RoutePlanningScreen.startRunKey));
+    await tester.pump();
+    expect(starts, 1);
   });
 }

@@ -1,5 +1,10 @@
 # Home feature (UI kit Revision 5)
 
+The current phone dashboard shows a route/weather card, weekly goal and streak,
+badge preview and the two newest runs. The bottom bar opens Routes, a deliberate
+Run start sheet, History and Profile. The menu remains available for secondary
+navigation, and the home header has a direct light/dark switch.
+
 Owner: Tharushi
 SRS reference: Section 8.4, FR-01 (trigger), FR-61, FR-71, NFR-09, NFR-14
 
