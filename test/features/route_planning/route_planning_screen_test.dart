@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:road_runner/data/planned_route.dart';
 import 'package:road_runner/data/planned_route_repository.dart';
 import 'package:road_runner/features/route_planning/ors_directions_client.dart';
+import 'package:road_runner/features/route_planning/place_search_client.dart';
 import 'package:road_runner/features/route_planning/route_planning_screen.dart';
 
 class _RecordingRoutes extends PlannedRouteRepository {
@@ -65,7 +66,10 @@ void main() {
     );
     await tester.tap(find.byKey(RoutePlanningScreen.findKey));
     await tester.pump();
-    await tester.enterText(find.byType(TextField), 'Morning loop');
+    await tester.enterText(
+      find.byKey(RoutePlanningScreen.nameFieldKey),
+      'Morning loop',
+    );
     await tester.tap(find.byKey(RoutePlanningScreen.saveKey));
     await tester.pump();
 
@@ -133,7 +137,10 @@ void main() {
       isNotNull,
     );
 
-    await tester.enterText(find.byType(TextField), 'Road loop');
+    await tester.enterText(
+      find.byKey(RoutePlanningScreen.nameFieldKey),
+      'Road loop',
+    );
     await tester.tap(find.byKey(RoutePlanningScreen.startRunKey));
     await tester.pumpAndSettle();
 
@@ -141,5 +148,84 @@ void main() {
     expect(routes.saved?.points.length, 3);
     expect(startedRoute?.id, routes.saved?.id);
     expect(startedRoute?.name, 'Road loop');
+  });
+
+  testWidgets('searches a destination, sets start on map, and starts run', (
+    tester,
+  ) async {
+    final routes = _RecordingRoutes();
+    PlannedRoute? startedRoute;
+    final placeSearch = PlaceSearchClient(
+      fetch: (_) async => {
+        'features': [
+          {
+            'geometry': {
+              'type': 'Point',
+              'coordinates': [79.8617, 6.9147],
+            },
+            'properties': {
+              'name': 'Viharamahadevi Park',
+              'city': 'Colombo',
+              'country': 'Sri Lanka',
+            },
+          },
+        ],
+      },
+    );
+    final directions = OrsDirectionsClient(
+      apiKey: '',
+      fetchOsrm: (_) async => {
+        'routes': [
+          {
+            'geometry': {
+              'type': 'LineString',
+              'coordinates': [
+                [79.86, 6.92],
+                [79.861, 6.917],
+                [79.8617, 6.9147],
+              ],
+            },
+          },
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RoutePlanningScreen(
+          repository: routes,
+          directions: directions,
+          placeSearch: placeSearch,
+          initialCenter: const LatLng(6.9271, 79.8612),
+          styleFuture: Completer<vt.Style>().future,
+          onStartRun: (route) => startedRoute = route,
+        ),
+      ),
+    );
+
+    // Set start on map first, then search destination and start run.
+    final map = find.byKey(RoutePlanningScreen.mapKey);
+    final topLeft = tester.getTopLeft(map);
+    await tester.tapAt(topLeft + const Offset(80, 80));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(RoutePlanningScreen.searchFieldKey),
+      'Viharamahadevi',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Viharamahadevi Park'), findsOneWidget);
+    await tester.tap(find.text('Viharamahadevi Park'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Route ready ·'), findsOneWidget);
+    await tester.tap(find.byKey(RoutePlanningScreen.startRunKey));
+    await tester.pumpAndSettle();
+
+    expect(routes.saved?.name, 'Run to Viharamahadevi Park');
+    expect(routes.saved?.points.length, 3);
+    expect(startedRoute?.name, 'Run to Viharamahadevi Park');
   });
 }

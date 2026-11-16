@@ -36,6 +36,7 @@ class RoutePlanningScreen extends StatefulWidget {
 
   static const Key mapKey = Key('routePlanning.map');
   static const Key searchFieldKey = Key('routePlanning.search');
+  static const Key nameFieldKey = Key('routePlanning.name');
   static const Key findKey = Key('routePlanning.find');
   static const Key saveKey = Key('routePlanning.save');
   static const Key startRunKey = Key('routePlanning.startRun');
@@ -458,6 +459,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                         : 'Tap the map for start, then tap or search for a destination.',
                   ),
                   TextField(
+                    key: RoutePlanningScreen.nameFieldKey,
                     controller: _name,
                     decoration: const InputDecoration(labelText: 'Route name'),
                   ),
