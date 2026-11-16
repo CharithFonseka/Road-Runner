@@ -23,6 +23,11 @@ dependencies:
   # Permissions UI (SRS §3.1)
   permission_handler: ^11.3.1
 
+  # Live street map (OpenFreeMap serves vector tiles).
+  flutter_map: ^8.3.2
+  flutter_map_vector_tiles: ^2.11.0
+  latlong2: ^0.9.1
+
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

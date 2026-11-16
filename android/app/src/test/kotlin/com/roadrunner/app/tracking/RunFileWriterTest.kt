@@ -27,8 +27,8 @@ class RunFileWriterTest {
                 isMock = false,
             )
 
-            writer.appendPoint(fix, FilterDecision(accepted = true))
-            writer.appendPoint(
+            val acceptedSeq = writer.appendPoint(fix, FilterDecision(accepted = true))
+            val rejectedSeq = writer.appendPoint(
                 fix.copy(tUtcMs = 3_000),
                 FilterDecision(
                     accepted = false,
@@ -38,6 +38,9 @@ class RunFileWriterTest {
             writer.appendState(RunFileState.PAUSED, 4_000)
             writer.appendState(RunFileState.RUNNING, 5_000)
             writer.finish(6_000)
+
+            assertEquals(0, acceptedSeq)
+            assertEquals(1, rejectedSeq)
 
             val lines = writer.file.readLines()
             assertEquals(6, lines.size)
