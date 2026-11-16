@@ -7,12 +7,14 @@ import 'package:sqflite/sqflite.dart';
 /// Manages the SQLite database lifecycle, schema initialization, and connections.
 class AppDatabase {
   static const String databaseName = 'road_runner.db';
-  static const int databaseVersion = 2;
+  static const int databaseVersion = 5;
 
   // Table names
   static const String tableRuns = 'runs';
   static const String tableRunPoints = 'run_points';
   static const String tableRunPauses = 'run_pauses';
+  static const String tablePlaceCache = 'place_cache';
+  static const String tableRunBadges = 'run_badges';
 
   // Runs table columns
   static const String colRunId = 'id';
@@ -23,6 +25,12 @@ class AppDatabase {
   static const String colAvgPaceSecPerKm = 'avg_pace_sec_per_km';
   static const String colMaxSpeedMps = 'max_speed_mps';
   static const String colStatus = 'status';
+  static const String colRunName = 'run_name';
+  static const String colPlaceName = 'place_name';
+  static const String colWeatherTempC = 'weather_temp_c';
+  static const String colWeatherWindKmh = 'weather_wind_kmh';
+  static const String colWeatherCode = 'weather_code';
+  static const String colLocalStartDay = 'local_start_day';
 
   // Run points table columns
   static const String colPointRunId = 'run_id';
@@ -97,7 +105,13 @@ class AppDatabase {
         $colDistanceM REAL NOT NULL,
         $colAvgPaceSecPerKm REAL,
         $colMaxSpeedMps REAL,
-        $colStatus TEXT NOT NULL
+        $colStatus TEXT NOT NULL,
+        $colRunName TEXT,
+        $colPlaceName TEXT,
+        $colWeatherTempC REAL,
+        $colWeatherWindKmh REAL,
+        $colWeatherCode INTEGER,
+        $colLocalStartDay TEXT
       );
     ''');
 
@@ -131,6 +145,25 @@ class AppDatabase {
         FOREIGN KEY ($colPauseRunId) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
       );
     ''');
+
+    await db.execute('''
+      CREATE TABLE $tablePlaceCache (
+        lat_bucket INTEGER NOT NULL,
+        lon_bucket INTEGER NOT NULL,
+        place_name TEXT NOT NULL,
+        PRIMARY KEY (lat_bucket, lon_bucket)
+      );
+    ''');
+
+    await db.execute('''
+      CREATE TABLE $tableRunBadges (
+        run_id TEXT NOT NULL,
+        badge_type TEXT NOT NULL,
+        awarded_at_utc_ms INTEGER NOT NULL,
+        PRIMARY KEY (run_id, badge_type),
+        FOREIGN KEY (run_id) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
+      );
+    ''');
   }
 
   /// Handles schema migrations for future database versions.
@@ -141,11 +174,47 @@ class AppDatabase {
   ) async {
     if (oldVersion < 2) {
       await db.execute('''
-        CREATE TABLE $tableRunPauses (
+        CREATE TABLE IF NOT EXISTS $tableRunPauses (
           $colPauseRunId TEXT NOT NULL,
           $colPauseStartMs INTEGER NOT NULL,
           $colPauseEndMs INTEGER NOT NULL,
           FOREIGN KEY ($colPauseRunId) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
+        );
+      ''');
+    }
+
+    if (oldVersion < 3) {
+      for (final sql in [
+        'ALTER TABLE $tableRuns ADD COLUMN $colRunName TEXT',
+        'ALTER TABLE $tableRuns ADD COLUMN $colPlaceName TEXT',
+        'ALTER TABLE $tableRuns ADD COLUMN $colWeatherTempC REAL',
+        'ALTER TABLE $tableRuns ADD COLUMN $colWeatherWindKmh REAL',
+        'ALTER TABLE $tableRuns ADD COLUMN $colWeatherCode INTEGER',
+        'ALTER TABLE $tableRuns ADD COLUMN $colLocalStartDay TEXT',
+      ]) {
+        await db.execute(sql);
+      }
+    }
+
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tablePlaceCache (
+          lat_bucket INTEGER NOT NULL,
+          lon_bucket INTEGER NOT NULL,
+          place_name TEXT NOT NULL,
+          PRIMARY KEY (lat_bucket, lon_bucket)
+        );
+      ''');
+    }
+
+    if (oldVersion < 5) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableRunBadges (
+          run_id TEXT NOT NULL,
+          badge_type TEXT NOT NULL,
+          awarded_at_utc_ms INTEGER NOT NULL,
+          PRIMARY KEY (run_id, badge_type),
+          FOREIGN KEY (run_id) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
         );
       ''');
     }
@@ -159,3 +228,6 @@ class AppDatabase {
     }
   }
 }
+
+/// Computes a discrete coordinate bucket grouping start coordinates within ~110m.
+int placeBucket(double coordinate) => (coordinate * 1000).round();

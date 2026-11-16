@@ -23,6 +23,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../account/account_models.dart';
 import '../app_strings.dart';
 import '../home/widgets/sky_header.dart';
 import '../permissions/permission_gateway.dart';
@@ -42,6 +43,15 @@ class SettingsScreen extends StatefulWidget {
     required this.onOpenHistory,
     required this.onManagePermissions,
     this.appVersion,
+    this.debugSimulationEnabled,
+    this.onDebugSimulationChanged,
+    this.accountUser,
+    this.accountProfile,
+    this.accountBusy = false,
+    this.accountError,
+    this.onSignInWithGoogle,
+    this.onSignOut,
+    this.onSyncAccount,
   });
 
   /// Reads permission status and opens the app's system settings page.
@@ -62,6 +72,20 @@ class SettingsScreen extends StatefulWidget {
   /// or blank hides the Version row; nothing is invented.
   final String? appVersion;
 
+  /// Optional debug-only route simulation toggle. Null hides the section.
+  final bool? debugSimulationEnabled;
+  final ValueChanged<bool>? onDebugSimulationChanged;
+
+  /// Optional Firebase Auth + Firestore account sync section.
+  /// Hidden when [onSignInWithGoogle] is null.
+  final AccountUser? accountUser;
+  final CloudUserProfile? accountProfile;
+  final bool accountBusy;
+  final String? accountError;
+  final VoidCallback? onSignInWithGoogle;
+  final VoidCallback? onSignOut;
+  final VoidCallback? onSyncAccount;
+
   static const Key backButtonKey = Key('settings.back');
   static const Key menuButtonKey = Key('settings.menu');
   static const Key manageButtonKey = Key('settings.manage');
@@ -70,6 +94,10 @@ class SettingsScreen extends StatefulWidget {
   static const Key checkFailedKey = Key('settings.checkFailed');
   static const Key settingsFailedKey = Key('settings.settingsFailed');
   static const Key versionKey = Key('settings.version');
+  static const Key signInButtonKey = Key('settings.account.signIn');
+  static const Key signOutButtonKey = Key('settings.account.signOut');
+  static const Key syncAccountButtonKey = Key('settings.account.sync');
+  static const Key accountErrorKey = Key('settings.account.error');
   static Key rowKey(SettingsPermissionRow row) => Key('settings.${row.name}');
 
   @override
@@ -195,10 +223,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 AppSpacing.large + bottomInset,
               ),
               children: [
+                if (widget.onSignInWithGoogle != null) ...[
+                  const _SectionHeading('Account & Cloud Sync'),
+                  _accountCard(context),
+                ],
                 const _SectionHeading(AppStrings.settingsPermissionsSection),
                 _permissionsCard(),
                 const _SectionHeading(AppStrings.settingsAboutSection),
                 _AboutCard(version: widget.appVersion),
+                if (widget.onDebugSimulationChanged != null) ...[
+                  const _SectionHeading('Demo & Testing (Debug)'),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    clipBehavior: Clip.antiAlias,
+                    child: SwitchListTile(
+                      key: const Key('settings.debugSimulation'),
+                      title: const Text('Simulate runner route'),
+                      subtitle: const Text(
+                        'Replays a repeatable ~1.2 km park loop through the native GPS filter.',
+                      ),
+                      value: widget.debugSimulationEnabled ?? false,
+                      onChanged: widget.onDebugSimulationChanged,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -270,10 +318,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            if (widget.onSignInWithGoogle != null) ...[
+                              const _SectionHeading('Account & Cloud Sync'),
+                              _accountCard(context),
+                            ],
                             const _SectionHeading(
                               AppStrings.settingsAboutSection,
                             ),
                             _AboutCard(version: widget.appVersion),
+                            if (widget.onDebugSimulationChanged != null) ...[
+                              const _SectionHeading('Demo & Testing (Debug)'),
+                              Card(
+                                margin: EdgeInsets.zero,
+                                clipBehavior: Clip.antiAlias,
+                                child: SwitchListTile(
+                                  key: const Key('settings.debugSimulation'),
+                                  title: const Text('Simulate runner route'),
+                                  subtitle: const Text(
+                                    'Replays a repeatable ~1.2 km park loop through the native GPS filter.',
+                                  ),
+                                  value: widget.debugSimulationEnabled ?? false,
+                                  onChanged: widget.onDebugSimulationChanged,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -285,6 +353,136 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _accountCard(BuildContext context) {
+    final AccountUser? user = widget.accountUser;
+    final CloudUserProfile? profile = widget.accountProfile;
+    final AppPalette palette = context.palette;
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (user == null) ...[
+              Text(
+                'Sign in with Google to back up your profile, goals, streaks, and badges.',
+                style: AppTextStyles.body.copyWith(
+                  color: palette.textSecondary,
+                ),
+              ),
+              if (widget.accountError != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  widget.accountError!,
+                  key: SettingsScreen.accountErrorKey,
+                  style: AppTextStyles.caption.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                key: SettingsScreen.signInButtonKey,
+                onPressed: widget.accountBusy
+                    ? null
+                    : widget.onSignInWithGoogle,
+                icon: const Icon(Icons.login_rounded),
+                label: Text(
+                  widget.accountBusy ? 'Signing in...' : 'Sign in with Google',
+                ),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: palette.primaryFill,
+                    child: Icon(
+                      Icons.person_rounded,
+                      color: palette.onPrimaryFill,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          (user.displayName?.trim().isNotEmpty ?? false)
+                              ? user.displayName!
+                              : 'Road Runner Account',
+                          style: AppTextStyles.body.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: palette.textPrimary,
+                          ),
+                        ),
+                        if (user.email?.trim().isNotEmpty ?? false)
+                          Text(
+                            user.email!,
+                            style: AppTextStyles.caption.copyWith(
+                              color: palette.textSecondary,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (profile != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Weekly goal: ${profile.weeklyGoalKm.toStringAsFixed(0)} km • '
+                  'Streak: ${profile.currentStreakDays}d • '
+                  'Badges: ${profile.badges.length}',
+                  style: AppTextStyles.caption.copyWith(
+                    color: palette.textSecondary,
+                  ),
+                ),
+              ],
+              if (widget.accountError != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  widget.accountError!,
+                  key: SettingsScreen.accountErrorKey,
+                  style: AppTextStyles.caption.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: SettingsScreen.syncAccountButtonKey,
+                      onPressed: widget.accountBusy
+                          ? null
+                          : widget.onSyncAccount,
+                      icon: const Icon(Icons.cloud_sync_outlined, size: 18),
+                      label: Text(
+                        widget.accountBusy ? 'Syncing...' : 'Sync now',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.itemGap),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: SettingsScreen.signOutButtonKey,
+                      onPressed: widget.accountBusy ? null : widget.onSignOut,
+                      icon: const Icon(Icons.logout_rounded, size: 18),
+                      label: const Text('Sign out'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
