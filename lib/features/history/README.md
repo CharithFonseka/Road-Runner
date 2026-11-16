@@ -4,20 +4,37 @@ Owner: Tharushi
 
 ## Public API
 
+The required constructor arguments remain compatible with the application
+integration:
+
 ```dart
 HistoryScreen(
-  runs: historyRuns,                 // List<HistoryRun>, in any order
-  onRunSelected: (String runId) {},  // parent opens Summary for this run
+  runs: historyRuns,
+  onRunSelected: (String runId) {},
   onBackToHome: () {},
 )
 ```
 
-- Runs are shown newest first: by `startedAt` descending, with ties broken by `runId`.
-- The screen never creates run records. With an empty list it shows its empty state.
+Optional inputs:
 
-## Repository integration (Praveen and Nadeesha)
+- `referenceDate` makes local-calendar month filtering deterministic in tests.
+- `initialFilter` selects `HistoryRunFilter.allRuns`, `thisMonth`, or
+  `lastMonth`. It defaults to `allRuns` to preserve the previous screen behavior.
+- `thisMonthSummary` and `lastMonthSummary` accept `HistoryMonthlySummary`
+  values supplied by the integration/domain layer. All Runs never shows a
+  month-specific summary.
+- `isLoading`, `hasError`, and `onRetry` provide loading and error states.
+- `onStartRun`, `onOpenHome`, and `onOpenSettings` enable the corresponding
+  actions when the caller supports them. Home falls back to `onBackToHome`.
 
-The data layer exists only as a README so far. Once `RunRepository` exists, the app flow should map `list()` to `HistoryRun` like this:
+Runs are filtered by their actual start timestamp in local calendar time and
+shown newest first; ties retain the existing deterministic `runId` ordering.
+Filtering and sorting do not mutate the input collection. The screen does not
+create records or aggregate monthly statistics.
+
+## Repository and summary integration
+
+Map saved repository runs to `HistoryRun` as before:
 
 | `HistoryRun` field | Source |
 |---|---|
@@ -27,8 +44,18 @@ The data layer exists only as a README so far. Once `RunRepository` exists, the 
 | `movingMs` | `runs.moving_ms` |
 | `averagePaceSecPerKm` | `runs.avg_pace_sec_per_km` (may be null) |
 
-Remaining requirements:
+Supply `HistoryMonthlySummary` values from outside the widget. Each summary
+contains a display month label, total run count, total distance in metres, and
+total moving time in milliseconds. If a summary is absent, its card is omitted;
+the screen does not invent totals. The All Runs filter does not display either
+monthly summary.
 
-- **Saved runs only:** `list()` should return only saved runs (`status = 'saved'`), not unfinished ones.
-- **Loading and errors:** show a loading or error state while `list()` runs; that is the parent's job.
-- **Opening a run:** `onRunSelected(runId)` should load `get(runId)` and `getPoints(runId)`, then open Summary.
+The current app shell supplies the existing required arguments only, so it
+opens All Runs without summaries, loading/error state, Start a Run callback, or
+a Settings destination callback. Those remain optional for backward
+compatibility and should be wired when the integration supports them.
+
+`onRunSelected(runId)` remains responsible for loading the run and its points,
+then opening Summary. Loading/errors and retry behavior likewise belong to the
+integration layer; pass `isLoading` or `hasError` and the relevant callback
+when available.

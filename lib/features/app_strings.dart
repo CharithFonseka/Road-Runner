@@ -281,7 +281,9 @@ class AppStrings {
 
   // ─── Run Summary ────────────────────────────────────────────────────────────
 
-  static const String summaryTitle = 'Run Summary';
+  static const String summaryTitle = 'Run summary';
+  static const String summaryBack = 'Back';
+  static const String summaryLoading = 'Loading run summary';
   static const String summaryDateUnavailable = 'Date unavailable';
   static String summaryDateTime(String date, String time) => '$date · $time';
 
@@ -289,18 +291,32 @@ class AppStrings {
   static const String statAverageSpeed = 'Average speed';
   static String statSemantics(String label, String value) => '$label: $value';
 
-  static const String routeTitle = 'Route';
-  static const String routeSubtitle = 'Your run path, north up';
+  /// Spoken instead of a placeholder such as "--.- km/h".
+  static const String statUnavailable = 'not available';
+
+  static const String unitM = 'm';
+
+  static const String routeTitle = 'Your route';
+  static const String routeSubtitle = 'Top-down view';
   static const String routeTooShort = 'Route too short to map';
+  static const String routeTooShortDetail =
+      'Fewer than two distinct GPS points were recorded.';
   static const String routeStart = 'Start';
   static const String routeFinish = 'Finish';
-  static const String routeSlower = 'Slower';
+  static const String routeSlower = 'Slower pace';
+  static const String routeSteady = 'Steady';
   static const String routeFaster = 'Faster';
+  static const String routeGridNote = 'Grid shows scale only';
+  static String routeGridSquare(String distance) =>
+      'Grid squares are $distance';
+  static const String routeGap = 'GPS gap';
   static const String routeNoSpeed = 'Speed colours unavailable for this run';
   static const String routeSemantics =
       'Route map of your run, from the start circle to the finish square.';
   static const String routeSemanticsSpeed =
-      'Colours show speed, from orange for slower to teal for faster.';
+      'Colours show pace compared with the rest of this run: blue for the '
+      'slower third, orange for steady, dark red for the faster third.';
+  static String routeSemanticsScale(String distance) => 'Scale bar: $distance.';
 
   static const String splitsTitle = 'Splits';
   static String splitKm(int km) => '$km km';
@@ -310,17 +326,41 @@ class AppStrings {
   static const String splitsUnderOneKm = 'Run under 1 km';
   static const String splitsUnderOneKmDetail =
       'Splits appear once you run a full kilometre.';
+  static const String splitsUnavailable = 'No splits to show';
+  static const String splitsUnavailableDetail =
+      'Kilometre splits are not available for this run.';
+  static const String splitPartial = 'partial';
+  static String splitPartialKm(String km) => '$km km';
+  static String splitPartialSemantics(String km, String time) =>
+      'Final partial split: $km kilometres in $time';
 
   static const String backToHome = 'Back to Home';
   static const String viewHistory = 'View History';
 
   // ─── History ────────────────────────────────────────────────────────────────
 
-  static const String historyHeaderSubtitle = 'Your past runs';
+  static const String historyHeaderSubtitle = 'Newest first';
+  static const String historyFilterLabel = 'Filter runs';
+  static const String historyAllRuns = 'All Runs';
+  static const String historyThisMonth = 'This Month';
+  static const String historyLastMonth = 'Last Month';
+  static const String historyTotalTime = 'Total time';
+  static const String historyLoading = 'Loading run history';
+  static const String historyErrorTitle = 'Could not load history';
+  static const String historyErrorMessage = 'Please try again in a moment.';
+  static const String historyRetry = 'Try again';
+  static const String historyStartRun = 'Start a run';
   static const String historyEmptyTitle = 'No runs yet';
+  static const String historyEmptyThisMonthTitle = 'No runs this month';
+  static const String historyEmptyLastMonthTitle = 'No runs last month';
   static const String historyEmptyMessage =
       'Every adventure starts with a first step. Finish a run to build your '
       'history.';
+  static const String historyEmptyPeriodMessage =
+      'Every adventure starts with a first step. Start a run to build your '
+      'history.';
+  static String historySummaryRunsDistance(int runs, String distance) =>
+      '$runs ${runs == 1 ? 'run' : 'runs'} · $distance km';
   static String historyDateTime(String date, String time) => '$date · $time';
   static String historyRunSemantics(
     String date,

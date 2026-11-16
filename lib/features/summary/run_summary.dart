@@ -44,6 +44,22 @@ class SplitSummary {
   final bool isFastest;
 }
 
+/// The final, shorter-than-1 km piece of a run (`Split.isPartial` from the
+/// stats layer). Shown after the full splits; never marked as fastest.
+@immutable
+class PartialSplitSummary {
+  const PartialSplitSummary({
+    required this.distanceM,
+    required this.durationMs,
+  });
+
+  /// Distance covered in the partial split, in metres (under 1000).
+  final double distanceM;
+
+  /// Time taken for it.
+  final int durationMs;
+}
+
 /// Everything the Summary screen shows for one completed run.
 @immutable
 class RunSummary {
@@ -56,6 +72,7 @@ class RunSummary {
     this.averageSpeedMps,
     this.route = const [],
     this.splits = const [],
+    this.partialSplit,
   });
 
   final String runId;
@@ -73,4 +90,7 @@ class RunSummary {
 
   /// Full kilometre splits, in order. Empty for runs under 1 km.
   final List<SplitSummary> splits;
+
+  /// Optional final partial split. Null hides the row.
+  final PartialSplitSummary? partialSplit;
 }

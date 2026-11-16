@@ -112,8 +112,10 @@ void main() {
       final String date = tester
           .widget<Text>(find.byKey(SummaryScreen.dateKey))
           .data!;
-      expect(date, contains('November 14, 2026'));
+      // UI kit Revision 5 header format: "14 Nov 2026 · 7:42 AM".
+      expect(date, contains('14 Nov 2026'));
       expect(date, contains('7:42 AM'));
+      expect(date, AppStrings.summaryDateTime('14 Nov 2026', '7:42 AM'));
     });
 
     testWidgets('missing date and values show placeholders', (tester) async {

@@ -9,6 +9,7 @@ import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/features/app_strings.dart';
 import 'package:road_runner/features/history/history_run.dart';
 import 'package:road_runner/features/history/history_screen.dart';
+import 'package:road_runner/features/shared/app_navigation_drawer.dart';
 
 // Test fixtures only — not real application data. Deliberately out of
 // order to exercise sorting.
@@ -33,10 +34,35 @@ final HistoryRun _middle = HistoryRun(
   movingMs: (21 * 60 + 5) * 1000,
   averagePaceSecPerKm: 363,
 );
+final HistoryRun _october = HistoryRun(
+  runId: 'run-october',
+  startedAt: DateTime(2026, 10, 31, 23, 59),
+  distanceM: 2400,
+  movingMs: 900000,
+  averagePaceSecPerKm: 375,
+);
+final HistoryRun _december = HistoryRun(
+  runId: 'run-december',
+  startedAt: DateTime(2026, 12, 31, 23, 59),
+  distanceM: 3100,
+  movingMs: 1200000,
+  averagePaceSecPerKm: 390,
+);
+final HistoryRun _january = HistoryRun(
+  runId: 'run-january',
+  startedAt: DateTime(2027, 1, 1),
+  distanceM: 1800,
+  movingMs: 600000,
+  averagePaceSecPerKm: 400,
+);
 
 class _Calls {
   final List<String> selected = [];
   int back = 0;
+  int start = 0;
+  int retry = 0;
+  int home = 0;
+  int settings = 0;
 }
 
 Future<_Calls> _pump(
@@ -44,6 +70,18 @@ Future<_Calls> _pump(
   List<HistoryRun> runs, {
   Size size = const Size(360, 800),
   double textScale = 1.0,
+  DateTime? referenceDate,
+  HistoryRunFilter initialFilter = HistoryRunFilter.allRuns,
+  HistoryMonthlySummary? thisMonthSummary,
+  HistoryMonthlySummary? lastMonthSummary,
+  bool isLoading = false,
+  bool hasError = false,
+  bool withRetryAction = false,
+  bool withStartRunAction = false,
+  VoidCallback? onRetry,
+  VoidCallback? onStartRun,
+  VoidCallback? onOpenHome,
+  VoidCallback? onOpenSettings,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
@@ -60,6 +98,17 @@ Future<_Calls> _pump(
           runs: runs,
           onRunSelected: calls.selected.add,
           onBackToHome: () => calls.back++,
+          referenceDate: referenceDate,
+          initialFilter: initialFilter,
+          thisMonthSummary: thisMonthSummary,
+          lastMonthSummary: lastMonthSummary,
+          isLoading: isLoading,
+          hasError: hasError,
+          onRetry: onRetry ?? (withRetryAction ? () => calls.retry++ : null),
+          onStartRun:
+              onStartRun ?? (withStartRunAction ? () => calls.start++ : null),
+          onOpenHome: onOpenHome ?? () => calls.home++,
+          onOpenSettings: onOpenSettings ?? () => calls.settings++,
         ),
       ),
     ),
@@ -78,6 +127,219 @@ void main() {
       expect(find.byType(Card), findsNothing);
       expect(find.byKey(HistoryScreen.backButtonKey), findsOneWidget);
     });
+
+    testWidgets('offers Start a run only when a callback is supplied', (
+      tester,
+    ) async {
+      final _Calls calls = await _pump(
+        tester,
+        const [],
+        withStartRunAction: true,
+      );
+      await tester.tap(find.text(AppStrings.historyStartRun));
+      expect(calls.start, 1);
+    });
+
+    testWidgets('shows an empty state for a month with no runs', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        [_newest],
+        referenceDate: DateTime(2026, 11, 15),
+        initialFilter: HistoryRunFilter.lastMonth,
+      );
+      expect(find.text(AppStrings.historyEmptyLastMonthTitle), findsOneWidget);
+      expect(find.byType(Card), findsNothing);
+      expect(_tile('run-c'), findsNothing);
+    });
+  });
+
+  group('Month filtering', () {
+    testWidgets('All Runs includes every run and omits month totals', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        [_october, _newest, _december],
+        referenceDate: DateTime(2026, 11, 15),
+        thisMonthSummary: const HistoryMonthlySummary(
+          monthLabel: 'Nov 2026',
+          totalRuns: 3,
+          totalDistanceM: 15600,
+          totalMovingMs: 6012000,
+        ),
+      );
+      expect(_tile('run-october'), findsOneWidget);
+      expect(_tile('run-c'), findsOneWidget);
+      expect(_tile('run-december'), findsOneWidget);
+      expect(find.byKey(HistoryScreen.summaryCardKey), findsNothing);
+      expect(find.text(AppStrings.historyAllRuns), findsOneWidget);
+    });
+
+    testWidgets('This Month uses local calendar dates', (tester) async {
+      await _pump(
+        tester,
+        [_october, _older, _middle, _newest, _december],
+        referenceDate: DateTime(2026, 11, 15),
+        initialFilter: HistoryRunFilter.thisMonth,
+      );
+      expect(_tile('run-a'), findsOneWidget);
+      expect(_tile('run-b'), findsOneWidget);
+      expect(_tile('run-c'), findsOneWidget);
+      expect(_tile('run-october'), findsNothing);
+      expect(_tile('run-december'), findsNothing);
+    });
+
+    testWidgets('Last Month selects the preceding calendar month', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        [_october, _older, _newest],
+        referenceDate: DateTime(2026, 11, 15),
+        initialFilter: HistoryRunFilter.lastMonth,
+      );
+      expect(_tile('run-october'), findsOneWidget);
+      expect(_tile('run-a'), findsNothing);
+      expect(_tile('run-c'), findsNothing);
+    });
+
+    testWidgets('month bounds are inclusive/exclusive without mutating input', (
+      tester,
+    ) async {
+      final List<HistoryRun> input = [
+        HistoryRun(runId: 'december-start', startedAt: DateTime(2026, 12, 1)),
+        HistoryRun(runId: 'november-start', startedAt: DateTime(2026, 11, 1)),
+        HistoryRun(
+          runId: 'november-end',
+          startedAt: DateTime(2026, 11, 30, 23, 59, 59),
+        ),
+      ];
+      await _pump(
+        tester,
+        input,
+        referenceDate: DateTime(2026, 11, 15),
+        initialFilter: HistoryRunFilter.thisMonth,
+        size: const Size(360, 2000),
+      );
+      expect(_tile('november-start'), findsOneWidget);
+      expect(_tile('november-end'), findsOneWidget);
+      expect(_tile('december-start'), findsNothing);
+      expect(input.map((run) => run.runId), [
+        'december-start',
+        'november-start',
+        'november-end',
+      ]);
+      expect(
+        tester.getTopLeft(_tile('november-end')).dy,
+        lessThan(tester.getTopLeft(_tile('november-start')).dy),
+      );
+    });
+
+    testWidgets(
+      'January Last Month correctly includes December of prior year',
+      (tester) async {
+        await _pump(
+          tester,
+          [_december, _january, _october],
+          referenceDate: DateTime(2027, 1, 1),
+          initialFilter: HistoryRunFilter.lastMonth,
+        );
+        expect(_tile('run-december'), findsOneWidget);
+        expect(_tile('run-january'), findsNothing);
+        expect(_tile('run-october'), findsNothing);
+      },
+    );
+
+    testWidgets('filter chips switch the visible period', (tester) async {
+      await _pump(tester, [
+        _october,
+        _newest,
+      ], referenceDate: DateTime(2026, 11, 15));
+      await tester.tap(
+        find.byKey(HistoryScreen.filterChipKey(HistoryRunFilter.thisMonth)),
+      );
+      await tester.pumpAndSettle();
+      expect(_tile('run-c'), findsOneWidget);
+      expect(_tile('run-october'), findsNothing);
+
+      await tester.tap(
+        find.byKey(HistoryScreen.filterChipKey(HistoryRunFilter.lastMonth)),
+      );
+      await tester.pumpAndSettle();
+      expect(_tile('run-october'), findsOneWidget);
+      expect(_tile('run-c'), findsNothing);
+
+      await tester.tap(
+        find.byKey(HistoryScreen.filterChipKey(HistoryRunFilter.allRuns)),
+      );
+      await tester.pumpAndSettle();
+      expect(_tile('run-october'), findsOneWidget);
+      expect(_tile('run-c'), findsOneWidget);
+    });
+  });
+
+  group('Monthly summary', () {
+    testWidgets('displays supplied totals for the selected month only', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        [_newest],
+        referenceDate: DateTime(2026, 11, 15),
+        initialFilter: HistoryRunFilter.thisMonth,
+        thisMonthSummary: const HistoryMonthlySummary(
+          monthLabel: 'Nov 2026',
+          totalRuns: 3,
+          totalDistanceM: 15600,
+          totalMovingMs: 6012000,
+        ),
+      );
+      expect(find.byKey(HistoryScreen.summaryCardKey), findsOneWidget);
+      expect(find.text('Nov 2026'), findsOneWidget);
+      expect(find.text('3 runs · 15.60 km'), findsOneWidget);
+      expect(find.text('1:40:12'), findsOneWidget);
+      expect(find.text(AppStrings.historyTotalTime), findsOneWidget);
+    });
+
+    testWidgets('omits summary when monthly totals are not supplied', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        [_newest],
+        referenceDate: DateTime(2026, 11, 15),
+        initialFilter: HistoryRunFilter.thisMonth,
+      );
+      expect(find.byKey(HistoryScreen.summaryCardKey), findsNothing);
+      expect(find.text(AppStrings.historyTotalTime), findsNothing);
+    });
+  });
+
+  group('Load states', () {
+    testWidgets('loading shows a summary and skeleton run cards', (
+      tester,
+    ) async {
+      await _pump(tester, [_newest], isLoading: true);
+      expect(find.byKey(HistoryScreen.loadingStateKey), findsOneWidget);
+      expect(find.byType(Card), findsNWidgets(4));
+      expect(_tile('run-c'), findsNothing);
+    });
+
+    testWidgets('error offers retry when a callback is provided', (
+      tester,
+    ) async {
+      final _Calls calls = await _pump(
+        tester,
+        const [],
+        hasError: true,
+        withRetryAction: true,
+      );
+      expect(find.text(AppStrings.historyErrorTitle), findsOneWidget);
+      await tester.tap(find.text(AppStrings.historyRetry));
+      expect(calls.retry, 1);
+    });
   });
 
   group('Runs', () {
@@ -85,8 +347,8 @@ void main() {
       tester,
     ) async {
       await _pump(tester, [_newest]);
-      expect(find.text('Nov 14, 2026'), findsOneWidget);
-      expect(find.text('7:42 AM'), findsOneWidget);
+      expect(find.text('14 Nov 2026'), findsOneWidget);
+      expect(find.text('7:42 AM'), findsNothing);
       expect(find.text('5.02 km'), findsOneWidget);
       expect(find.text('32:15'), findsOneWidget);
       expect(find.text('6:25/km'), findsOneWidget);
@@ -176,6 +438,52 @@ void main() {
       expect(calls.back, 1);
       expect(calls.selected, isEmpty);
     });
+
+    testWidgets('drawer marks History selected and does not open it twice', (
+      tester,
+    ) async {
+      final _Calls calls = await _pump(tester, [_newest]);
+      await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<AppNavigationDrawer>(find.byType(AppNavigationDrawer))
+            .selected,
+        AppDestination.history,
+      );
+      await tester.tap(
+        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.history)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(AppNavigationDrawer), findsNothing);
+      expect(calls.back, 0);
+      expect(calls.home, 0);
+      expect(calls.settings, 0);
+    });
+
+    testWidgets('drawer Home uses onOpenHome', (tester) async {
+      final _Calls calls = await _pump(tester, [_newest]);
+      await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.home)),
+      );
+      await tester.pumpAndSettle();
+      expect(calls.home, 1);
+      expect(calls.back, 0);
+    });
+
+    testWidgets('drawer Settings uses onOpenSettings', (tester) async {
+      final _Calls calls = await _pump(tester, [_newest]);
+      await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.settings)),
+      );
+      await tester.pumpAndSettle();
+      expect(calls.settings, 1);
+      expect(calls.home, 0);
+    });
   });
 
   group('Accessibility', () {
@@ -188,7 +496,7 @@ void main() {
         tester.getSemantics(_tile('run-c')),
         containsSemantics(
           label: AppStrings.historyRunSemantics(
-            AppStrings.historyDateTime('Nov 14, 2026', '7:42 AM'),
+            AppStrings.historyDateTime('14 Nov 2026', '7:42 AM'),
             '5.02 km',
             '32:15',
             '6:25/km',
@@ -205,6 +513,34 @@ void main() {
       await _pump(tester, [_newest, _middle]);
       await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      handle.dispose();
+    });
+
+    testWidgets('filter chips expose selected state and 48dp targets', (
+      tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await _pump(tester, [_newest]);
+      for (final HistoryRunFilter filter in HistoryRunFilter.values) {
+        final Finder chip = find.byKey(HistoryScreen.filterChipKey(filter));
+        expect(
+          tester.getSize(chip).height,
+          greaterThanOrEqualTo(AppSpacing.minTouchTarget),
+        );
+        expect(
+          tester.getSemantics(chip),
+          containsSemantics(
+            label: switch (filter) {
+              HistoryRunFilter.allRuns => AppStrings.historyAllRuns,
+              HistoryRunFilter.thisMonth => AppStrings.historyThisMonth,
+              HistoryRunFilter.lastMonth => AppStrings.historyLastMonth,
+            },
+            isButton: true,
+            isSelected: filter == HistoryRunFilter.allRuns,
+            hasTapAction: true,
+          ),
+        );
+      }
       handle.dispose();
     });
 
@@ -248,6 +584,64 @@ void main() {
             await tester.pump();
             expect(tester.takeException(), isNull);
           }
+        });
+      }
+    }
+
+    // Phase 2B.3: every non-list state at the same sizes.
+    final HistoryMonthlySummary longSummary = const HistoryMonthlySummary(
+      monthLabel: 'November 2026',
+      totalRuns: 23,
+      totalDistanceM: 187450,
+      totalMovingMs: (19 * 3600 + 42 * 60 + 7) * 1000,
+    );
+    final Map<String, Future<void> Function(WidgetTester, Size, double)>
+    states = {
+      'month summary': (t, size, scale) => _pump(
+        t,
+        [_older, _newest, _middle],
+        size: size,
+        textScale: scale,
+        referenceDate: DateTime(2026, 11, 16),
+        initialFilter: HistoryRunFilter.thisMonth,
+        thisMonthSummary: longSummary,
+      ),
+      'loading': (t, size, scale) =>
+          _pump(t, const [], size: size, textScale: scale, isLoading: true),
+      'error': (t, size, scale) => _pump(
+        t,
+        const [],
+        size: size,
+        textScale: scale,
+        hasError: true,
+        withRetryAction: true,
+      ),
+      'empty month with start': (t, size, scale) => _pump(
+        t,
+        [_october],
+        size: size,
+        textScale: scale,
+        referenceDate: DateTime(2026, 11, 16),
+        initialFilter: HistoryRunFilter.thisMonth,
+        withStartRunAction: true,
+      ),
+    };
+    for (final MapEntry<String, (Size, double)> s in sizes.entries) {
+      for (final MapEntry<
+            String,
+            Future<void> Function(WidgetTester, Size, double)
+          >
+          st
+          in states.entries) {
+        testWidgets('${s.key}, ${st.key}', (tester) async {
+          await st.value(tester, s.value.$1, s.value.$2);
+          expect(tester.takeException(), isNull);
+          await tester.drag(
+            find.byType(CustomScrollView),
+            const Offset(0, -600),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
         });
       }
     }
