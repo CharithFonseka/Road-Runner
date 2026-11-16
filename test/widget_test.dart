@@ -71,6 +71,7 @@ class _StubTrackingBridge implements TrackingBridge {
 class _StubRunRepository implements RunRepository {
   final List<Run> runs;
   final Map<String, List<Point>> pointsByRun;
+  final Map<String, List<PauseInterval>> pausesByRun;
   Completer<void>? listGate;
   int failListRemaining = 0;
   int failSaveRemaining = 0;
@@ -78,11 +79,13 @@ class _StubRunRepository implements RunRepository {
   _StubRunRepository({
     List<Run>? runs,
     Map<String, List<Point>>? pointsByRun,
+    Map<String, List<PauseInterval>>? pausesByRun,
     this.listGate,
     this.failListRemaining = 0,
     this.failSaveRemaining = 0,
   }) : runs = runs ?? [],
-       pointsByRun = pointsByRun ?? {};
+       pointsByRun = pointsByRun ?? {},
+       pausesByRun = pausesByRun ?? {};
 
   @override
   Future<void> saveFromFile(String runId, String filePath) async {
@@ -130,9 +133,14 @@ class _StubRunRepository implements RunRepository {
       pointsByRun[runId] ?? const [];
 
   @override
+  Future<List<PauseInterval>> getPauses(String runId) async =>
+      pausesByRun[runId] ?? const [];
+
+  @override
   Future<void> delete(String runId) async {
     runs.removeWhere((r) => r.id == runId);
     pointsByRun.remove(runId);
+    pausesByRun.remove(runId);
   }
 
   @override
@@ -287,6 +295,68 @@ void main() {
       expect(find.byType(SummaryScreen), findsOneWidget);
       expect(find.byKey(SummaryScreen.splitRowKey(1)), findsOneWidget);
       expect(find.byKey(SummaryScreen.partialSplitKey), findsOneWidget);
+      bridge.dispose();
+    },
+  );
+
+  testWidgets(
+    'Summary displays split duration excluding paused time when run has pauses',
+    (WidgetTester tester) async {
+      _usePhoneViewport(tester);
+      final bridge = _StubTrackingBridge();
+      // Run: 1 km completed in 360s elapsed, with 60s pause -> 300s moving (5:00)
+      final repo = _StubRunRepository(
+        runs: [
+          const Run(
+            id: 'run-paused',
+            startedAtUtcMs: 1700100000000,
+            endedAtUtcMs: 1700100360000,
+            movingMs: 300000,
+            distanceM: 1000.0,
+            avgPaceSecPerKm: 300.0,
+          ),
+        ],
+        pointsByRun: {
+          'run-paused': const [
+            Point(
+              tUtcMs: 1700100000000,
+              lat: 6.9271,
+              lon: 79.8612,
+              speedMps: 3.3,
+            ),
+            Point(
+              tUtcMs: 1700100360000,
+              lat: 6.9360933,
+              lon: 79.8612,
+              speedMps: 3.3,
+            ),
+          ],
+        },
+        pausesByRun: {
+          'run-paused': const [
+            PauseInterval(startMs: 1700100100000, endMs: 1700100160000),
+          ],
+        },
+      );
+      final permissions = _StubPermissionGateway();
+
+      await tester.pumpWidget(
+        RoadRunnerApp(
+          bridge: bridge,
+          repository: repo,
+          permissionGateway: permissions,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SummaryScreen), findsOneWidget);
+      expect(find.byKey(SummaryScreen.splitRowKey(1)), findsOneWidget);
+      // Duration should be 5:00 (300s), NOT 6:00 (360s)
+      expect(find.text('5:00'), findsOneWidget);
+      expect(find.text('6:00'), findsNothing);
       bridge.dispose();
     },
   );
@@ -447,6 +517,127 @@ void main() {
   );
 
   testWidgets(
+    'History screen shows monthly totals when filtering by This Month and Last Month',
+    (WidgetTester tester) async {
+      _usePhoneViewport(tester);
+      final bridge = _StubTrackingBridge();
+      final now = DateTime.now();
+      final thisMonthTime = DateTime(
+        now.year,
+        now.month,
+        5,
+        8,
+        0,
+      ).millisecondsSinceEpoch;
+      final lastMonthDate = DateTime(now.year, now.month - 1, 10, 8, 0);
+      final lastMonthTime = lastMonthDate.millisecondsSinceEpoch;
+
+      final repo = _StubRunRepository(
+        runs: [
+          Run(
+            id: 'run-this-month',
+            startedAtUtcMs: thisMonthTime,
+            endedAtUtcMs: thisMonthTime + 1800000,
+            movingMs: 1800000,
+            distanceM: 5000.0,
+            avgPaceSecPerKm: 360.0,
+          ),
+          Run(
+            id: 'run-last-month',
+            startedAtUtcMs: lastMonthTime,
+            endedAtUtcMs: lastMonthTime + 2400000,
+            movingMs: 2400000,
+            distanceM: 6000.0,
+            avgPaceSecPerKm: 400.0,
+          ),
+        ],
+      );
+      final permissions = _StubPermissionGateway();
+
+      await tester.pumpWidget(
+        RoadRunnerApp(
+          bridge: bridge,
+          repository: repo,
+          permissionGateway: permissions,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open History from Home
+      await tester.tap(find.byKey(RecentRunsCard.viewAllKey));
+      await tester.pumpAndSettle();
+      expect(find.byType(HistoryScreen), findsOneWidget);
+
+      // Default All Runs: summary card is omitted
+      expect(find.byKey(HistoryScreen.summaryCardKey), findsNothing);
+
+      // Filter: This Month
+      await tester.tap(
+        find.byKey(HistoryScreen.filterChipKey(HistoryRunFilter.thisMonth)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(HistoryScreen.summaryCardKey), findsOneWidget);
+      expect(find.text('1 run · 5.00 km'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(HistoryScreen.summaryCardKey),
+          matching: find.text('30:00'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(HistoryScreen.summaryCardKey),
+          matching: find.text('${AppStrings.statAveragePace} 6:00/km'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(HistoryScreen.runTileKey('run-this-month')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(HistoryScreen.runTileKey('run-last-month')),
+        findsNothing,
+      );
+
+      // Filter: Last Month
+      await tester.tap(
+        find.byKey(HistoryScreen.filterChipKey(HistoryRunFilter.lastMonth)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(HistoryScreen.summaryCardKey), findsOneWidget);
+      expect(find.text('1 run · 6.00 km'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(HistoryScreen.summaryCardKey),
+          matching: find.text('40:00'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(HistoryScreen.summaryCardKey),
+          matching: find.text('${AppStrings.statAveragePace} 6:40/km'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(HistoryScreen.runTileKey('run-last-month')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(HistoryScreen.runTileKey('run-this-month')),
+        findsNothing,
+      );
+
+      bridge.dispose();
+    },
+  );
+
+  testWidgets(
     'Crash recovery cleans up unfinished run file after import and skips already-saved runs',
     (WidgetTester tester) async {
       _usePhoneViewport(tester);
@@ -504,10 +695,7 @@ void main() {
   ) async {
     _usePhoneViewport(tester);
     final bridge = _StubTrackingBridge();
-    final repo = _StubRunRepository(
-      failListRemaining: 2,
-      failSaveRemaining: 1,
-    );
+    final repo = _StubRunRepository(failListRemaining: 2, failSaveRemaining: 1);
     final permissions = _StubPermissionGateway();
 
     await tester.pumpWidget(

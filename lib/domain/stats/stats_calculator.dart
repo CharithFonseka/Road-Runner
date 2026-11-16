@@ -3,7 +3,9 @@
 // SRS reference: Section 4.6, 4.7, 8.5
 
 import 'dart:math' as math;
+
 import 'package:road_runner/core/contract/contract.dart';
+
 import 'haversine.dart';
 import 'models.dart';
 
@@ -119,7 +121,10 @@ double? computeAvgPaceSecPerKm(double distanceM, int movingMs) {
 ///
 /// Only accepted GPS points are considered. If there is remaining distance after
 /// the last full kilometer, a partial split ([Split.isPartial] = true) is appended.
-List<Split> computeSplits(List<Point> points) {
+List<Split> computeSplits(
+  List<Point> points, {
+  List<PauseInterval> pauses = const [],
+}) {
   final List<Point> accepted = points.where((p) => p.accepted).toList();
   if (accepted.length < 2) {
     return const [];
@@ -140,7 +145,12 @@ List<Split> computeSplits(List<Point> points) {
     final Point pPrev = accepted[i - 1];
     final Point pCurr = accepted[i];
 
-    final double segmentDist = haversineM(pPrev.lat, pPrev.lon, pCurr.lat, pCurr.lon);
+    final double segmentDist = haversineM(
+      pPrev.lat,
+      pPrev.lon,
+      pCurr.lat,
+      pCurr.lon,
+    );
     if (segmentDist <= 0.0 || segmentDist.isNaN || segmentDist.isInfinite) {
       continue;
     }
@@ -149,20 +159,29 @@ List<Split> computeSplits(List<Point> points) {
     final int segmentDurationMs = math.max(0, pCurr.tUtcMs - pPrev.tUtcMs);
 
     while (newAccumulatedDistanceM >= nextTargetDistanceM) {
-      final double distanceNeededInSegment = nextTargetDistanceM - accumulatedDistanceM;
-      final double fraction = (distanceNeededInSegment / segmentDist).clamp(0.0, 1.0);
+      final double distanceNeededInSegment =
+          nextTargetDistanceM - accumulatedDistanceM;
+      final double fraction = (distanceNeededInSegment / segmentDist).clamp(
+        0.0,
+        1.0,
+      );
       final int splitBoundaryTimestampMs =
           pPrev.tUtcMs + (fraction * segmentDurationMs).round();
 
-      final int splitDurationMs =
-          math.max(0, splitBoundaryTimestampMs - prevSplitBoundaryTimestampMs);
+      final int splitDurationMs = computeMovingMs(
+        prevSplitBoundaryTimestampMs,
+        splitBoundaryTimestampMs,
+        pauses,
+      );
 
-      splits.add(Split(
-        kmIndex: splitIndex,
-        durationMs: splitDurationMs,
-        distanceM: CalcConfig.splitDistanceM,
-        isPartial: false,
-      ));
+      splits.add(
+        Split(
+          kmIndex: splitIndex,
+          durationMs: splitDurationMs,
+          distanceM: CalcConfig.splitDistanceM,
+          isPartial: false,
+        ),
+      );
 
       prevSplitBoundaryTimestampMs = splitBoundaryTimestampMs;
       prevSplitBoundaryDistanceM = nextTargetDistanceM;
@@ -176,17 +195,23 @@ List<Split> computeSplits(List<Point> points) {
   // Append any final partial split for the remaining distance.
   // We emit a partial split if there is meaningful remaining distance (>= 1.0m),
   // or if the run was shorter than 1 km and produced no full splits yet.
-  final double remainderDistanceM = accumulatedDistanceM - prevSplitBoundaryDistanceM;
+  final double remainderDistanceM =
+      accumulatedDistanceM - prevSplitBoundaryDistanceM;
   if ((splits.isEmpty ? remainderDistanceM > 0.0 : remainderDistanceM >= 1.0) &&
       accepted.isNotEmpty) {
-    final int remainderDurationMs =
-        math.max(0, accepted.last.tUtcMs - prevSplitBoundaryTimestampMs);
-    splits.add(Split(
-      kmIndex: splitIndex,
-      durationMs: remainderDurationMs,
-      distanceM: remainderDistanceM,
-      isPartial: true,
-    ));
+    final int remainderDurationMs = computeMovingMs(
+      prevSplitBoundaryTimestampMs,
+      accepted.last.tUtcMs,
+      pauses,
+    );
+    splits.add(
+      Split(
+        kmIndex: splitIndex,
+        durationMs: remainderDurationMs,
+        distanceM: remainderDistanceM,
+        isPartial: true,
+      ),
+    );
   }
 
   return splits;
@@ -197,12 +222,14 @@ List<Split> computeSplits(List<Point> points) {
 /// Returns null if no accepted points contain a valid non-negative speed.
 double? computeMaxSpeedMps(List<Point> points) {
   final validSpeeds = points
-      .where((p) =>
-          p.accepted &&
-          p.speedMps != null &&
-          !p.speedMps!.isNaN &&
-          !p.speedMps!.isInfinite &&
-          p.speedMps! >= 0.0)
+      .where(
+        (p) =>
+            p.accepted &&
+            p.speedMps != null &&
+            !p.speedMps!.isNaN &&
+            !p.speedMps!.isInfinite &&
+            p.speedMps! >= 0.0,
+      )
       .map((p) => p.speedMps!)
       .toList();
 

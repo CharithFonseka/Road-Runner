@@ -11,18 +11,16 @@ void main() {
     test('returns 0.0 for empty or single point list', () {
       expect(computeDistance([]), 0.0);
       expect(
-        computeDistance([
-          const Point(tUtcMs: 1000, lat: 6.9271, lon: 79.8612),
-        ]),
+        computeDistance([const Point(tUtcMs: 1000, lat: 6.9271, lon: 79.8612)]),
         0.0,
       );
     });
 
     test('sums distance between consecutive points accurately', () {
-      // 1 degree latitude is ~111,195 meters
+      // 1 degree latitude is approximately 111,195 meters.
       const p1 = Point(tUtcMs: 1000, lat: 0.0, lon: 0.0);
-      const p2 = Point(tUtcMs: 2000, lat: 0.0089932, lon: 0.0); // ~1000 m
-      const p3 = Point(tUtcMs: 3000, lat: 0.0179864, lon: 0.0); // ~another 1000 m
+      const p2 = Point(tUtcMs: 2000, lat: 0.0089932, lon: 0.0);
+      const p3 = Point(tUtcMs: 3000, lat: 0.0179864, lon: 0.0);
 
       final dist = computeDistance([p1, p2, p3]);
       expect(dist, closeTo(2000.0, 1.0));
@@ -30,12 +28,10 @@ void main() {
 
     test('ignores unaccepted points in distance accumulation', () {
       const p1 = Point(tUtcMs: 1000, lat: 0.0, lon: 0.0, accepted: true);
-      // Spike point rejected by GPS filter
       const pSpike = Point(tUtcMs: 1500, lat: 10.0, lon: 10.0, accepted: false);
       const p2 = Point(tUtcMs: 2000, lat: 0.0089932, lon: 0.0, accepted: true);
 
       final dist = computeDistance([p1, pSpike, p2]);
-      // Should calculate distance directly between p1 and p2 (~1000m), skipping spike
       expect(dist, closeTo(1000.0, 1.0));
     });
   });
@@ -46,56 +42,53 @@ void main() {
     });
 
     test('subtracts single pause correctly', () {
-      final pauses = [
-        const PauseInterval(startMs: 20000, endMs: 30000), // 10s pause
-      ];
-      // Total elapsed = 60s, moving = 50s = 50000ms
+      final pauses = [const PauseInterval(startMs: 20000, endMs: 30000)];
+
       expect(computeMovingMs(0, 60000, pauses), 50000);
     });
 
     test('subtracts multiple non-overlapping pauses correctly', () {
       final pauses = [
-        const PauseInterval(startMs: 10000, endMs: 15000), // 5s
-        const PauseInterval(startMs: 30000, endMs: 40000), // 10s
+        const PauseInterval(startMs: 10000, endMs: 15000),
+        const PauseInterval(startMs: 30000, endMs: 40000),
       ];
-      // Total elapsed = 60s, paused = 15s, moving = 45s = 45000ms
+
       expect(computeMovingMs(0, 60000, pauses), 45000);
     });
 
-    test('merges overlapping pause intervals and does not double-count pause time', () {
-      final pauses = [
-        const PauseInterval(startMs: 10000, endMs: 25000), // 10s to 25s
-        const PauseInterval(startMs: 20000, endMs: 35000), // 20s to 35s (overlaps)
-      ];
-      // Merged pause window: 10s to 35s = 25s paused.
-      // Total elapsed = 60s, moving = 35s = 35000ms
-      expect(computeMovingMs(0, 60000, pauses), 35000);
-    });
+    test(
+      'merges overlapping pause intervals and does not double-count pause time',
+      () {
+        final pauses = [
+          const PauseInterval(startMs: 10000, endMs: 25000),
+          const PauseInterval(startMs: 20000, endMs: 35000),
+        ];
+
+        expect(computeMovingMs(0, 60000, pauses), 35000);
+      },
+    );
 
     test('merges adjacent touching pause intervals', () {
       final pauses = [
-        const PauseInterval(startMs: 10000, endMs: 20000), // 10s
-        const PauseInterval(startMs: 20000, endMs: 30000), // 10s
+        const PauseInterval(startMs: 10000, endMs: 20000),
+        const PauseInterval(startMs: 20000, endMs: 30000),
       ];
-      // Merged: 10s to 30s = 20s paused.
-      // Total elapsed = 60s, moving = 40s = 40000ms
+
       expect(computeMovingMs(0, 60000, pauses), 40000);
     });
 
     test('clamps pauses extending outside the start/end window', () {
       final pauses = [
-        const PauseInterval(startMs: -5000, endMs: 10000), // starts before 0
-        const PauseInterval(startMs: 50000, endMs: 80000), // ends after 60000
+        const PauseInterval(startMs: -5000, endMs: 10000),
+        const PauseInterval(startMs: 50000, endMs: 80000),
       ];
-      // Clamped: [0, 10000] (10s) and [50000, 60000] (10s) -> total 20s
-      // Total elapsed = 60s, moving = 40s = 40000ms
+
       expect(computeMovingMs(0, 60000, pauses), 40000);
     });
 
     test('returns 0 when pauses cover or exceed the entire run duration', () {
-      final pauses = [
-        const PauseInterval(startMs: 0, endMs: 60000),
-      ];
+      final pauses = [const PauseInterval(startMs: 0, endMs: 60000)];
+
       expect(computeMovingMs(0, 60000, pauses), 0);
     });
 
@@ -117,19 +110,18 @@ void main() {
     });
 
     test('calculates correct pace for valid distance and time', () {
-      // 1000 m (1.0 km) in 300,000 ms (300 s) = 300 s/km (5:00 min/km)
+      // 1000 m in 300 seconds = 300 seconds/km (5:00 min/km).
       final pace = computeAvgPaceSecPerKm(1000.0, 300000);
       expect(pace, isNotNull);
       expect(pace!, closeTo(300.0, 0.001));
 
-      // 5000 m (5.0 km) in 1,500,000 ms (1500 s) = 300 s/km
+      // 5000 m in 1500 seconds = 300 seconds/km.
       final pace5k = computeAvgPaceSecPerKm(5000.0, 1500000);
       expect(pace5k, isNotNull);
       expect(pace5k!, closeTo(300.0, 0.001));
     });
 
-    test('returns null when pace exceeds max limit (1200 s/km = 20 min/km)', () {
-      // 1000 m in 1,201,000 ms = 1201 s/km > 1200
+    test('returns null when pace exceeds max limit (1200 s/km)', () {
       expect(computeAvgPaceSecPerKm(1000.0, 1201000), isNull);
     });
 
@@ -143,23 +135,18 @@ void main() {
     test('returns empty list for fewer than 2 points', () {
       expect(computeSplits([]), isEmpty);
       expect(
-        computeSplits([
-          const Point(tUtcMs: 0, lat: 0.0, lon: 0.0),
-        ]),
+        computeSplits([const Point(tUtcMs: 0, lat: 0.0, lon: 0.0)]),
         isEmpty,
       );
     });
 
     test('interpolates split timestamp accurately for a complete 1 km run', () {
-      // Point 0 at 0m, t=0
-      // Point 1 at 500m, t=150,000
-      // Point 2 at 1000m, t=300,000
-      // 0.0089933 degrees produces ~1000.009 meters (genuinely reaching and crossing 1 km)
       const p0 = Point(tUtcMs: 0, lat: 0.0, lon: 0.0);
-      const p1 = Point(tUtcMs: 150000, lat: 0.0044966, lon: 0.0); // 500m
-      const p2 = Point(tUtcMs: 300000, lat: 0.0089933, lon: 0.0); // ~1000m
+      const p1 = Point(tUtcMs: 150000, lat: 0.0044966, lon: 0.0);
+      const p2 = Point(tUtcMs: 300000, lat: 0.0089933, lon: 0.0);
 
       final splits = computeSplits([p0, p1, p2]);
+
       expect(splits, hasLength(1));
       expect(splits[0].kmIndex, 1);
       expect(splits[0].durationMs, closeTo(300000, 100));
@@ -167,13 +154,13 @@ void main() {
       expect(splits[0].isPartial, isFalse);
     });
 
-    test('reports partial split and does not round up for run slightly shorter than 1 km', () {
-      // 0.0089932 degrees produces ~999.998 meters (1.8 mm short of 1 km)
+    test('reports partial split for a run slightly shorter than 1 km', () {
       const p0 = Point(tUtcMs: 0, lat: 0.0, lon: 0.0);
       const p1 = Point(tUtcMs: 150000, lat: 0.0044966, lon: 0.0);
       const p2 = Point(tUtcMs: 300000, lat: 0.0089932, lon: 0.0);
 
       final splits = computeSplits([p0, p1, p2]);
+
       expect(splits, hasLength(1));
       expect(splits[0].kmIndex, 1);
       expect(splits[0].isPartial, isTrue);
@@ -182,60 +169,112 @@ void main() {
     });
 
     test('interpolates split boundary crossing between two points', () {
-      // Point 0 at 0m, t=0
-      // Point 1 at 900m, t=270,000
-      // Point 2 at 1100m, t=330,000
-      // The 1000m mark is halfway between Point 1 and Point 2.
-      // Expected boundary timestamp = 270,000 + 0.5 * (330,000 - 270,000) = 300,000 ms.
       const p0 = Point(tUtcMs: 0, lat: 0.0, lon: 0.0);
-      const p1 = Point(tUtcMs: 270000, lat: 0.0080939, lon: 0.0); // ~900m
-      const p2 = Point(tUtcMs: 330000, lat: 0.0098925, lon: 0.0); // ~1100m
+      const p1 = Point(tUtcMs: 270000, lat: 0.0080939, lon: 0.0);
+      const p2 = Point(tUtcMs: 330000, lat: 0.0098925, lon: 0.0);
 
       final splits = computeSplits([p0, p1, p2]);
-      expect(splits, hasLength(2)); // 1 complete split + 1 partial split for 100m
 
-      // First split: exactly 1 km
+      expect(splits, hasLength(2));
+
       expect(splits[0].kmIndex, 1);
       expect(splits[0].isPartial, isFalse);
       expect(splits[0].durationMs, closeTo(300000, 200));
 
-      // Second split: partial for remainder (100m)
       expect(splits[1].kmIndex, 2);
       expect(splits[1].isPartial, isTrue);
       expect(splits[1].distanceM, closeTo(100.0, 1.0));
       expect(splits[1].durationMs, closeTo(30000, 200));
     });
 
-    test('generates multiple full splits and partial final split for a 2.5 km run', () {
-      // ~2.5 km run over 750,000 ms (5 min/km pace)
-      const p0 = Point(tUtcMs: 0, lat: 0.0, lon: 0.0);
-      const p1 = Point(tUtcMs: 300000, lat: 0.0089932, lon: 0.0); // 1000m
-      const p2 = Point(tUtcMs: 600000, lat: 0.0179864, lon: 0.0); // 2000m
-      const p3 = Point(tUtcMs: 750000, lat: 0.0224830, lon: 0.0); // 2500m
+    test(
+      'generates multiple full splits and partial final split for a 2.5 km run',
+      () {
+        const p0 = Point(tUtcMs: 0, lat: 0.0, lon: 0.0);
+        const p1 = Point(tUtcMs: 300000, lat: 0.0089932, lon: 0.0);
+        const p2 = Point(tUtcMs: 600000, lat: 0.0179864, lon: 0.0);
+        const p3 = Point(tUtcMs: 750000, lat: 0.0224830, lon: 0.0);
 
-      final splits = computeSplits([p0, p1, p2, p3]);
-      expect(splits, hasLength(3));
+        final splits = computeSplits([p0, p1, p2, p3]);
 
-      expect(splits[0].kmIndex, 1);
-      expect(splits[0].isPartial, isFalse);
-      expect(splits[0].durationMs, closeTo(300000, 100));
+        expect(splits, hasLength(3));
 
-      expect(splits[1].kmIndex, 2);
-      expect(splits[1].isPartial, isFalse);
-      expect(splits[1].durationMs, closeTo(300000, 100));
+        expect(splits[0].kmIndex, 1);
+        expect(splits[0].isPartial, isFalse);
+        expect(splits[0].durationMs, closeTo(300000, 100));
 
-      expect(splits[2].kmIndex, 3);
-      expect(splits[2].isPartial, isTrue);
-      expect(splits[2].distanceM, closeTo(500.0, 1.0));
-      expect(splits[2].durationMs, closeTo(150000, 100));
+        expect(splits[1].kmIndex, 2);
+        expect(splits[1].isPartial, isFalse);
+        expect(splits[1].durationMs, closeTo(300000, 100));
+
+        expect(splits[2].kmIndex, 3);
+        expect(splits[2].isPartial, isTrue);
+        expect(splits[2].distanceM, closeTo(500.0, 1.0));
+        expect(splits[2].durationMs, closeTo(150000, 100));
+      },
+    );
+
+    test('excludes paused time from a full split', () {
+      const p0 = Point(tUtcMs: 0, lat: 0.0, lon: 0.0, accepted: true);
+
+      const p1 = Point(
+        tUtcMs: 300000,
+        lat: 0.0089933,
+        lon: 0.0,
+        accepted: true,
+      );
+
+      final splits = computeSplits(
+        [p0, p1],
+        pauses: [const PauseInterval(startMs: 100000, endMs: 160000)],
+      );
+
+      expect(splits, hasLength(1));
+      expect(splits.first.isPartial, isFalse);
+      expect(splits.first.durationMs, closeTo(240000, 100));
+    });
+
+    test('excludes paused time from a partial split', () {
+      const p0 = Point(tUtcMs: 0, lat: 0.0, lon: 0.0, accepted: true);
+
+      const p1 = Point(
+        tUtcMs: 150000,
+        lat: 0.0044966,
+        lon: 0.0,
+        accepted: true,
+      );
+
+      const p2 = Point(
+        tUtcMs: 300000,
+        lat: 0.0089932,
+        lon: 0.0,
+        accepted: true,
+      );
+
+      final splits = computeSplits(
+        [p0, p1, p2],
+        pauses: [const PauseInterval(startMs: 100000, endMs: 160000)],
+      );
+
+      expect(splits, hasLength(1));
+      expect(splits.first.isPartial, isTrue);
+      expect(splits.first.durationMs, closeTo(240000, 100));
     });
 
     test('ignores unaccepted GPS points when calculating splits', () {
       const p0 = Point(tUtcMs: 0, lat: 0.0, lon: 0.0, accepted: true);
+
       const pSpike = Point(tUtcMs: 100000, lat: 5.0, lon: 5.0, accepted: false);
-      const p1 = Point(tUtcMs: 300000, lat: 0.0089932, lon: 0.0, accepted: true);
+
+      const p1 = Point(
+        tUtcMs: 300000,
+        lat: 0.0089932,
+        lon: 0.0,
+        accepted: true,
+      );
 
       final splits = computeSplits([p0, pSpike, p1]);
+
       expect(splits, hasLength(1));
       expect(splits[0].kmIndex, 1);
       expect(splits[0].durationMs, closeTo(300000, 100));
@@ -266,8 +305,13 @@ void main() {
     test('ignores unaccepted points even if they have high speed', () {
       const points = [
         Point(tUtcMs: 1000, lat: 0.0, lon: 0.0, speedMps: 2.5, accepted: true),
-        // Rejected spike speed
-        Point(tUtcMs: 2000, lat: 0.0, lon: 0.0, speedMps: 25.0, accepted: false),
+        Point(
+          tUtcMs: 2000,
+          lat: 0.0,
+          lon: 0.0,
+          speedMps: 25.0,
+          accepted: false,
+        ),
         Point(tUtcMs: 3000, lat: 0.0, lon: 0.0, speedMps: 3.2, accepted: true),
       ];
 
@@ -299,6 +343,7 @@ void main() {
       );
 
       final dbMap = point.toDbMap('run-123');
+
       expect(dbMap['run_id'], 'run-123');
       expect(dbMap['seq'], 5);
       expect(dbMap['t_utc_ms'], 1731600000000);
@@ -310,6 +355,7 @@ void main() {
       expect(dbMap['accepted'], 1);
 
       final reconstructed = Point.fromDbMap(dbMap);
+
       expect(reconstructed.seq, point.seq);
       expect(reconstructed.tUtcMs, point.tUtcMs);
       expect(reconstructed.lat, point.lat);
@@ -334,6 +380,7 @@ void main() {
       };
 
       final point = Point.fromJsonl(jsonl);
+
       expect(point.seq, 2);
       expect(point.tUtcMs, 1731600002000);
       expect(point.lat, 6.9272);
@@ -353,11 +400,13 @@ void main() {
       );
 
       final json = split.toJson();
+
       expect(json['km_index'], 1);
       expect(json['duration_ms'], 302000);
       expect(json['is_partial'], isFalse);
 
       final parsed = Split.fromJson(json);
+
       expect(parsed.kmIndex, 1);
       expect(parsed.durationMs, 302000);
       expect(parsed.isPartial, isFalse);
