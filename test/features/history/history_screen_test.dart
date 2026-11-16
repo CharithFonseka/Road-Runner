@@ -324,6 +324,32 @@ void main() {
       expect(find.text(AppStrings.historyTotalTime), findsOneWidget);
     });
 
+    testWidgets('displays average pace in monthly summary when provided', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        [_newest],
+        referenceDate: DateTime(2026, 11, 15),
+        initialFilter: HistoryRunFilter.thisMonth,
+        thisMonthSummary: const HistoryMonthlySummary(
+          monthLabel: 'Nov 2026',
+          totalRuns: 2,
+          totalDistanceM: 8000,
+          totalMovingMs: 2400000,
+          averagePaceSecPerKm: 300.0,
+        ),
+      );
+      expect(find.byKey(HistoryScreen.summaryCardKey), findsOneWidget);
+      expect(find.text('Nov 2026'), findsOneWidget);
+      expect(find.text('2 runs · 8.00 km'), findsOneWidget);
+      expect(
+        find.text('${AppStrings.statAveragePace} 5:00/km'),
+        findsOneWidget,
+      );
+      expect(find.text('40:00'), findsOneWidget);
+    });
+
     testWidgets('omits summary when monthly totals are not supplied', (
       tester,
     ) async {

@@ -93,6 +93,12 @@ void main() {
 
       expect(points[3].seq, 3);
       expect(points[3].accepted, isTrue);
+
+      // Verify pause intervals were inserted
+      final pauses = await repository.getPauses(runId);
+      expect(pauses, hasLength(1));
+      expect(pauses.first.startMs, 1731600050000);
+      expect(pauses.first.endMs, 1731600070000);
     });
 
     test('saveFromFile handles incomplete crashed run without end record', () async {
@@ -229,7 +235,7 @@ void main() {
       expect(await repository.get('non-existent-id'), isNull);
     });
 
-    test('delete removes run and associated points', () async {
+    test('delete removes run, associated points, and pause intervals', () async {
       final runId = 'to-delete';
 
       fakeDb.tables[AppDatabase.tableRuns]!.add({
@@ -251,13 +257,99 @@ void main() {
         'accepted': 1,
       });
 
+      fakeDb.tables[AppDatabase.tableRunPauses]!.add({
+        'run_id': runId,
+        'start_ms': 1200,
+        'end_ms': 1400,
+      });
+
       expect(await repository.get(runId), isNotNull);
       expect(await repository.getPoints(runId), hasLength(1));
+      expect(await repository.getPauses(runId), hasLength(1));
 
       await repository.delete(runId);
 
       expect(await repository.get(runId), isNull);
       expect(await repository.getPoints(runId), isEmpty);
+      expect(await repository.getPauses(runId), isEmpty);
+    });
+
+    test('saveFromFile persists pause intervals and getPauses returns them in chronological order', () async {
+      final runId = 'run-with-multiple-pauses';
+      final file = File('${tempDir.path}/$runId.jsonl');
+
+      final content = StringBuffer()
+        ..writeln('{"v":1,"runId":"$runId","startedAtUtcMs":1000}')
+        ..writeln('{"k":"p","seq":0,"t":1000,"lat":0.0,"lon":0.0,"acc":4.0,"spd":2.5,"alt":10.0,"ok":1}')
+        ..writeln('{"k":"s","t":1500,"state":"paused"}')
+        ..writeln('{"k":"s","t":2000,"state":"running"}')
+        ..writeln('{"k":"p","seq":1,"t":2500,"lat":0.001,"lon":0.0,"acc":4.0,"spd":2.5,"alt":10.0,"ok":1}')
+        ..writeln('{"k":"s","t":3000,"state":"paused"}')
+        ..writeln('{"k":"s","t":3500,"state":"running"}')
+        ..writeln('{"k":"p","seq":2,"t":4000,"lat":0.002,"lon":0.0,"acc":4.0,"spd":2.5,"alt":10.0,"ok":1}')
+        ..writeln('{"k":"end","t":4000}');
+
+      await file.writeAsString(content.toString());
+      await repository.saveFromFile(runId, file.path);
+
+      final pauses = await repository.getPauses(runId);
+      expect(pauses, hasLength(2));
+      expect(pauses[0].startMs, 1500);
+      expect(pauses[0].endMs, 2000);
+      expect(pauses[1].startMs, 3000);
+      expect(pauses[1].endMs, 3500);
+    });
+
+    test('saving the same run again replaces previous pause intervals instead of duplicating', () async {
+      final runId = 'run-replace-pauses';
+      final file = File('${tempDir.path}/$runId.jsonl');
+
+      // Initial run with 2 pauses
+      final content1 = StringBuffer()
+        ..writeln('{"v":1,"runId":"$runId","startedAtUtcMs":1000}')
+        ..writeln('{"k":"p","seq":0,"t":1000,"lat":0.0,"lon":0.0,"acc":4.0,"spd":2.5,"alt":10.0,"ok":1}')
+        ..writeln('{"k":"s","t":1500,"state":"paused"}')
+        ..writeln('{"k":"s","t":2000,"state":"running"}')
+        ..writeln('{"k":"s","t":2500,"state":"paused"}')
+        ..writeln('{"k":"s","t":3000,"state":"running"}')
+        ..writeln('{"k":"end","t":3000}');
+
+      await file.writeAsString(content1.toString());
+      await repository.saveFromFile(runId, file.path);
+
+      expect(await repository.getPauses(runId), hasLength(2));
+
+      // Overwrite file with updated content (only 1 pause)
+      final content2 = StringBuffer()
+        ..writeln('{"v":1,"runId":"$runId","startedAtUtcMs":1000}')
+        ..writeln('{"k":"p","seq":0,"t":1000,"lat":0.0,"lon":0.0,"acc":4.0,"spd":2.5,"alt":10.0,"ok":1}')
+        ..writeln('{"k":"s","t":1800,"state":"paused"}')
+        ..writeln('{"k":"s","t":2200,"state":"running"}')
+        ..writeln('{"k":"end","t":3000}');
+
+      await file.writeAsString(content2.toString());
+      await repository.saveFromFile(runId, file.path);
+
+      final updatedPauses = await repository.getPauses(runId);
+      expect(updatedPauses, hasLength(1));
+      expect(updatedPauses.first.startMs, 1800);
+      expect(updatedPauses.first.endMs, 2200);
+    });
+
+    test('getPauses returns empty list for runs without pauses or non-existent runs', () async {
+      final runId = 'no-pause-run';
+      final file = File('${tempDir.path}/$runId.jsonl');
+
+      final content = StringBuffer()
+        ..writeln('{"v":1,"runId":"$runId","startedAtUtcMs":1000}')
+        ..writeln('{"k":"p","seq":0,"t":1000,"lat":0.0,"lon":0.0,"acc":4.0,"spd":2.5,"alt":10.0,"ok":1}')
+        ..writeln('{"k":"end","t":2000}');
+
+      await file.writeAsString(content.toString());
+      await repository.saveFromFile(runId, file.path);
+
+      expect(await repository.getPauses(runId), isEmpty);
+      expect(await repository.getPauses('non-existent-run'), isEmpty);
     });
 
     test('getUnfinishedRunPath returns path of latest unclosed JSONL file', () async {
@@ -292,6 +384,7 @@ class FakeDatabase extends Fake implements Database {
   final Map<String, List<Map<String, Object?>>> tables = {
     AppDatabase.tableRuns: [],
     AppDatabase.tableRunPoints: [],
+    AppDatabase.tableRunPauses: [],
   };
 
   @override
@@ -338,6 +431,10 @@ class FakeDatabase extends Fake implements Database {
       } else if (orderBy.contains('seq ASC')) {
         filtered.sort((a, b) =>
             ((a['seq'] as num?) ?? 0).compareTo((b['seq'] as num?) ?? 0));
+      } else if (orderBy.contains('start_ms ASC')) {
+        filtered.sort((a, b) =>
+            ((a['start_ms'] as num?) ?? 0)
+                .compareTo((b['start_ms'] as num?) ?? 0));
       }
     }
 

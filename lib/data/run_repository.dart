@@ -17,6 +17,7 @@ abstract class RunRepository {
   Future<List<Run>> list();
   Future<Run?> get(String runId);
   Future<List<Point>> getPoints(String runId);
+  Future<List<PauseInterval>> getPauses(String runId);
   Future<void> delete(String runId);
   Future<String?> getUnfinishedRunPath();
 }
@@ -26,10 +27,8 @@ class SqliteRunRepository implements RunRepository {
   final AppDatabase _database;
   final String? runsDirectoryPath;
 
-  SqliteRunRepository({
-    AppDatabase? database,
-    this.runsDirectoryPath,
-  }) : _database = database ?? AppDatabase.instance;
+  SqliteRunRepository({AppDatabase? database, this.runsDirectoryPath})
+    : _database = database ?? AppDatabase.instance;
 
   @override
   Future<void> saveFromFile(String runId, String filePath) async {
@@ -70,10 +69,12 @@ class SqliteRunRepository implements RunRepository {
       );
     }
 
-    final int? startedAtUtcMs =
-        (rawHeader[kRunFileKeyStartedAtUtcMs] as num?)?.toInt();
+    final int? startedAtUtcMs = (rawHeader[kRunFileKeyStartedAtUtcMs] as num?)
+        ?.toInt();
     if (startedAtUtcMs == null || startedAtUtcMs <= 0) {
-      throw const FormatException('Invalid or missing startedAtUtcMs in header');
+      throw const FormatException(
+        'Invalid or missing startedAtUtcMs in header',
+      );
     }
 
     // 2. Parse points, pause/resume state records, and end record
@@ -94,7 +95,9 @@ class SqliteRunRepository implements RunRepository {
       }
 
       if (decoded is! Map<String, dynamic>) {
-        throw FormatException('Line ${i + 1} is not a valid JSON object: $line');
+        throw FormatException(
+          'Line ${i + 1} is not a valid JSON object: $line',
+        );
       }
 
       final String? kind = decoded[kRunFileKeyKind]?.toString();
@@ -133,7 +136,9 @@ class SqliteRunRepository implements RunRepository {
 
     // If still in paused state when the file ended, close the pause interval.
     if (currentPauseStartMs != null && currentPauseStartMs < endedAtUtcMs) {
-      pauses.add(PauseInterval(startMs: currentPauseStartMs, endMs: endedAtUtcMs));
+      pauses.add(
+        PauseInterval(startMs: currentPauseStartMs, endMs: endedAtUtcMs),
+      );
     }
 
         // 3. Compute running statistics using the pure Dart stats module.
@@ -204,7 +209,7 @@ class SqliteRunRepository implements RunRepository {
       status: kStateSaved,
     );
 
-    // 4. Save to SQLite in a single transaction with a Batch for points
+    // 4. Save to SQLite in a single transaction with a Batch for points and pauses
     final db = await _database.database;
     await db.transaction((txn) async {
       await txn.insert(
@@ -219,12 +224,22 @@ class SqliteRunRepository implements RunRepository {
         whereArgs: [runId],
       );
 
+      await txn.delete(
+        AppDatabase.tableRunPauses,
+        where: '${AppDatabase.colPauseRunId} = ?',
+        whereArgs: [runId],
+      );
+
       final batch = txn.batch();
       for (final point in points) {
-        batch.insert(
-          AppDatabase.tableRunPoints,
-          point.toDbMap(runId),
-        );
+        batch.insert(AppDatabase.tableRunPoints, point.toDbMap(runId));
+      }
+      for (final pause in pauses) {
+        batch.insert(AppDatabase.tableRunPauses, {
+          AppDatabase.colPauseRunId: runId,
+          AppDatabase.colPauseStartMs: pause.startMs,
+          AppDatabase.colPauseEndMs: pause.endMs,
+        });
       }
       await batch.commit(noResult: true);
     });
@@ -266,12 +281,34 @@ class SqliteRunRepository implements RunRepository {
   }
 
   @override
+  Future<List<PauseInterval>> getPauses(String runId) async {
+    final db = await _database.database;
+    final List<Map<String, Object?>> rows = await db.query(
+      AppDatabase.tableRunPauses,
+      where: '${AppDatabase.colPauseRunId} = ?',
+      whereArgs: [runId],
+      orderBy: '${AppDatabase.colPauseStartMs} ASC',
+    );
+    return rows.map((row) {
+      return PauseInterval(
+        startMs: (row[AppDatabase.colPauseStartMs] as num).toInt(),
+        endMs: (row[AppDatabase.colPauseEndMs] as num).toInt(),
+      );
+    }).toList();
+  }
+
+  @override
   Future<void> delete(String runId) async {
     final db = await _database.database;
     await db.transaction((txn) async {
       await txn.delete(
         AppDatabase.tableRunPoints,
         where: '${AppDatabase.colPointRunId} = ?',
+        whereArgs: [runId],
+      );
+      await txn.delete(
+        AppDatabase.tableRunPauses,
+        where: '${AppDatabase.colPauseRunId} = ?',
         whereArgs: [runId],
       );
       await txn.delete(
@@ -320,9 +357,9 @@ class SqliteRunRepository implements RunRepository {
 
       // 1. Verify header line
       final String header = lines.first.trim();
-      final headerMatch =
-          RegExp(r'^\{"v":1,"runId":"([^"]+)","startedAtUtcMs":(\d+)\}$')
-              .firstMatch(header);
+      final headerMatch = RegExp(
+        r'^\{"v":1,"runId":"([^"]+)","startedAtUtcMs":(\d+)\}$',
+      ).firstMatch(header);
       if (headerMatch == null) continue;
 
       final int? startedAt = int.tryParse(headerMatch.group(2) ?? '');

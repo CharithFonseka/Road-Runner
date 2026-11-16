@@ -7,11 +7,12 @@ import 'package:sqflite/sqflite.dart';
 /// Manages the SQLite database lifecycle, schema initialization, and connections.
 class AppDatabase {
   static const String databaseName = 'road_runner.db';
-  static const int databaseVersion = 1;
+  static const int databaseVersion = 2;
 
   // Table names
   static const String tableRuns = 'runs';
   static const String tableRunPoints = 'run_points';
+  static const String tableRunPauses = 'run_pauses';
 
   // Runs table columns
   static const String colRunId = 'id';
@@ -33,6 +34,11 @@ class AppDatabase {
   static const String colPointSpeedMps = 'speed_mps';
   static const String colPointAltM = 'alt_m';
   static const String colPointAccepted = 'accepted';
+
+  // Run pauses table columns
+  static const String colPauseRunId = 'run_id';
+  static const String colPauseStartMs = 'start_ms';
+  static const String colPauseEndMs = 'end_ms';
 
   // Index name
   static const String idxRunPointsRunIdSeq = 'idx_run_points_run_id_seq';
@@ -60,7 +66,8 @@ class AppDatabase {
   /// Opens the database at [path], or at the default databases directory.
   Future<Database> open({String? path}) async {
     final String databasesDirectory = await getDatabasesPath();
-    final String dbPath = path ??
+    final String dbPath =
+        path ??
         (databasesDirectory.endsWith('/') || databasesDirectory.endsWith('\\')
             ? '$databasesDirectory$databaseName'
             : '$databasesDirectory/$databaseName');
@@ -79,7 +86,7 @@ class AppDatabase {
     await db.execute('PRAGMA foreign_keys = ON;');
   }
 
-  /// Creates the initial database schema (version 1).
+  /// Creates the database schema for a new installation.
   static Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
       CREATE TABLE $tableRuns (
@@ -115,6 +122,15 @@ class AppDatabase {
         $colPointSeq
       );
     ''');
+
+    await db.execute('''
+      CREATE TABLE $tableRunPauses (
+        $colPauseRunId TEXT NOT NULL,
+        $colPauseStartMs INTEGER NOT NULL,
+        $colPauseEndMs INTEGER NOT NULL,
+        FOREIGN KEY ($colPauseRunId) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
+      );
+    ''');
   }
 
   /// Handles schema migrations for future database versions.
@@ -123,7 +139,16 @@ class AppDatabase {
     int oldVersion,
     int newVersion,
   ) async {
-    // Schema migration logic will be added here when databaseVersion increments.
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE $tableRunPauses (
+          $colPauseRunId TEXT NOT NULL,
+          $colPauseStartMs INTEGER NOT NULL,
+          $colPauseEndMs INTEGER NOT NULL,
+          FOREIGN KEY ($colPauseRunId) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
+        );
+      ''');
+    }
   }
 
   /// Closes the underlying database connection.

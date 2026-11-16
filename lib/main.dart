@@ -13,6 +13,7 @@ import 'domain/stats/stats.dart';
 import 'features/app_strings.dart';
 import 'features/history/history_run.dart';
 import 'features/history/history_screen.dart';
+import 'features/history/history_summary.dart';
 import 'features/home/home_screen.dart';
 import 'features/home/widgets/sky_header.dart' show HeaderIconButton;
 import 'features/permissions/permission_gateway.dart';
@@ -415,12 +416,16 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     }
   }
 
-  Future<void> _openHistory({bool replaceCurrent = false}) async {
+  Future<void> _openHistory({
+    bool replaceCurrent = false,
+    DateTime? referenceDate,
+  }) async {
     final route = MaterialPageRoute<void>(
       builder: (context) => _HistoryRouteScreen(
         repository: _repository,
         runsRevision: _runsRevision,
         formatter: _formatter,
+        referenceDate: referenceDate,
         onRunSelected: (runId) {
           unawaited(_openSummaryForRunId(runId, fromHistory: true));
         },
@@ -478,13 +483,14 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     final Run? run = await _repository.get(runId);
     if (run == null) return null;
     final List<Point> points = await _repository.getPoints(runId);
+    final List<PauseInterval> pauses = await _repository.getPauses(runId);
 
     final List<RoutePoint> route = points
         .where((p) => p.accepted)
         .map((p) => RoutePoint(lat: p.lat, lon: p.lon, speedMps: p.speedMps))
         .toList();
 
-    final List<Split> allSplits = computeSplits(points);
+    final List<Split> allSplits = computeSplits(points, pauses: pauses);
     final List<Split> fullSplits =
         allSplits.where((s) => !s.isPartial).toList();
     final Split? partial = allSplits.where((s) => s.isPartial).lastOrNull;
@@ -677,6 +683,7 @@ class _HistoryRouteScreen extends StatefulWidget {
     required this.onOpenHome,
     required this.onOpenSettings,
     required this.onStartRun,
+    this.referenceDate,
   });
 
   final RunRepository repository;
@@ -687,6 +694,7 @@ class _HistoryRouteScreen extends StatefulWidget {
   final VoidCallback onOpenHome;
   final VoidCallback onOpenSettings;
   final VoidCallback onStartRun;
+  final DateTime? referenceDate;
 
   @override
   State<_HistoryRouteScreen> createState() => _HistoryRouteScreenState();
@@ -755,46 +763,25 @@ class _HistoryRouteScreenState extends State<_HistoryRouteScreen> {
     }
   }
 
-  HistoryMonthlySummary _summarizeMonth(
-    List<HistoryRun> runs,
-    DateTime monthStart,
-  ) {
-    final DateTime monthEnd = DateTime(monthStart.year, monthStart.month + 1);
-    int totalRuns = 0;
-    double totalDistanceM = 0.0;
-    int totalMovingMs = 0;
-    for (final HistoryRun run in runs) {
-      final DateTime localStart = run.startedAt.toLocal();
-      if (!localStart.isBefore(monthStart) && localStart.isBefore(monthEnd)) {
-        totalRuns++;
-        totalDistanceM += run.distanceM ?? 0.0;
-        totalMovingMs += run.movingMs ?? 0;
-      }
-    }
-    final String monthLabel =
-        '${AppStrings.monthsShort[monthStart.month - 1]} ${monthStart.year}';
-    return HistoryMonthlySummary(
-      monthLabel: monthLabel,
-      totalRuns: totalRuns,
-      totalDistanceM: totalDistanceM,
-      totalMovingMs: totalMovingMs,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final DateTime now = DateTime.now().toLocal();
+    final DateTime now = (widget.referenceDate ?? DateTime.now()).toLocal();
     final DateTime thisMonthStart = DateTime(now.year, now.month);
     final DateTime lastMonthStart = DateTime(now.year, now.month - 1);
 
     return HistoryScreen(
       runs: _runs,
       formatter: widget.formatter,
+      referenceDate: widget.referenceDate,
       isLoading: _isLoading,
       hasError: _hasError,
       onRetry: () => unawaited(_loadRuns()),
-      thisMonthSummary: _hasError ? null : _summarizeMonth(_runs, thisMonthStart),
-      lastMonthSummary: _hasError ? null : _summarizeMonth(_runs, lastMonthStart),
+      thisMonthSummary: _hasError
+          ? null
+          : computeMonthlySummary(_runs, thisMonthStart),
+      lastMonthSummary: _hasError
+          ? null
+          : computeMonthlySummary(_runs, lastMonthStart),
       onRunSelected: widget.onRunSelected,
       onBackToHome: widget.onBackToHome,
       onOpenHome: widget.onOpenHome,
