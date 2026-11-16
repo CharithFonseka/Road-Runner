@@ -97,4 +97,29 @@ class GpsFilterTest {
         assertTrue(afterGap.accepted)
         assertTrue(afterGap.addedDistanceM > 30.0)
     }
+
+    @Test
+    fun debugFilterAcceptsMockFixesButStillRejectsBadFixes() {
+        val filter = GpsFilter(allowMockLocations = true)
+        assertTrue(filter.evaluate(fix(1_000, mock = true)).accepted)
+        assertEquals(
+            RejectionReason.POOR_ACCURACY,
+            filter.evaluate(
+                fix(2_000, accuracyM = 25.1, mock = true)
+            ).reason,
+        )
+
+        val moved = filter.evaluate(
+            fix(3_000, lon = 79.86123, mock = true)
+        )
+        assertTrue(moved.accepted)
+        assertTrue(moved.addedDistanceM > 0.0)
+
+        assertEquals(
+            RejectionReason.IMPOSSIBLE_JUMP,
+            filter.evaluate(
+                fix(4_000, lon = 79.87123, mock = true)
+            ).reason,
+        )
+    }
 }

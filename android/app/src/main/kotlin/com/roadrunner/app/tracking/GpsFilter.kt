@@ -30,7 +30,9 @@ data class FilterDecision(
     val reason: RejectionReason? = null,
 )
 
-class GpsFilter {
+class GpsFilter(
+    private val allowMockLocations: Boolean = false,
+) {
     private var lastAccepted: GpsFix? = null
     private var firstFixAfterResume = false
 
@@ -46,7 +48,7 @@ class GpsFilter {
         if (!isValid(fix)) {
             return rejected(RejectionReason.INVALID_FIX)
         }
-        if (fix.isMock) {
+        if (fix.isMock && !allowMockLocations) {
             return rejected(RejectionReason.MOCK_LOCATION)
         }
         if (fix.accM > FilterConfig.MAX_ACCURACY_M) {
