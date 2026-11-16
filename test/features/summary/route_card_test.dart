@@ -35,17 +35,26 @@ double _contrast(Color a, Color b) {
   return (la > lb ? la + 0.05 : lb + 0.05) / (la > lb ? lb + 0.05 : la + 0.05);
 }
 
-Future<void> _pump(WidgetTester tester, List<RoutePoint> route) async {
+Future<void> _pump(
+  WidgetTester tester,
+  List<RoutePoint> route, {
+  Size size = const Size(360, 800),
+  double textScale = 1.0,
+}) async {
   tester.view.devicePixelRatio = 3.0;
-  tester.view.physicalSize = const Size(360, 800) * 3.0;
+  tester.view.physicalSize = size * 3.0;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.light(),
-      home: SummaryScreen(
-        summary: RunSummary(runId: 'r', route: route),
-        onBackToHome: () {},
-        onOpenHistory: () {},
+      home: MediaQuery.withClampedTextScaling(
+        minScaleFactor: textScale,
+        maxScaleFactor: textScale,
+        child: SummaryScreen(
+          summary: RunSummary(runId: 'r', route: route),
+          onBackToHome: () {},
+          onOpenHistory: () {},
+        ),
       ),
     ),
   );
@@ -285,5 +294,47 @@ void main() {
       expect(find.byKey(const Key('summary.route.scaleBar')), findsNothing);
       expect(find.text(AppStrings.routeGridNote), findsNothing);
     });
+
+    // Phase 2B.3: legend and scale pill at small sizes and large text.
+    for (final (Size size, double scale) in [
+      (const Size(320, 568), 1.0),
+      (const Size(320, 568), 1.3),
+      (const Size(360, 800), 1.3),
+    ]) {
+      for (final bool withSpeed in [true, false]) {
+        testWidgets(
+          '${size.width.toInt()}x${size.height.toInt()} at ${scale}x, '
+          '${withSpeed ? 'bands and gap' : 'no speed'}: no overflow',
+          (tester) async {
+            await _pump(
+              tester,
+              [
+                ..._line(6, speed: withSpeed ? 2 : null),
+                ..._line(6, lat0: 0.01, speed: withSpeed ? 3 : null),
+              ],
+              size: size,
+              textScale: scale,
+            );
+            await tester.ensureVisible(find.text(AppStrings.routeGridNote));
+            await tester.pump();
+            expect(tester.takeException(), isNull);
+            final Rect map = tester.getRect(
+              find.byKey(SummaryScreen.routeAreaKey),
+            );
+            final Rect bar = tester.getRect(
+              find.byKey(const Key('summary.route.scaleBar')),
+            );
+            expect(map.contains(bar.topLeft), isTrue);
+            expect(map.contains(bar.bottomRight), isTrue);
+            expect(
+              find.text(
+                withSpeed ? AppStrings.routeSteady : AppStrings.routeNoSpeed,
+              ),
+              findsOneWidget,
+            );
+          },
+        );
+      }
+    }
   });
 }

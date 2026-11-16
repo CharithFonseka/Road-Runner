@@ -1,4 +1,4 @@
-// Road Runner — Run Summary screen (UI kit Revision 5, Phase 2B.1).
+// Road Runner — Run Summary screen (UI kit Revision 5, Phases 2B.1–2B.2).
 // Owner: Tharushi
 // SRS reference: Section 8.4, FR-50, FR-51, FR-52, NFR-09, NFR-14
 //
@@ -7,8 +7,6 @@
 // fastest split come from the data/stats layer via the integrator. The
 // screen never calculates them. Navigation is the parent's job; there is
 // no navigation drawer here (Summary is reached from a run or History).
-//
-// The route card is unchanged in this phase (its redesign is Phase 2B.2).
 
 import 'package:flutter/material.dart';
 
@@ -1173,10 +1171,11 @@ class _LoadingBody extends StatelessWidget {
                   children: [
                     _block(110, 18),
                     const SizedBox(height: AppSpacing.itemGap),
+                    // Same size as the real map, so nothing jumps on load.
                     _block(
                       c.maxWidth,
-                      (c.maxWidth * 0.85).clamp(220.0, 360.0),
-                      radius: AppSpacing.radiusTile,
+                      (c.maxWidth * _RouteCard._mapAspect).clamp(220.0, 360.0),
+                      radius: 14,
                     ),
                   ],
                 ),

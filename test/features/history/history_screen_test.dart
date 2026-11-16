@@ -587,5 +587,63 @@ void main() {
         });
       }
     }
+
+    // Phase 2B.3: every non-list state at the same sizes.
+    final HistoryMonthlySummary longSummary = const HistoryMonthlySummary(
+      monthLabel: 'November 2026',
+      totalRuns: 23,
+      totalDistanceM: 187450,
+      totalMovingMs: (19 * 3600 + 42 * 60 + 7) * 1000,
+    );
+    final Map<String, Future<void> Function(WidgetTester, Size, double)>
+    states = {
+      'month summary': (t, size, scale) => _pump(
+        t,
+        [_older, _newest, _middle],
+        size: size,
+        textScale: scale,
+        referenceDate: DateTime(2026, 11, 16),
+        initialFilter: HistoryRunFilter.thisMonth,
+        thisMonthSummary: longSummary,
+      ),
+      'loading': (t, size, scale) =>
+          _pump(t, const [], size: size, textScale: scale, isLoading: true),
+      'error': (t, size, scale) => _pump(
+        t,
+        const [],
+        size: size,
+        textScale: scale,
+        hasError: true,
+        withRetryAction: true,
+      ),
+      'empty month with start': (t, size, scale) => _pump(
+        t,
+        [_october],
+        size: size,
+        textScale: scale,
+        referenceDate: DateTime(2026, 11, 16),
+        initialFilter: HistoryRunFilter.thisMonth,
+        withStartRunAction: true,
+      ),
+    };
+    for (final MapEntry<String, (Size, double)> s in sizes.entries) {
+      for (final MapEntry<
+            String,
+            Future<void> Function(WidgetTester, Size, double)
+          >
+          st
+          in states.entries) {
+        testWidgets('${s.key}, ${st.key}', (tester) async {
+          await st.value(tester, s.value.$1, s.value.$2);
+          expect(tester.takeException(), isNull);
+          await tester.drag(
+            find.byType(CustomScrollView),
+            const Offset(0, -600),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        });
+      }
+    }
   });
 }

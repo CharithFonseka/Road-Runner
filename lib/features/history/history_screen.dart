@@ -331,31 +331,48 @@ class _MonthlySummaryCard extends StatelessWidget {
           children: [
             const IconTile(icon: Icons.bar_chart_rounded),
             const SizedBox(width: AppSpacing.itemGap),
+            // Total time sits on the right, or wraps below the month on
+            // narrow phones with large text, so nothing overflows.
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: AppSpacing.small,
+                runSpacing: AppSpacing.small,
                 children: [
-                  Text(summary.monthLabel, style: AppTextStyles.sectionHeading),
-                  Text(
-                    AppStrings.historySummaryRunsDistance(
-                      summary.totalRuns,
-                      distance,
-                    ),
-                    style: AppTextStyles.caption,
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        summary.monthLabel,
+                        style: AppTextStyles.sectionHeading,
+                      ),
+                      Text(
+                        AppStrings.historySummaryRunsDistance(
+                          summary.totalRuns,
+                          distance,
+                        ),
+                        style: AppTextStyles.caption,
+                      ),
+                    ],
+                  ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        formatter.elapsed(summary.totalMovingMs),
+                        style: AppTextStyles.statValue,
+                      ),
+                      Text(
+                        AppStrings.historyTotalTime,
+                        style: AppTextStyles.caption,
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: AppSpacing.small),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  formatter.elapsed(summary.totalMovingMs),
-                  style: AppTextStyles.statValue,
-                ),
-                Text(AppStrings.historyTotalTime, style: AppTextStyles.caption),
-              ],
             ),
           ],
         ),
@@ -384,10 +401,7 @@ class _HistoryLoadingState extends StatelessWidget {
         children: [
           const _HistorySkeletonSummary(),
           const SizedBox(height: AppSpacing.itemGap),
-          _HistoryFilterBar(
-            selected: selected,
-            onSelected: onSelected,
-          ),
+          _HistoryFilterBar(selected: selected, onSelected: onSelected),
           const SizedBox(height: AppSpacing.itemGap),
           for (int i = 0; i < 3; i++) ...[
             const _HistorySkeletonCard(),
