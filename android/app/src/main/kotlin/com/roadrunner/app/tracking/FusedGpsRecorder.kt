@@ -43,6 +43,8 @@ class FusedGpsRecorder(
     private val speedSmoother = LiveSpeedSmoother()
     private val clock = RunClock(startedAtMonotonicMs)
     private val stopping = AtomicBoolean(false)
+    private val simulator: DebugRouteSimulator? =
+        if (DebugRouteSimulator.isEnabled(appContext)) DebugRouteSimulator() else null
 
     private val wakeLock =
         (appContext.getSystemService(Context.POWER_SERVICE) as PowerManager)
@@ -81,6 +83,20 @@ class FusedGpsRecorder(
                 }
 
                 publishSnapshot()
+                worker.postDelayed(this, 1_000L)
+            } catch (error: Exception) {
+                fail(error)
+            }
+        }
+    }
+
+    private val simTick = object : Runnable {
+        override fun run() {
+            val activeSimulator = simulator ?: return
+            if (stopping.get() || clock.state != RunClockState.RUNNING) return
+
+            try {
+                record(activeSimulator.nextLocation(System.currentTimeMillis()))
                 worker.postDelayed(this, 1_000L)
             } catch (error: Exception) {
                 fail(error)
@@ -144,6 +160,8 @@ class FusedGpsRecorder(
     }
 
     private fun environmentProblem(): TrackingErrorCode? {
+        if (simulator != null) return null
+
         val hasFineLocation =
             appContext.checkSelfPermission(
                 Manifest.permission.ACCESS_FINE_LOCATION
@@ -243,6 +261,7 @@ class FusedGpsRecorder(
                 runCatching { writer?.close() }
             } finally {
                 releaseWakeLock()
+                simulator?.close()
                 writer = null
                 workerThread.quitSafely()
 
@@ -256,6 +275,13 @@ class FusedGpsRecorder(
     }
 
     private fun requestUpdates() {
+        val activeSimulator = simulator
+        if (activeSimulator != null) {
+            activeSimulator.prepare()
+            worker.post(simTick)
+            return
+        }
+
         val callback = object : LocationCallback() {
             override fun onLocationAvailability(
                 availability: LocationAvailability,
@@ -324,6 +350,7 @@ class FusedGpsRecorder(
     }
 
     private fun removeUpdates() {
+        worker.removeCallbacks(simTick)
         val callback = activeCallback
         activeCallback = null
         callback?.let { locationClient.removeLocationUpdates(it) }
@@ -414,6 +441,22 @@ class FusedGpsRecorder(
             )
         } else {
             speedSmoother.rejected()
+        }
+
+        simulator?.let { activeSimulator ->
+            val nowMonotonicMs = SystemClock.elapsedRealtime()
+            val time = clock.snapshot(nowMonotonicMs)
+            val smoothed = speedSmoother.speedMps(nowMonotonicMs)
+            activeSimulator.reportTelemetry(
+                lat = fix.lat,
+                lon = fix.lon,
+                distanceM = distanceM,
+                movingMs = time.movingMs,
+                smoothedSpeedMps = smoothed,
+                paceSecPerKm = LiveSpeedSmoother.paceSecPerKm(smoothed),
+                accepted = decision.accepted,
+                reason = decision.reason?.name,
+            )
         }
     }
 
