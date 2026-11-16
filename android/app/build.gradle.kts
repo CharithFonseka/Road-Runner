@@ -1,8 +1,26 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
+}
+
+val releaseStoreFilePath: String? = keystoreProperties.getProperty("storeFile")
+    ?: System.getenv("ROAD_RUNNER_KEYSTORE_FILE")
+val releaseStorePassword: String? = keystoreProperties.getProperty("storePassword")
+    ?: System.getenv("ROAD_RUNNER_KEYSTORE_PASSWORD")
+val releaseKeyAlias: String? = keystoreProperties.getProperty("keyAlias")
+    ?: System.getenv("ROAD_RUNNER_KEY_ALIAS")
+val releaseKeyPassword: String? = keystoreProperties.getProperty("keyPassword")
+    ?: System.getenv("ROAD_RUNNER_KEY_PASSWORD")
 
 android {
     namespace = "com.roadrunner.app"
@@ -25,10 +43,28 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (
+            !releaseStoreFilePath.isNullOrBlank() &&
+            !releaseStorePassword.isNullOrBlank() &&
+            !releaseKeyAlias.isNullOrBlank() &&
+            !releaseKeyPassword.isNullOrBlank()
+        ) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFilePath)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Signing with debug keys for now so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Uses external release keystore (android/key.properties or ROAD_RUNNER_* env vars)
+            // when configured; falls back to debug keys so local/CI builds without secrets work.
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
         }
     }
 }
