@@ -3,6 +3,7 @@
 // SRS reference: Section 8.5
 
 import 'package:road_runner/core/contract/contract.dart';
+import 'package:road_runner/data/run_name.dart';
 
 /// Represents a single completed workout summary stored in the SQLite `runs` table.
 class Run {
@@ -14,6 +15,11 @@ class Run {
   final double? avgPaceSecPerKm;
   final double? maxSpeedMps;
   final String status;
+  final String? name;
+  final String? placeName;
+  final double? weatherTempC;
+  final double? weatherWindKmh;
+  final int? weatherCode;
 
   const Run({
     required this.id,
@@ -24,7 +30,14 @@ class Run {
     this.avgPaceSecPerKm,
     this.maxSpeedMps,
     this.status = kStateSaved,
+    this.name,
+    this.placeName,
+    this.weatherTempC,
+    this.weatherWindKmh,
+    this.weatherCode,
   });
+
+  String get displayName => name ?? runName(startedAtUtcMs, placeName);
 
   /// Factory constructor to create a [Run] instance from a SQLite row map.
   factory Run.fromDbMap(Map<String, Object?> map) {
@@ -37,6 +50,11 @@ class Run {
       avgPaceSecPerKm: (map['avg_pace_sec_per_km'] as num?)?.toDouble(),
       maxSpeedMps: (map['max_speed_mps'] as num?)?.toDouble(),
       status: (map['status'] as String?) ?? kStateSaved,
+      name: map['name'] as String?,
+      placeName: map['place_name'] as String?,
+      weatherTempC: (map['weather_temp_c'] as num?)?.toDouble(),
+      weatherWindKmh: (map['weather_wind_kmh'] as num?)?.toDouble(),
+      weatherCode: (map['weather_code'] as num?)?.toInt(),
     );
   }
 
@@ -51,6 +69,11 @@ class Run {
       'avg_pace_sec_per_km': avgPaceSecPerKm,
       'max_speed_mps': maxSpeedMps,
       'status': status,
+      'name': name,
+      'place_name': placeName,
+      'weather_temp_c': weatherTempC,
+      'weather_wind_kmh': weatherWindKmh,
+      'weather_code': weatherCode,
     };
   }
 
@@ -64,6 +87,11 @@ class Run {
     double? avgPaceSecPerKm,
     double? maxSpeedMps,
     String? status,
+    String? name,
+    String? placeName,
+    double? weatherTempC,
+    double? weatherWindKmh,
+    int? weatherCode,
   }) {
     return Run(
       id: id ?? this.id,
@@ -74,6 +102,11 @@ class Run {
       avgPaceSecPerKm: avgPaceSecPerKm ?? this.avgPaceSecPerKm,
       maxSpeedMps: maxSpeedMps ?? this.maxSpeedMps,
       status: status ?? this.status,
+      name: name ?? this.name,
+      placeName: placeName ?? this.placeName,
+      weatherTempC: weatherTempC ?? this.weatherTempC,
+      weatherWindKmh: weatherWindKmh ?? this.weatherWindKmh,
+      weatherCode: weatherCode ?? this.weatherCode,
     );
   }
 
@@ -89,19 +122,29 @@ class Run {
           distanceM == other.distanceM &&
           avgPaceSecPerKm == other.avgPaceSecPerKm &&
           maxSpeedMps == other.maxSpeedMps &&
-          status == other.status;
+          status == other.status &&
+          name == other.name &&
+          placeName == other.placeName &&
+          weatherTempC == other.weatherTempC &&
+          weatherWindKmh == other.weatherWindKmh &&
+          weatherCode == other.weatherCode;
 
   @override
   int get hashCode => Object.hash(
-        id,
-        startedAtUtcMs,
-        endedAtUtcMs,
-        movingMs,
-        distanceM,
-        avgPaceSecPerKm,
-        maxSpeedMps,
-        status,
-      );
+    id,
+    startedAtUtcMs,
+    endedAtUtcMs,
+    movingMs,
+    distanceM,
+    avgPaceSecPerKm,
+    maxSpeedMps,
+    status,
+    name,
+    placeName,
+    weatherTempC,
+    weatherWindKmh,
+    weatherCode,
+  );
 
   @override
   String toString() {

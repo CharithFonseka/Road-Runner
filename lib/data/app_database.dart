@@ -7,12 +7,13 @@ import 'package:sqflite/sqflite.dart';
 /// Manages the SQLite database lifecycle, schema initialization, and connections.
 class AppDatabase {
   static const String databaseName = 'road_runner.db';
-  static const int databaseVersion = 2;
+  static const int databaseVersion = 3;
 
   // Table names
   static const String tableRuns = 'runs';
   static const String tableRunPoints = 'run_points';
   static const String tableRunPauses = 'run_pauses';
+  static const String tablePlaceCache = 'place_cache';
 
   // Runs table columns
   static const String colRunId = 'id';
@@ -23,6 +24,11 @@ class AppDatabase {
   static const String colAvgPaceSecPerKm = 'avg_pace_sec_per_km';
   static const String colMaxSpeedMps = 'max_speed_mps';
   static const String colStatus = 'status';
+  static const String colName = 'name';
+  static const String colPlaceName = 'place_name';
+  static const String colWeatherTempC = 'weather_temp_c';
+  static const String colWeatherWindKmh = 'weather_wind_kmh';
+  static const String colWeatherCode = 'weather_code';
 
   // Run points table columns
   static const String colPointRunId = 'run_id';
@@ -97,7 +103,12 @@ class AppDatabase {
         $colDistanceM REAL NOT NULL,
         $colAvgPaceSecPerKm REAL,
         $colMaxSpeedMps REAL,
-        $colStatus TEXT NOT NULL
+        $colStatus TEXT NOT NULL,
+        $colName TEXT,
+        $colPlaceName TEXT,
+        $colWeatherTempC REAL,
+        $colWeatherWindKmh REAL,
+        $colWeatherCode INTEGER
       );
     ''');
 
@@ -131,7 +142,15 @@ class AppDatabase {
         FOREIGN KEY ($colPauseRunId) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
       );
     ''');
+    await _createPlaceCache(db);
   }
+
+  static Future<void> _createPlaceCache(Database db) => db.execute('''
+    CREATE TABLE $tablePlaceCache (
+      coordinate_key TEXT PRIMARY KEY,
+      place_name TEXT NOT NULL
+    );
+  ''');
 
   /// Handles schema migrations for future database versions.
   static Future<void> _onUpgrade(
@@ -148,6 +167,20 @@ class AppDatabase {
           FOREIGN KEY ($colPauseRunId) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
         );
       ''');
+    }
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE $tableRuns ADD COLUMN $colName TEXT;');
+      await db.execute('ALTER TABLE $tableRuns ADD COLUMN $colPlaceName TEXT;');
+      await db.execute(
+        'ALTER TABLE $tableRuns ADD COLUMN $colWeatherTempC REAL;',
+      );
+      await db.execute(
+        'ALTER TABLE $tableRuns ADD COLUMN $colWeatherWindKmh REAL;',
+      );
+      await db.execute(
+        'ALTER TABLE $tableRuns ADD COLUMN $colWeatherCode INTEGER;',
+      );
+      await _createPlaceCache(db);
     }
   }
 

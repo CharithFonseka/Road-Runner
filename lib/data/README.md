@@ -19,6 +19,17 @@ SQLite storage layer via `sqflite`.
 | `avg_pace_sec_per_km` | REAL | nullable |
 | `max_speed_mps` | REAL | nullable |
 | `status` | TEXT | `'saved'` |
+| `name` | TEXT | offline time-of-day title, updated with place when available |
+| `place_name` | TEXT | optional cached Nominatim locality |
+| `weather_temp_c` | REAL | optional start-time hourly estimate |
+| `weather_wind_kmh` | REAL | optional start-time hourly estimate |
+| `weather_code` | INTEGER | optional Open-Meteo WMO code |
+
+Database version 3 adds these nullable columns to existing runs and creates
+`place_cache(coordinate_key, place_name)`. Existing runs and points are kept.
+The cache key rounds start coordinates to three decimals. Summary requests
+missing details once when opened, after the run has already been saved. Failed
+network requests leave the local run usable and can retry on a later opening.
 
 **`run_points` table**
 

@@ -201,6 +201,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
             distanceM: r.distanceM,
             movingMs: r.movingMs,
             averagePaceSecPerKm: r.avgPaceSecPerKm,
+            runName: r.displayName,
           ),
         )
         .toList();
@@ -565,6 +566,11 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
 
     return RunSummary(
       runId: run.id,
+      runName: run.displayName,
+      placeName: run.placeName,
+      weatherTempC: run.weatherTempC,
+      weatherWindKmh: run.weatherWindKmh,
+      weatherCode: run.weatherCode,
       startedAt: DateTime.fromMillisecondsSinceEpoch(
         run.startedAtUtcMs,
         isUtc: true,
@@ -582,6 +588,21 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
               durationMs: partial.durationMs,
             ),
     );
+  }
+
+  Future<RunSummary?> _enrichAndReloadSummary(String runId) async {
+    final repository = _repository;
+    if (repository is! SqliteRunRepository) return null;
+    try {
+      final points = await repository.getPoints(runId);
+      final start = points.where((p) => p.accepted).firstOrNull;
+      if (start == null) return null;
+      await repository.enrichDetails(runId, start);
+      await _refreshRecentRuns();
+      return await _loadRunSummary(runId);
+    } on Exception {
+      return null;
+    }
   }
 
   Future<void> _confirmAndDeleteRun(
@@ -648,46 +669,51 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     required bool fromHistory,
   }) {
     final double topInset = MediaQuery.paddingOf(context).top;
-    return Stack(
-      children: [
-        SummaryScreen(
-          summary: summary,
-          formatter: _formatter,
-          onBack: fromHistory
-              ? () => _navigatorKey.currentState?.maybePop()
-              : _popToHome,
-          onBackToHome: () {
-            _popToHome();
-            unawaited(_refreshRecentRuns());
-          },
-          onOpenHistory: () {
-            if (fromHistory) {
-              _navigatorKey.currentState?.pop();
-            } else {
+    return _SummaryDetailsLoader(
+      initialSummary: summary,
+      loadDetails: () => _enrichAndReloadSummary(summary.runId),
+      builder: (shownSummary) => Stack(
+        children: [
+          SummaryScreen(
+            summary: shownSummary,
+            enableStreetMap: true,
+            formatter: _formatter,
+            onBack: fromHistory
+                ? () => _navigatorKey.currentState?.maybePop()
+                : _popToHome,
+            onBackToHome: () {
               _popToHome();
-              unawaited(_openHistory());
-            }
-          },
-        ),
-        PositionedDirectional(
-          top: topInset + AppSpacing.small,
-          end: AppSpacing.medium,
-          child: Material(
-            type: MaterialType.transparency,
-            child: HeaderIconButton(
-              key: const Key('summary.delete'),
-              icon: Icons.delete_outline_rounded,
-              tooltip: 'Delete run',
-              onPressed: () => unawaited(
-                _confirmAndDeleteRun(
-                  summary.runId,
-                  fromHistory: fromHistory,
+              unawaited(_refreshRecentRuns());
+            },
+            onOpenHistory: () {
+              if (fromHistory) {
+                _navigatorKey.currentState?.pop();
+              } else {
+                _popToHome();
+                unawaited(_openHistory());
+              }
+            },
+          ),
+          PositionedDirectional(
+            top: topInset + AppSpacing.small,
+            end: AppSpacing.medium,
+            child: Material(
+              type: MaterialType.transparency,
+              child: HeaderIconButton(
+                key: const Key('summary.delete'),
+                icon: Icons.delete_outline_rounded,
+                tooltip: 'Delete run',
+                onPressed: () => unawaited(
+                  _confirmAndDeleteRun(
+                    summary.runId,
+                    fromHistory: fromHistory,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -745,6 +771,39 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
       ),
     );
   }
+}
+
+class _SummaryDetailsLoader extends StatefulWidget {
+  const _SummaryDetailsLoader({
+    required this.initialSummary,
+    required this.loadDetails,
+    required this.builder,
+  });
+
+  final RunSummary initialSummary;
+  final Future<RunSummary?> Function() loadDetails;
+  final Widget Function(RunSummary) builder;
+
+  @override
+  State<_SummaryDetailsLoader> createState() => _SummaryDetailsLoaderState();
+}
+
+class _SummaryDetailsLoaderState extends State<_SummaryDetailsLoader> {
+  late RunSummary _summary = widget.initialSummary;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final updated = await widget.loadDetails();
+    if (mounted && updated != null) setState(() => _summary = updated);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_summary);
 }
 
 class _HistoryRouteScreen extends StatefulWidget {
@@ -819,6 +878,7 @@ class _HistoryRouteScreenState extends State<_HistoryRouteScreen> {
               distanceM: r.distanceM,
               movingMs: r.movingMs,
               averagePaceSecPerKm: r.avgPaceSecPerKm,
+              runName: r.displayName,
             ),
           )
           .toList();

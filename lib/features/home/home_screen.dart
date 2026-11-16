@@ -115,6 +115,7 @@ class HomeScreen extends StatelessWidget {
           RecentRunRow(
             runId: run.runId,
             dateLabel: AppStrings.runDate(run.startedAt.toLocal()),
+            runName: run.runName,
             distance:
                 '${formatter.distanceKm(run.distanceM)} ${AppStrings.unitKm}',
             duration: formatter.elapsed(run.movingMs),

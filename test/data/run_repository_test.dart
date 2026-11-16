@@ -9,7 +9,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:road_runner/core/contract/contract.dart';
 import 'package:road_runner/data/app_database.dart';
 import 'package:road_runner/data/run.dart';
+import 'package:road_runner/data/run_details_service.dart';
 import 'package:road_runner/data/run_repository.dart';
+import 'package:road_runner/domain/stats/stats.dart';
 import 'package:sqflite/sqflite.dart';
 
 void main() {
@@ -375,6 +377,46 @@ void main() {
       expect(File(path!).existsSync(), isTrue);
       expect(path, contains('unfinished.jsonl'));
     });
+
+    test('online details persist and place lookup is reused from cache', () async {
+      final start = DateTime.utc(2024, 11, 16, 10, 20).millisecondsSinceEpoch;
+      for (final id in ['a', 'b']) {
+        await fakeDb.insert(
+          AppDatabase.tableRuns,
+          Run(
+            id: id,
+            startedAtUtcMs: start,
+            endedAtUtcMs: start + 1000,
+            movingMs: 1000,
+            distanceM: 10,
+          ).toDbMap(),
+        );
+      }
+      var placeCalls = 0;
+      final hour = DateTime.utc(2024, 11, 16, 10).millisecondsSinceEpoch ~/ 1000;
+      final service = RunDetailsService(loadJson: (uri, headers) async {
+        if (uri.host == 'nominatim.openstreetmap.org') {
+          placeCalls++;
+          return {'address': {'suburb': 'Parramatta'}};
+        }
+        return {
+          'hourly': {
+            'time': [hour],
+            'temperature_2m': [23.5],
+            'wind_speed_10m': [11.0],
+            'weather_code': [2],
+          },
+        };
+      });
+      final point = Point(tUtcMs: start, lat: -33.8154, lon: 151.0024);
+      final first = await repository.enrichDetails('a', point, service: service);
+      final second = await repository.enrichDetails('b', point, service: service);
+      expect(placeCalls, 1);
+      expect(first!.placeName, 'Parramatta');
+      expect(second!.displayName, contains('run in Parramatta'));
+      expect(second.weatherTempC, 23.5);
+      expect(fakeDb.tables[AppDatabase.tablePlaceCache], hasLength(1));
+    });
   });
 }
 
@@ -385,6 +427,7 @@ class FakeDatabase extends Fake implements Database {
     AppDatabase.tableRuns: [],
     AppDatabase.tableRunPoints: [],
     AppDatabase.tableRunPauses: [],
+    AppDatabase.tablePlaceCache: [],
   };
 
   @override
@@ -420,6 +463,9 @@ class FakeDatabase extends Fake implements Database {
       } else if (where.startsWith('run_id = ?')) {
         final runId = whereArgs.first;
         filtered = filtered.where((r) => r['run_id'] == runId).toList();
+      } else if (where.startsWith('coordinate_key = ?')) {
+        final key = whereArgs.first;
+        filtered = filtered.where((r) => r['coordinate_key'] == key).toList();
       }
     }
 
@@ -486,6 +532,23 @@ class FakeDatabase extends Fake implements Database {
 
   @override
   Batch batch() => FakeBatch(this);
+
+  @override
+  Future<int> update(
+    String table,
+    Map<String, Object?> values, {
+    String? where,
+    List<Object?>? whereArgs,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) async {
+    var changed = 0;
+    for (final row in tables[table]!) {
+      if (where == 'id = ?' && row['id'] != whereArgs?.first) continue;
+      row.addAll(values);
+      changed++;
+    }
+    return changed;
+  }
 }
 
 class FakeTransaction extends Fake implements Transaction {

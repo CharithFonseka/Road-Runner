@@ -27,12 +27,14 @@ class RecentRunRow {
     required this.distance,
     required this.duration,
     required this.pace,
+    this.runName,
   });
 
   /// Repository run ID, or null for rows without one (the legacy
   /// LastRunSummary input).
   final String? runId;
   final String dateLabel;
+  final String? runName;
   final String distance;
   final String duration;
   final String pace;
@@ -196,7 +198,9 @@ class _RunRow extends StatelessWidget {
       container: true,
       button: true,
       label: AppStrings.recentRunSemantics(
-        row.dateLabel,
+        row.runName == null
+            ? row.dateLabel
+            : '${row.runName}, ${row.dateLabel}',
         row.distance,
         row.duration,
         row.pace,
@@ -218,7 +222,7 @@ class _RunRow extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        row.dateLabel,
+                        row.runName ?? row.dateLabel,
                         style: AppTextStyles.of(context).body.copyWith(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -234,6 +238,8 @@ class _RunRow extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (row.runName != null)
+                  Text(row.dateLabel, style: AppTextStyles.of(context).caption),
                 const SizedBox(height: 6),
                 _Trio(
                   stats: [
@@ -261,12 +267,10 @@ class _Trio extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextScaler scaler = MediaQuery.textScalerOf(context);
-    final TextStyle valueStyle = AppTextStyles.of(
-      context,
-    ).statValue.copyWith(fontSize: 18);
-    final TextStyle labelStyle = AppTextStyles.of(
-      context,
-    ).caption.copyWith(fontSize: 12, fontWeight: FontWeight.normal);
+    final TextStyle valueStyle = AppTextStyles.of(context).statValue
+        .copyWith(fontSize: 18);
+    final TextStyle labelStyle = AppTextStyles.of(context).caption
+        .copyWith(fontSize: 12, fontWeight: FontWeight.normal);
     return LayoutBuilder(
       builder: (context, constraints) {
         const double gap = 8;

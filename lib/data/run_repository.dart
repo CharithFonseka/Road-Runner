@@ -8,6 +8,8 @@ import 'dart:io';
 import 'package:road_runner/core/contract/contract.dart';
 import 'package:road_runner/data/app_database.dart';
 import 'package:road_runner/data/run.dart';
+import 'package:road_runner/data/run_details_service.dart';
+import 'package:road_runner/data/run_name.dart';
 import 'package:road_runner/domain/stats/stats.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -141,10 +143,11 @@ class SqliteRunRepository implements RunRepository {
       );
     }
 
-        // 3. Compute running statistics using the pure Dart stats module.
+    // 3. Compute running statistics using the pure Dart stats module.
     // Start a new distance segment after every pause.
-    final List<Point> acceptedPoints =
-        points.where((point) => point.accepted).toList();
+    final List<Point> acceptedPoints = points
+        .where((point) => point.accepted)
+        .toList();
 
     double distanceM = 0.0;
     int pauseIndex = 0;
@@ -156,8 +159,7 @@ class SqliteRunRepository implements RunRepository {
           pauses[pauseIndex].endMs <= point.tUtcMs) {
         final pause = pauses[pauseIndex];
 
-        if (previousPoint != null &&
-            previousPoint.tUtcMs <= pause.startMs) {
+        if (previousPoint != null && previousPoint.tUtcMs <= pause.startMs) {
           previousPoint = null;
         }
 
@@ -165,7 +167,8 @@ class SqliteRunRepository implements RunRepository {
       }
 
       // Ignore points recorded during a pause.
-      final isInsidePause = pauseIndex < pauses.length &&
+      final isInsidePause =
+          pauseIndex < pauses.length &&
           point.tUtcMs >= pauses[pauseIndex].startMs &&
           point.tUtcMs < pauses[pauseIndex].endMs;
 
@@ -191,13 +194,12 @@ class SqliteRunRepository implements RunRepository {
       previousPoint = point;
     }
 
-    final int movingMs =
-        computeMovingMs(startedAtUtcMs, endedAtUtcMs, pauses);
+    final int movingMs = computeMovingMs(startedAtUtcMs, endedAtUtcMs, pauses);
 
-    final double? avgPaceSecPerKm =
-        computeAvgPaceSecPerKm(distanceM, movingMs);
+    final double? avgPaceSecPerKm = computeAvgPaceSecPerKm(distanceM, movingMs);
 
     final double? maxSpeedMps = computeMaxSpeedMps(points);
+    final existing = await get(runId);
     final run = Run(
       id: runId,
       startedAtUtcMs: startedAtUtcMs,
@@ -207,6 +209,11 @@ class SqliteRunRepository implements RunRepository {
       avgPaceSecPerKm: avgPaceSecPerKm,
       maxSpeedMps: maxSpeedMps,
       status: kStateSaved,
+      name: existing?.name ?? runName(startedAtUtcMs),
+      placeName: existing?.placeName,
+      weatherTempC: existing?.weatherTempC,
+      weatherWindKmh: existing?.weatherWindKmh,
+      weatherCode: existing?.weatherCode,
     );
 
     // 4. Save to SQLite in a single transaction with a Batch for points and pauses
@@ -266,6 +273,90 @@ class SqliteRunRepository implements RunRepository {
     );
     if (rows.isEmpty) return null;
     return Run.fromDbMap(rows.first);
+  }
+
+  /// Adds optional online details after the run has already been saved.
+  /// Failed lookups leave the local run and its route untouched.
+  Future<Run?> enrichDetails(
+    String runId,
+    Point startPoint, {
+    RunDetailsService? service,
+  }) async {
+    var run = await get(runId);
+    if (run == null) return null;
+    if (!startPoint.lat.isFinite ||
+        !startPoint.lon.isFinite ||
+        startPoint.lat < -90 ||
+        startPoint.lat > 90 ||
+        startPoint.lon < -180 ||
+        startPoint.lon > 180) {
+      return run;
+    }
+    final details = service ?? RunDetailsService();
+    final db = await _database.database;
+    final key =
+        '${startPoint.lat.toStringAsFixed(3)},'
+        '${startPoint.lon.toStringAsFixed(3)}';
+    if (run.placeName == null) {
+      try {
+        final cached = await db.query(
+          AppDatabase.tablePlaceCache,
+          columns: ['place_name'],
+          where: 'coordinate_key = ?',
+          whereArgs: [key],
+          limit: 1,
+        );
+        final place = cached.isNotEmpty
+            ? cached.first['place_name'] as String?
+            : await details.lookupPlace(startPoint.lat, startPoint.lon);
+        if (place != null && place.isNotEmpty) {
+          if (cached.isEmpty) {
+            await db.insert(AppDatabase.tablePlaceCache, {
+              'coordinate_key': key,
+              'place_name': place,
+            }, conflictAlgorithm: ConflictAlgorithm.ignore);
+          }
+          await db.update(
+            AppDatabase.tableRuns,
+            {
+              AppDatabase.colPlaceName: place,
+              AppDatabase.colName: runName(run.startedAtUtcMs, place),
+            },
+            where: '${AppDatabase.colRunId} = ?',
+            whereArgs: [runId],
+          );
+        }
+      } on Exception {
+        // Place lookup is optional and can be retried when Summary reopens.
+      }
+    }
+    if (run.weatherCode == null ||
+        run.weatherTempC == null ||
+        run.weatherWindKmh == null) {
+      try {
+        final weather = await details.lookupWeather(
+          startPoint.lat,
+          startPoint.lon,
+          run.startedAtUtcMs,
+        );
+        if (weather != null) {
+          await db.update(
+            AppDatabase.tableRuns,
+            {
+              AppDatabase.colWeatherTempC: weather.temperatureC,
+              AppDatabase.colWeatherWindKmh: weather.windKmh,
+              AppDatabase.colWeatherCode: weather.code,
+            },
+            where: '${AppDatabase.colRunId} = ?',
+            whereArgs: [runId],
+          );
+        }
+      } on Exception {
+        // Weather lookup is optional and can be retried when Summary reopens.
+      }
+    }
+    run = await get(runId);
+    return run;
   }
 
   @override
