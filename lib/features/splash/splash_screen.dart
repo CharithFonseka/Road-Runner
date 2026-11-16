@@ -21,12 +21,13 @@ class SplashScreen extends StatelessWidget {
 
   static const Key brandKey = Key('splash.brand');
   static const Key progressKey = Key('splash.progress');
+  static const Key spinnerKey = Key('splash.spinner');
   static const Key landscapeKey = Key('splash.landscape');
 
-  /// Arc shown instead of the spinning indicator when the user has asked
-  /// for reduced motion. It is a still shape, not a percentage, so it is
-  /// never announced as one.
-  static const double reducedMotionArc = 0.25;
+  static const Duration normalSpinDuration = Duration(seconds: 1);
+  static const Duration reducedMotionSpinDuration = Duration(
+    milliseconds: 2400,
+  );
 
   // Sky gradient from the UI kit splash. Artwork colours, not theme tokens.
   static const List<Color> _sky = [
@@ -125,7 +126,6 @@ class _Brand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Column(
       key: SplashScreen.brandKey,
       mainAxisSize: MainAxisSize.min,
@@ -174,21 +174,61 @@ class _Brand extends StatelessWidget {
           key: SplashScreen.progressKey,
           container: true,
           label: AppStrings.splashLoading,
-          child: ExcludeSemantics(
-            child: SizedBox.square(
-              dimension: _progressSize,
-              child: CircularProgressIndicator(
-                value: reduceMotion ? SplashScreen.reducedMotionArc : null,
-                strokeWidth: 4,
-                color: AppColors.burntOrangeDeep,
-                backgroundColor: reduceMotion
-                    ? AppColors.burntOrangeDeep.withValues(alpha: 0.2)
-                    : null,
-              ),
-            ),
-          ),
+          child: const ExcludeSemantics(child: _SplashSpinner()),
         ),
       ],
+    );
+  }
+}
+
+class _SplashSpinner extends StatefulWidget {
+  const _SplashSpinner();
+
+  @override
+  State<_SplashSpinner> createState() => _SplashSpinnerState();
+}
+
+class _SplashSpinnerState extends State<_SplashSpinner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rotation = AnimationController(
+    vsync: this,
+    duration: SplashScreen.normalSpinDuration,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final Duration duration = MediaQuery.disableAnimationsOf(context)
+        ? SplashScreen.reducedMotionSpinDuration
+        : SplashScreen.normalSpinDuration;
+    if (_rotation.duration == duration && _rotation.isAnimating) return;
+    _rotation
+      ..stop()
+      ..duration = duration
+      ..repeat();
+  }
+
+  @override
+  void dispose() {
+    _rotation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RotationTransition(
+      key: SplashScreen.spinnerKey,
+      turns: _rotation,
+      child: const SizedBox.square(
+        dimension: _Brand._progressSize,
+        child: CircularProgressIndicator(
+          value: 0.25,
+          strokeWidth: 4,
+          strokeCap: StrokeCap.round,
+          color: AppColors.burntOrangeDeep,
+          backgroundColor: Color(0x295B3A29),
+        ),
+      ),
     );
   }
 }

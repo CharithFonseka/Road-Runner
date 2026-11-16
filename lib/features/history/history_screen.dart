@@ -15,6 +15,7 @@ import '../app_strings.dart';
 import '../home/widgets/icon_tile.dart';
 import '../home/widgets/sky_header.dart';
 import '../shared/app_navigation_drawer.dart';
+import '../shared/skeleton_shimmer.dart';
 import '../run/live_run_formatter.dart';
 import '../run/widgets/live_stat.dart' show measureStatWidth;
 import 'history_run.dart';
@@ -397,17 +398,19 @@ class _HistoryLoadingState extends StatelessWidget {
       container: true,
       liveRegion: true,
       label: AppStrings.historyLoading,
-      child: Column(
-        children: [
-          const _HistorySkeletonSummary(),
-          const SizedBox(height: AppSpacing.itemGap),
-          _HistoryFilterBar(selected: selected, onSelected: onSelected),
-          const SizedBox(height: AppSpacing.itemGap),
-          for (int i = 0; i < 3; i++) ...[
-            const _HistorySkeletonCard(),
-            if (i < 2) const SizedBox(height: AppSpacing.itemGap),
+      child: SkeletonShimmer(
+        child: Column(
+          children: [
+            const _HistorySkeletonSummary(),
+            const SizedBox(height: AppSpacing.itemGap),
+            _HistoryFilterBar(selected: selected, onSelected: onSelected),
+            const SizedBox(height: AppSpacing.itemGap),
+            for (int i = 0; i < 3; i++) ...[
+              const _HistorySkeletonCard(),
+              if (i < 2) const SizedBox(height: AppSpacing.itemGap),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -498,12 +501,14 @@ class _SkeletonBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: AppColors.iconTile,
-        borderRadius: BorderRadius.circular(radius),
+    return SkeletonShimmerBlock(
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: AppColors.iconTile,
+          borderRadius: BorderRadius.circular(radius),
+        ),
       ),
     );
   }
