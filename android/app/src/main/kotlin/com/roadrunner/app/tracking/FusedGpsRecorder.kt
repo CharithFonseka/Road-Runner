@@ -44,7 +44,19 @@ class FusedGpsRecorder(
     private val clock = RunClock(startedAtMonotonicMs)
     private val stopping = AtomicBoolean(false)
     private val simulator: DebugRouteSimulator? =
-        if (DebugRouteSimulator.isEnabled(appContext)) DebugRouteSimulator() else null
+        if (DebugRouteSimulator.isEnabled(appContext)) {
+            DebugRouteSimulator(
+                onRouteChanged = {
+                    worker.post {
+                        if (!stopping.get()) {
+                            filter.markResumed()
+                        }
+                    }
+                },
+            )
+        } else {
+            null
+        }
 
     private val wakeLock =
         (appContext.getSystemService(Context.POWER_SERVICE) as PowerManager)
@@ -96,7 +108,12 @@ class FusedGpsRecorder(
             if (stopping.get() || clock.state != RunClockState.RUNNING) return
 
             try {
-                record(activeSimulator.nextLocation(System.currentTimeMillis()))
+                val location = activeSimulator.nextLocation(System.currentTimeMillis())
+                if (location != null) {
+                    record(location)
+                } else {
+                    TrackingApi.publishGps(GpsQuality.SEARCHING)
+                }
                 worker.postDelayed(this, 1_000L)
             } catch (error: Exception) {
                 fail(error)
@@ -447,9 +464,11 @@ class FusedGpsRecorder(
             val nowMonotonicMs = SystemClock.elapsedRealtime()
             val time = clock.snapshot(nowMonotonicMs)
             val smoothed = speedSmoother.speedMps(nowMonotonicMs)
+            val liveLat = lastAcceptedLat ?: fix.lat
+            val liveLon = lastAcceptedLon ?: fix.lon
             activeSimulator.reportTelemetry(
-                lat = fix.lat,
-                lon = fix.lon,
+                lat = liveLat,
+                lon = liveLon,
                 distanceM = distanceM,
                 movingMs = time.movingMs,
                 smoothedSpeedMps = smoothed,

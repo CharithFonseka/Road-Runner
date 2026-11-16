@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -9,8 +10,10 @@ import '../../core/theme/app_palette.dart';
 import '../../data/planned_route.dart';
 import '../../data/planned_route_repository.dart';
 import 'ors_directions_client.dart';
+import 'place_search_client.dart';
 
-/// Pick two map points, preview the walking route, then save or start a run.
+/// Pick two map points or search a destination, preview the walking route,
+/// then save or start a run.
 class RoutePlanningScreen extends StatefulWidget {
   const RoutePlanningScreen({
     super.key,
@@ -19,6 +22,7 @@ class RoutePlanningScreen extends StatefulWidget {
     required this.initialCenter,
     this.initialZoom = 13,
     this.styleFuture,
+    this.placeSearch,
     this.onStartRun,
   });
 
@@ -27,9 +31,12 @@ class RoutePlanningScreen extends StatefulWidget {
   final LatLng initialCenter;
   final double initialZoom;
   final Future<vt.Style>? styleFuture;
+  final PlaceSearchClient? placeSearch;
   final ValueChanged<PlannedRoute>? onStartRun;
 
   static const Key mapKey = Key('routePlanning.map');
+  static const Key searchFieldKey = Key('routePlanning.search');
+  static const Key nameFieldKey = Key('routePlanning.name');
   static const Key findKey = Key('routePlanning.find');
   static const Key saveKey = Key('routePlanning.save');
   static const Key startRunKey = Key('routePlanning.startRun');
@@ -43,6 +50,10 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
   final TextEditingController _name = TextEditingController(
     text: 'Planned route',
   );
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  late final PlaceSearchClient _placeSearch =
+      widget.placeSearch ?? PlaceSearchClient();
   late final Future<vt.Style> _style =
       widget.styleFuture ??
       vt.StyleReader(uri: 'https://tiles.openfreemap.org/styles/liberty')
@@ -51,30 +62,108 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
   LatLng? _start;
   LatLng? _finish;
   List<PlannedRoutePoint>? _preview;
+  List<PlaceSearchResult> _searchResults = const [];
+  Timer? _searchDebounce;
+  bool _searching = false;
+  int _searchSeq = 0;
   bool _busy = false;
   bool _mapReady = false;
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _controller.dispose();
     _name.dispose();
+    _searchController.dispose();
+    _searchFocus.dispose();
     _style.then((style) => style.dispose()).ignore();
     super.dispose();
   }
 
   void _selectPoint(LatLng point) {
-    final shouldFetch = _start != null && _finish == null;
+    _searchFocus.unfocus();
+    var shouldFetch = false;
     setState(() {
-      if (_start == null || _finish != null) {
+      _searchResults = const [];
+      if (_start == null && _finish != null) {
+        _start = point;
+        shouldFetch = true;
+      } else if (_start == null || _finish != null) {
         _start = point;
         _finish = null;
       } else {
         _finish = point;
+        shouldFetch = true;
       }
       _preview = null;
     });
     if (shouldFetch) {
       unawaited(_findRoute());
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    if (value.trim().length < 2) {
+      setState(() {
+        _searchSeq++;
+        _searching = false;
+        _searchResults = const [];
+      });
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      unawaited(_runSearch(value));
+    });
+  }
+
+  Future<void> _runSearch(String query, {bool showError = false}) async {
+    final trimmed = query.trim();
+    if (trimmed.length < 2) return;
+    final seq = ++_searchSeq;
+    setState(() => _searching = true);
+    try {
+      final bias = _mapReady ? _controller.camera.center : widget.initialCenter;
+      final results = await _placeSearch.search(trimmed, biasCenter: bias);
+      if (!mounted || seq != _searchSeq) return;
+      setState(() {
+        _searchResults = results;
+        _searching = false;
+      });
+    } catch (error) {
+      if (!mounted || seq != _searchSeq) return;
+      setState(() {
+        _searchResults = const [];
+        _searching = false;
+      });
+      if (showError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not search places: $error')),
+        );
+      }
+    }
+  }
+
+  void _selectDestination(PlaceSearchResult result) {
+    _searchDebounce?.cancel();
+    _searchFocus.unfocus();
+    setState(() {
+      _finish = result.location;
+      _preview = null;
+      _searchResults = const [];
+      _searching = false;
+      _searchController.text = result.name;
+      if (_name.text.trim().isEmpty || _name.text == 'Planned route') {
+        _name.text = 'Run to ${result.name}';
+      }
+    });
+    if (_start != null) {
+      unawaited(_findRoute());
+    } else if (_mapReady) {
+      _controller.move(
+        result.location,
+        math.max(_controller.camera.zoom, 14),
+      );
     }
   }
 
@@ -240,13 +329,102 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                   ),
                   if (styleSnapshot.hasError)
                     Positioned(
-                      top: 8,
-                      left: 8,
+                      top: 68,
+                      left: 12,
                       child: _MapNote(
                         'Street map unavailable',
                         palette: palette,
                       ),
                     ),
+                  Positioned(
+                    top: 10,
+                    left: 12,
+                    right: 12,
+                    child: Material(
+                      elevation: 3,
+                      borderRadius: BorderRadius.circular(12),
+                      color: palette.surface,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextField(
+                            key: RoutePlanningScreen.searchFieldKey,
+                            controller: _searchController,
+                            focusNode: _searchFocus,
+                            textInputAction: TextInputAction.search,
+                            onChanged: _onSearchChanged,
+                            onSubmitted: (value) =>
+                                unawaited(_runSearch(value, showError: true)),
+                            decoration: InputDecoration(
+                              hintText: 'Search destination (e.g. park, road)',
+                              prefixIcon: const Icon(Icons.search),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 14,
+                              ),
+                              suffixIcon: _searching
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    )
+                                  : _searchController.text.isNotEmpty
+                                  ? IconButton(
+                                      tooltip: 'Clear search',
+                                      icon: const Icon(Icons.close),
+                                      onPressed: () {
+                                        _searchDebounce?.cancel();
+                                        setState(() {
+                                          _searchController.clear();
+                                          _searchResults = const [];
+                                          _searching = false;
+                                        });
+                                      },
+                                    )
+                                  : null,
+                            ),
+                          ),
+                          if (_searchResults.isNotEmpty)
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 200),
+                              child: ListView.separated(
+                                shrinkWrap: true,
+                                padding: EdgeInsets.zero,
+                                itemCount: _searchResults.length,
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final item = _searchResults[index];
+                                  return ListTile(
+                                    dense: true,
+                                    leading: const Icon(Icons.place_outlined),
+                                    title: Text(
+                                      item.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: item.subtitle.isEmpty
+                                        ? null
+                                        : Text(
+                                            item.subtitle,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                    onTap: () => _selectDestination(item),
+                                  );
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                   Positioned(
                     bottom: 6,
                     left: 6,
@@ -274,9 +452,14 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                   Text(
                     preview != null
                         ? 'Route ready · ${_routeDistanceKm(preview).toStringAsFixed(2)} km'
-                        : 'Tap the map for start, then tap for finish.',
+                        : _start == null && _finish != null
+                        ? 'Destination set. Tap the map to set your start point.'
+                        : _start != null && _finish == null
+                        ? 'Start set. Tap the map or search for a destination.'
+                        : 'Tap the map for start, then tap or search for a destination.',
                   ),
                   TextField(
+                    key: RoutePlanningScreen.nameFieldKey,
                     controller: _name,
                     decoration: const InputDecoration(labelText: 'Route name'),
                   ),
@@ -289,11 +472,16 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                       OutlinedButton(
                         onPressed: _busy
                             ? null
-                            : () => setState(() {
-                                _start = null;
-                                _finish = null;
-                                _preview = null;
-                              }),
+                            : () {
+                                _searchDebounce?.cancel();
+                                setState(() {
+                                  _start = null;
+                                  _finish = null;
+                                  _preview = null;
+                                  _searchResults = const [];
+                                  _searchController.clear();
+                                });
+                              },
                         child: const Text('Clear'),
                       ),
                       FilledButton.tonal(
