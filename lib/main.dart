@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Split;
+import 'package:flutter/services.dart';
 
 import 'bridge/native_tracking_bridge.dart';
 import 'bridge/tracking_bridge.dart';
 import 'core/contract/contract.dart';
+import 'core/theme/app_palette.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_theme.dart';
 import 'data/run.dart';
@@ -647,6 +649,29 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
       title: AppStrings.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: AppTheme.themeMode,
+      builder: (context, child) {
+        final AppPalette palette = context.palette;
+        final bool isDark = palette.isDark;
+        final SystemUiOverlayStyle overlayStyle =
+            (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+                .copyWith(
+                  statusBarColor: Colors.transparent,
+                  statusBarIconBrightness:
+                      isDark ? Brightness.light : Brightness.dark,
+                  statusBarBrightness:
+                      isDark ? Brightness.dark : Brightness.light,
+                  systemNavigationBarColor: palette.background,
+                  systemNavigationBarDividerColor: Colors.transparent,
+                  systemNavigationBarIconBrightness:
+                      isDark ? Brightness.light : Brightness.dark,
+                );
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: overlayStyle,
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: ListenableBuilder(
         listenable: _shellRevision,
         builder: (context, _) {
