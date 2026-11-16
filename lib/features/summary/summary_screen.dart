@@ -20,7 +20,9 @@ import '../run/live_run_formatter.dart';
 import '../shared/app_navigation_drawer.dart' show DrawerLandscapePainter;
 import '../shared/skeleton_shimmer.dart';
 import 'run_summary.dart';
+import 'weather_description.dart';
 import 'widgets/route_painter.dart';
+import 'widgets/street_route_map.dart';
 
 class SummaryScreen extends StatefulWidget {
   const SummaryScreen({
@@ -32,6 +34,7 @@ class SummaryScreen extends StatefulWidget {
     this.onBack,
     this.isLoading = false,
     this.onDeleteRun,
+    this.enableStreetMap = false,
   });
 
   final RunSummary summary;
@@ -53,6 +56,9 @@ class SummaryScreen extends StatefulWidget {
   /// Deletes this run through the app shell. The caller must delete persisted
   /// data, refresh Home/History, and navigate only after deletion succeeds.
   final Future<void> Function(String runId)? onDeleteRun;
+
+  /// Enabled by the app shell. Component tests may use the offline route art.
+  final bool enableStreetMap;
 
   static const Key homeButtonKey = Key('summary.home');
   static const Key historyButtonKey = Key('summary.history');
@@ -150,8 +156,16 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       summary: widget.summary,
                       formatter: widget.formatter,
                     ),
+                    if (widget.summary.runName != null ||
+                        widget.summary.weatherCode != null) ...[
+                      const SizedBox(height: 10),
+                      _RunDetailsCard(summary: widget.summary),
+                    ],
                     const SizedBox(height: 10),
-                    _RouteCard(route: widget.summary.route),
+                    _RouteCard(
+                      route: widget.summary.route,
+                      enableStreetMap: widget.enableStreetMap,
+                    ),
                     const SizedBox(height: 10),
                     _SplitsCard(
                       summary: widget.summary,
@@ -575,9 +589,10 @@ class _StatLine extends StatelessWidget {
 /// route on a casing underlay, a scale pill, then the legend. All map
 /// colours come from the active [AppPalette] (navy map at night).
 class _RouteCard extends StatelessWidget {
-  const _RouteCard({required this.route});
+  const _RouteCard({required this.route, required this.enableStreetMap});
 
   final List<RoutePoint> route;
+  final bool enableStreetMap;
 
   /// Kit map is 328 × 232.
   static const double _mapAspect = 232 / 328;
@@ -626,11 +641,20 @@ class _RouteCard extends StatelessWidget {
                     height: height,
                     color: palette.mapBackground,
                     child: drawable
-                        ? _RouteMap(
-                            route: route,
-                            size: Size(c.maxWidth, height),
-                            speed: speed,
-                          )
+                        ? enableStreetMap
+                              ? StreetRouteMap(
+                                  route: route,
+                                  fallback: _RouteMap(
+                                    route: route,
+                                    size: Size(c.maxWidth, height),
+                                    speed: speed,
+                                  ),
+                                )
+                              : _RouteMap(
+                                  route: route,
+                                  size: Size(c.maxWidth, height),
+                                  speed: speed,
+                                )
                         : const _RouteTooShort(),
                   ),
                 );
@@ -639,6 +663,62 @@ class _RouteCard extends StatelessWidget {
             if (drawable) ...[
               const SizedBox(height: AppSpacing.itemGap),
               _RouteLegend(speed: speed, gaps: gaps),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RunDetailsCard extends StatelessWidget {
+  const _RunDetailsCard({required this.summary});
+
+  final RunSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    final text = AppTextStyles.of(context);
+    final hasWeather =
+        summary.weatherCode != null &&
+        summary.weatherTempC != null &&
+        summary.weatherWindKmh != null;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (summary.runName != null)
+              Text(summary.runName!, style: text.sectionHeading),
+            if (hasWeather) ...[
+              const SizedBox(height: AppSpacing.small),
+              Wrap(
+                spacing: AppSpacing.medium,
+                runSpacing: AppSpacing.small,
+                children: [
+                  Text(
+                    weatherDescription(summary.weatherCode!),
+                    style: text.body,
+                  ),
+                  Text('${summary.weatherTempC!.round()} °C', style: text.body),
+                  Text(
+                    'Wind ${summary.weatherWindKmh!.round()} km/h',
+                    style: text.body,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.small),
+              Text('Weather near start · Open-Meteo', style: text.caption),
+            ],
+            if (summary.placeName != null) ...[
+              const SizedBox(height: AppSpacing.small),
+              Text(
+                'Place data © OpenStreetMap',
+                style: text.caption.copyWith(color: palette.textSecondary),
+              ),
             ],
           ],
         ),

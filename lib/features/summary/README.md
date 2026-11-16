@@ -13,6 +13,7 @@ SummaryScreen(
   onBack: () {},              // header Back; null uses onBackToHome
   isLoading: false,           // true shows loading skeletons, static with reduced motion
   onDeleteRun: _deleteAndRefreshRun, // absent hides Delete Run
+  enableStreetMap: true,     // app shell enables OpenFreeMap streets
 )
 ```
 
@@ -45,7 +46,8 @@ route.
 - **Statistics:** Distance, Moving time, Average pace and Average speed, side by side with hairline dividers.
   - On narrow screens or with large text, the strip becomes a 2 × 2 grid, then one stat per line. Values are never cut off.
   - Missing or invalid values show the formatter's placeholder, such as `--.- km/h`, and are spoken as "not available".
-- **Route:** unchanged in this phase; the redesign is Phase 2B.2. The too-short state now also says why: fewer than two distinct GPS points.
+- **Route:** the app shell shows the locally saved GPS route on OpenFreeMap streets. The existing drawn route remains visible while the style loads or when it is unavailable. The too-short state still explains when there are fewer than two distinct GPS points.
+- **Run details:** an offline time-of-day name is updated with a cached locality when available. Temperature, wind, and conditions are displayed from the Open-Meteo hour nearest the start time. These details are optional and never block saving or opening a run.
 - **Splits:**
   - one row per full kilometre, showing that kilometre's time;
   - the split flagged `isFastest` gets a tinted row and a FASTEST label;
@@ -67,10 +69,12 @@ route.
 | `splits` | `computeSplits(points)`, full kilometres only |
 | `SplitSummary.isFastest` | set by the integrator on the full split with the lowest `durationMs` |
 | `partialSplit` | **new, optional.** The `Split` with `isPartial == true` from `computeSplits`, mapped to `PartialSplitSummary(distanceM, durationMs)` |
+| `runName`, `placeName` | saved run name and locality; local time-of-day name when no place is available |
+| `weatherTempC`, `weatherWindKmh`, `weatherCode` | optional saved Open-Meteo hourly result |
 
 ### Integration follow-up (Charith / Praveen)
 
-`main.dart` currently drops the partial split (`.where((s) => !s.isPartial)`), so the partial row never appears in the app. To show it, pass it in `_loadRunSummary`:
+`main.dart` passes the partial split through `_loadRunSummary`:
 
 ```dart
 final Split? partial =

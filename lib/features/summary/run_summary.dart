@@ -73,9 +73,19 @@ class RunSummary {
     this.route = const [],
     this.splits = const [],
     this.partialSplit,
+    this.runName,
+    this.placeName,
+    this.weatherTempC,
+    this.weatherWindKmh,
+    this.weatherCode,
   });
 
   final String runId;
+  final String? runName;
+  final String? placeName;
+  final double? weatherTempC;
+  final double? weatherWindKmh;
+  final int? weatherCode;
 
   /// Start of the run. Shown in the phone's local time.
   final DateTime? startedAt;

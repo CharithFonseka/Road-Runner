@@ -607,7 +607,9 @@ class _RunCard extends StatelessWidget {
       container: true,
       button: true,
       label: AppStrings.historyRunSemantics(
-        AppStrings.historyDateTime(date, time),
+        run.runName == null
+            ? AppStrings.historyDateTime(date, time)
+            : '${run.runName}, ${AppStrings.historyDateTime(date, time)}',
         distance,
         duration,
         pace,
@@ -637,9 +639,11 @@ class _RunCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              date,
+                              run.runName ?? date,
                               style: text.sectionHeading.copyWith(fontSize: 19),
                             ),
+                            if (run.runName != null)
+                              Text(date, style: text.caption),
                           ],
                         ),
                       ),
