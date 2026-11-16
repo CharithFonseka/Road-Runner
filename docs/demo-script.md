@@ -76,4 +76,4 @@ SRS reference: Section 1.2, Section 5, Section 8.1
 
 1. **Indoors GPS behavior:** Show how `GpsFilter` properly displays `"Finding GPS"` (`FR-16`) instead of hallucinating noisy indoor fixes.
 2. **Pre-recorded Outdoor Proof:** Immediately switch to the real outdoor field-test run in History (and play the recorded lock-screen / field-test screen recording) and share the exact measured accuracy & battery figures from `docs/test-logs/field-test-log.md` and `battery-test-log.md`.
-3. **Architecture & QA Proof:** Show `bash scripts/check_contract.sh` (`64/64` constants verified), unit tests (`flutter test` & `./gradlew testDebugUnitTest`), and the release manifest check (`TC-13`) confirming zero `INTERNET` permission.
+3. **Architecture & QA Proof:** Show `bash scripts/check_contract.sh` (`75/75` constants verified), unit tests (`flutter test` & `./gradlew testDebugUnitTest`), and the release manifest check (`TC-13` / `NFR-07`) confirming `allowBackup="false"`, `exported="false"`, and only approved free-tier network usage.

@@ -3,7 +3,7 @@
 // SRS reference: Section 8.5
 
 import 'package:road_runner/core/contract/contract.dart';
-import 'package:road_runner/data/run_name.dart';
+import 'package:road_runner/domain/run_name.dart';
 
 /// Represents a single completed workout summary stored in the SQLite `runs` table.
 class Run {
@@ -15,11 +15,22 @@ class Run {
   final double? avgPaceSecPerKm;
   final double? maxSpeedMps;
   final String status;
-  final String? name;
+  final String? runName;
   final String? placeName;
   final double? weatherTempC;
   final double? weatherWindKmh;
   final int? weatherCode;
+  final String? localStartDay;
+
+  String get displayName =>
+      runName ??
+      makeRunName(
+        DateTime.fromMillisecondsSinceEpoch(
+          startedAtUtcMs,
+          isUtc: true,
+        ).toLocal(),
+        placeName,
+      );
 
   const Run({
     required this.id,
@@ -30,14 +41,13 @@ class Run {
     this.avgPaceSecPerKm,
     this.maxSpeedMps,
     this.status = kStateSaved,
-    this.name,
+    this.runName,
     this.placeName,
     this.weatherTempC,
     this.weatherWindKmh,
     this.weatherCode,
+    this.localStartDay,
   });
-
-  String get displayName => name ?? runName(startedAtUtcMs, placeName);
 
   /// Factory constructor to create a [Run] instance from a SQLite row map.
   factory Run.fromDbMap(Map<String, Object?> map) {
@@ -50,11 +60,12 @@ class Run {
       avgPaceSecPerKm: (map['avg_pace_sec_per_km'] as num?)?.toDouble(),
       maxSpeedMps: (map['max_speed_mps'] as num?)?.toDouble(),
       status: (map['status'] as String?) ?? kStateSaved,
-      name: map['name'] as String?,
+      runName: map['run_name'] as String?,
       placeName: map['place_name'] as String?,
       weatherTempC: (map['weather_temp_c'] as num?)?.toDouble(),
       weatherWindKmh: (map['weather_wind_kmh'] as num?)?.toDouble(),
       weatherCode: (map['weather_code'] as num?)?.toInt(),
+      localStartDay: map['local_start_day'] as String?,
     );
   }
 
@@ -69,11 +80,12 @@ class Run {
       'avg_pace_sec_per_km': avgPaceSecPerKm,
       'max_speed_mps': maxSpeedMps,
       'status': status,
-      'name': name,
+      'run_name': runName,
       'place_name': placeName,
       'weather_temp_c': weatherTempC,
       'weather_wind_kmh': weatherWindKmh,
       'weather_code': weatherCode,
+      'local_start_day': localStartDay,
     };
   }
 
@@ -87,11 +99,12 @@ class Run {
     double? avgPaceSecPerKm,
     double? maxSpeedMps,
     String? status,
-    String? name,
+    String? runName,
     String? placeName,
     double? weatherTempC,
     double? weatherWindKmh,
     int? weatherCode,
+    String? localStartDay,
   }) {
     return Run(
       id: id ?? this.id,
@@ -102,11 +115,12 @@ class Run {
       avgPaceSecPerKm: avgPaceSecPerKm ?? this.avgPaceSecPerKm,
       maxSpeedMps: maxSpeedMps ?? this.maxSpeedMps,
       status: status ?? this.status,
-      name: name ?? this.name,
+      runName: runName ?? this.runName,
       placeName: placeName ?? this.placeName,
       weatherTempC: weatherTempC ?? this.weatherTempC,
       weatherWindKmh: weatherWindKmh ?? this.weatherWindKmh,
       weatherCode: weatherCode ?? this.weatherCode,
+      localStartDay: localStartDay ?? this.localStartDay,
     );
   }
 
@@ -123,11 +137,12 @@ class Run {
           avgPaceSecPerKm == other.avgPaceSecPerKm &&
           maxSpeedMps == other.maxSpeedMps &&
           status == other.status &&
-          name == other.name &&
+          runName == other.runName &&
           placeName == other.placeName &&
           weatherTempC == other.weatherTempC &&
           weatherWindKmh == other.weatherWindKmh &&
-          weatherCode == other.weatherCode;
+          weatherCode == other.weatherCode &&
+          localStartDay == other.localStartDay;
 
   @override
   int get hashCode => Object.hash(
@@ -139,15 +154,16 @@ class Run {
     avgPaceSecPerKm,
     maxSpeedMps,
     status,
-    name,
+    runName,
     placeName,
     weatherTempC,
     weatherWindKmh,
     weatherCode,
+    localStartDay,
   );
 
   @override
   String toString() {
-    return 'Run(id: $id, startedAtUtcMs: $startedAtUtcMs, endedAtUtcMs: $endedAtUtcMs, movingMs: $movingMs, distanceM: $distanceM, avgPaceSecPerKm: $avgPaceSecPerKm, maxSpeedMps: $maxSpeedMps, status: $status)';
+    return 'Run(id: $id, startedAtUtcMs: $startedAtUtcMs, endedAtUtcMs: $endedAtUtcMs, movingMs: $movingMs, distanceM: $distanceM, avgPaceSecPerKm: $avgPaceSecPerKm, maxSpeedMps: $maxSpeedMps, status: $status, runName: $runName, placeName: $placeName, weatherTempC: $weatherTempC, weatherWindKmh: $weatherWindKmh, weatherCode: $weatherCode, localStartDay: $localStartDay)';
   }
 }

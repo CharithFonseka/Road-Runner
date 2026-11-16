@@ -29,10 +29,10 @@ SRS reference: Section 9.1, Section 9.6
 | **TC-07** | `FR-05` | Force-stop app mid-run (`adb shell am force-stop com.roadrunner.app` or Android Settings), reopen app | `"Recover run"` prompt is offered; recovering imports a valid run up to the last synced point | | ⬜ PENDING | |
 | **TC-08** | `FR-15` | Turn device Location off mid-run | Native emits `LOCATION_OFF` error event; run pauses cleanly; clear plain-language message shown; no crash | | ⬜ PENDING | |
 | **TC-09** | `FR-40`, `FR-41` | Deny location permission on first prompt, then permanently deny | Explain-then-ask rationale shown first; clear plain-language error on deny; `"Open settings"` button opens Android app settings cleanly; no crash | | ⬜ PENDING | |
-| **TC-10** | `FR-50`, `FR-52` | Complete a loop run and open Summary screen | Path drawn cleanly without map tiles, closed loop, coloured by speed, start/finish markers visible, full-km interpolated splits + best split highlighted | | ⬜ PENDING | |
+| **TC-10** | `FR-50`, `FR-52` | Complete a loop run and open Summary screen | Route drawn cleanly (offline canvas or `flutter_map` + OpenFreeMap tiles with `© OpenStreetMap` credit, still rendering if offline), closed loop, coloured by speed, start/finish markers visible, full-km interpolated splits + best split highlighted | | ⬜ PENDING | |
 | **TC-11** | `FR-60`, `FR-62` | Force-close/restart app, open History, open the saved run | Saved run appears newest-first; opening it in Summary shows identical numbers to right after the run | | ⬜ PENDING | |
 | **TC-12** | `FR-65` | Start a run and stop it immediately (< 10 s / < 20 m / 0 points) | Handled cleanly without crash or `NaN`; pace displays `--:--`; discard prompt offered (`FR-04`) if implemented | | ⬜ PENDING | |
-| **TC-13** | `NFR-07`, `NFR-08` | Build release APK and inspect merged release `AndroidManifest.xml` | Zero `android.permission.INTERNET` in release manifest; `android:allowBackup="false"`; service/receivers `android:exported="false"` | | ⬜ PENDING | |
+| **TC-13** | `NFR-07`, `NFR-08` | Build release APK and inspect merged release `AndroidManifest.xml` | `android.permission.INTERNET` only (for approved free-tier map/weather/places/routing/Firebase services; zero ad/analytics/paid SDKs); `android:allowBackup="false"`; service/receivers `android:exported="false"` | | ⬜ PENDING | |
 | **TC-14** | `NFR-06` | Load a 1-hour run (~3,600 points) into Summary | Summary (stats, splits, downsampled path) renders in **under 2 s**; 100-run History list scrolls smoothly | | ⬜ PENDING | |
 
 ---
@@ -74,4 +74,4 @@ ls -lh build/app/outputs/flutter-apk/app-release.apk
 # Inspect merged release manifest (requires Android SDK build-tools aapt2)
 aapt2 dump xmltree build/app/outputs/flutter-apk/app-release.apk --file AndroidManifest.xml | grep -E "INTERNET|allowBackup|exported|foregroundServiceType"
 ```
-*Expected:* `INTERNET` must **not** appear; `allowBackup` must be `false` (`0x0`); `TrackingService` must have `exported=false` (`0x0`) and `foregroundServiceType=0x8` (`location`).
+*Expected (`NFR-07` / `NFR-08`):* `INTERNET` is present only for approved free-tier online features (OpenFreeMap, Open-Meteo, Nominatim, OpenRouteService, Firebase Auth/Firestore) with no third-party analytics/ad SDKs; `allowBackup` must be `false` (`0x0`); `TrackingService` must have `exported=false` (`0x0`) and `foregroundServiceType=0x8` (`location`).

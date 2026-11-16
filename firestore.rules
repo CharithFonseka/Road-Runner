@@ -1,0 +1,186 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// This security rules file assumes the following per-user private
+// cloud sync data structures for the Road Runner app:
+//
+// Collection: users
+// Document ID: {userId} (must match request.auth.uid)
+// Fields:
+//   - displayName: string (optional, 0..100 chars)
+//   - email: string (optional, 0..200 chars, valid email if non-empty)
+//   - photoUrl: string (optional, 0..500 chars, http/https URL if non-empty)
+//   - weeklyGoalKm: number (optional, 0..1000)
+//   - currentStreakDays: int (optional, 0..10000)
+//   - longestStreakDays: int (optional, 0..10000)
+//   - badges: list of strings (optional, <= 50 items)
+//   - updatedAt: timestamp or int >= 0 (required)
+//
+// Subcollection: users/{userId}/goals
+// Document ID: {goalId}
+// Fields:
+//   - title: string (required, 1..120 chars)
+//   - targetKm: number (required, > 0 and <= 10000)
+//   - period: string (required, one of ['weekly', 'monthly', 'custom'])
+//   - updatedAt: timestamp or int >= 0 (required)
+//
+// Subcollection: users/{userId}/badges
+// Document ID: {badgeId}
+// Fields:
+//   - id: string (required, 1..64 chars)
+//   - earnedAt: timestamp or int >= 0 (required)
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the authenticated user owns the path
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Validate required fields exist on the incoming document
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Enforce strict schema by allowing only whitelisted fields
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Validate optional string field length when present
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is string &&
+         request.resource.data[field].size() >= minLen &&
+         request.resource.data[field].size() <= maxLen);
+    }
+
+    // Validate URL format (must start with https:// or http://)
+    function isValidUrl(url) {
+      return url is string &&
+        (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    // Validate email format
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // Validate that a value is a list within maxSize
+    function isValidList(listData, maxSize) {
+      return listData is list && listData.size() <= maxSize;
+    }
+
+    // Validate timestamp or non-negative integer epoch value
+    function isValidTimestampOrInt(value) {
+      return value is timestamp || (value is int && value >= 0);
+    }
+
+    // ===============================================================
+    // Domain Validators (Used in BOTH create and update)
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields([
+               'displayName',
+               'email',
+               'photoUrl',
+               'weeklyGoalKm',
+               'currentStreakDays',
+               'longestStreakDays',
+               'badges',
+               'updatedAt'
+             ]) &&
+             hasRequiredFields(['updatedAt']) &&
+             isValidOptionalString('displayName', 0, 100) &&
+             (!('email' in data) ||
+              (data.email is string &&
+               data.email.size() <= 200 &&
+               (data.email.size() == 0 || isValidEmail(data.email)))) &&
+             (!('photoUrl' in data) ||
+              (data.photoUrl is string &&
+               data.photoUrl.size() <= 500 &&
+               (data.photoUrl.size() == 0 || isValidUrl(data.photoUrl)))) &&
+             (!('weeklyGoalKm' in data) ||
+              (data.weeklyGoalKm is number &&
+               data.weeklyGoalKm >= 0 &&
+               data.weeklyGoalKm <= 1000)) &&
+             (!('currentStreakDays' in data) ||
+              (data.currentStreakDays is int &&
+               data.currentStreakDays >= 0 &&
+               data.currentStreakDays <= 10000)) &&
+             (!('longestStreakDays' in data) ||
+              (data.longestStreakDays is int &&
+               data.longestStreakDays >= 0 &&
+               data.longestStreakDays <= 10000)) &&
+             (!('badges' in data) ||
+              (isValidList(data.badges, 50) &&
+               (data.badges.size() == 0 ||
+                (data.badges[0] is string && data.badges[0].size() <= 64)))) &&
+             isValidTimestampOrInt(data.updatedAt);
+    }
+
+    function isValidGoal(data) {
+      return hasOnlyAllowedFields(['title', 'targetKm', 'period', 'updatedAt']) &&
+             hasRequiredFields(['title', 'targetKm', 'period', 'updatedAt']) &&
+             data.title is string &&
+             data.title.size() > 0 &&
+             data.title.size() <= 120 &&
+             data.targetKm is number &&
+             data.targetKm > 0 &&
+             data.targetKm <= 10000 &&
+             data.period is string &&
+             data.period in ['weekly', 'monthly', 'custom'] &&
+             isValidTimestampOrInt(data.updatedAt);
+    }
+
+    function isValidBadge(data) {
+      return hasOnlyAllowedFields(['id', 'earnedAt']) &&
+             hasRequiredFields(['id', 'earnedAt']) &&
+             data.id is string &&
+             data.id.size() > 0 &&
+             data.id.size() <= 64 &&
+             isValidTimestampOrInt(data.earnedAt);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUser(request.resource.data);
+
+      match /goals/{goalId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidGoal(request.resource.data);
+      }
+
+      match /badges/{badgeId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidBadge(request.resource.data);
+      }
+    }
+
+    // Default deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

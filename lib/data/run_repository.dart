@@ -8,10 +8,13 @@ import 'dart:io';
 import 'package:road_runner/core/contract/contract.dart';
 import 'package:road_runner/data/app_database.dart';
 import 'package:road_runner/data/run.dart';
-import 'package:road_runner/data/run_details_service.dart';
-import 'package:road_runner/data/run_name.dart';
+import 'package:road_runner/domain/achievements/achievements.dart';
+import 'package:road_runner/domain/run_name.dart';
 import 'package:road_runner/domain/stats/stats.dart';
 import 'package:sqflite/sqflite.dart';
+
+export 'package:road_runner/domain/achievements/achievements.dart';
+export 'package:road_runner/domain/run_name.dart';
 
 /// Repository interface for saving, loading, and managing runs and GPS points.
 abstract class RunRepository {
@@ -22,6 +25,24 @@ abstract class RunRepository {
   Future<List<PauseInterval>> getPauses(String runId);
   Future<void> delete(String runId);
   Future<String?> getUnfinishedRunPath();
+  Future<void> updateWeather(
+    String runId, {
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+  });
+  Future<void> updateDetails(
+    String runId, {
+    String? runName,
+    String? placeName,
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+    String? localStartDay,
+  });
+  Future<List<BadgeAward>> getBadgesForRun(String runId);
+  Future<int> getCurrentStreak();
+  Future<void> recalculateBadges();
 }
 
 /// SQLite-backed implementation of [RunRepository] using [AppDatabase].
@@ -199,6 +220,8 @@ class SqliteRunRepository implements RunRepository {
     final double? avgPaceSecPerKm = computeAvgPaceSecPerKm(distanceM, movingMs);
 
     final double? maxSpeedMps = computeMaxSpeedMps(points);
+    final localStart = DateTime.fromMillisecondsSinceEpoch(startedAtUtcMs)
+        .toLocal();
     final existing = await get(runId);
     final run = Run(
       id: runId,
@@ -209,11 +232,13 @@ class SqliteRunRepository implements RunRepository {
       avgPaceSecPerKm: avgPaceSecPerKm,
       maxSpeedMps: maxSpeedMps,
       status: kStateSaved,
-      name: existing?.name ?? runName(startedAtUtcMs),
+      runName:
+          existing?.runName ?? makeRunName(localStart, existing?.placeName),
       placeName: existing?.placeName,
       weatherTempC: existing?.weatherTempC,
       weatherWindKmh: existing?.weatherWindKmh,
       weatherCode: existing?.weatherCode,
+      localStartDay: existing?.localStartDay ?? localDay(localStart),
     );
 
     // 4. Save to SQLite in a single transaction with a Batch for points and pauses
@@ -250,6 +275,8 @@ class SqliteRunRepository implements RunRepository {
       }
       await batch.commit(noResult: true);
     });
+
+    await recalculateBadges();
   }
 
   @override
@@ -273,90 +300,6 @@ class SqliteRunRepository implements RunRepository {
     );
     if (rows.isEmpty) return null;
     return Run.fromDbMap(rows.first);
-  }
-
-  /// Adds optional online details after the run has already been saved.
-  /// Failed lookups leave the local run and its route untouched.
-  Future<Run?> enrichDetails(
-    String runId,
-    Point startPoint, {
-    RunDetailsService? service,
-  }) async {
-    var run = await get(runId);
-    if (run == null) return null;
-    if (!startPoint.lat.isFinite ||
-        !startPoint.lon.isFinite ||
-        startPoint.lat < -90 ||
-        startPoint.lat > 90 ||
-        startPoint.lon < -180 ||
-        startPoint.lon > 180) {
-      return run;
-    }
-    final details = service ?? RunDetailsService();
-    final db = await _database.database;
-    final key =
-        '${startPoint.lat.toStringAsFixed(3)},'
-        '${startPoint.lon.toStringAsFixed(3)}';
-    if (run.placeName == null) {
-      try {
-        final cached = await db.query(
-          AppDatabase.tablePlaceCache,
-          columns: ['place_name'],
-          where: 'coordinate_key = ?',
-          whereArgs: [key],
-          limit: 1,
-        );
-        final place = cached.isNotEmpty
-            ? cached.first['place_name'] as String?
-            : await details.lookupPlace(startPoint.lat, startPoint.lon);
-        if (place != null && place.isNotEmpty) {
-          if (cached.isEmpty) {
-            await db.insert(AppDatabase.tablePlaceCache, {
-              'coordinate_key': key,
-              'place_name': place,
-            }, conflictAlgorithm: ConflictAlgorithm.ignore);
-          }
-          await db.update(
-            AppDatabase.tableRuns,
-            {
-              AppDatabase.colPlaceName: place,
-              AppDatabase.colName: runName(run.startedAtUtcMs, place),
-            },
-            where: '${AppDatabase.colRunId} = ?',
-            whereArgs: [runId],
-          );
-        }
-      } on Exception {
-        // Place lookup is optional and can be retried when Summary reopens.
-      }
-    }
-    if (run.weatherCode == null ||
-        run.weatherTempC == null ||
-        run.weatherWindKmh == null) {
-      try {
-        final weather = await details.lookupWeather(
-          startPoint.lat,
-          startPoint.lon,
-          run.startedAtUtcMs,
-        );
-        if (weather != null) {
-          await db.update(
-            AppDatabase.tableRuns,
-            {
-              AppDatabase.colWeatherTempC: weather.temperatureC,
-              AppDatabase.colWeatherWindKmh: weather.windKmh,
-              AppDatabase.colWeatherCode: weather.code,
-            },
-            where: '${AppDatabase.colRunId} = ?',
-            whereArgs: [runId],
-          );
-        }
-      } on Exception {
-        // Weather lookup is optional and can be retried when Summary reopens.
-      }
-    }
-    run = await get(runId);
-    return run;
   }
 
   @override
@@ -407,6 +350,105 @@ class SqliteRunRepository implements RunRepository {
         where: '${AppDatabase.colRunId} = ?',
         whereArgs: [runId],
       );
+    });
+
+    await recalculateBadges();
+  }
+
+  @override
+  Future<void> updateWeather(
+    String runId, {
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+  }) async {
+    final db = await _database.database;
+    await db.update(
+      AppDatabase.tableRuns,
+      {
+        'weather_temp_c': temperatureC,
+        'weather_wind_kmh': windKmh,
+        'weather_code': weatherCode,
+      },
+      where: '${AppDatabase.colRunId} = ?',
+      whereArgs: [runId],
+    );
+  }
+
+  @override
+  Future<void> updateDetails(
+    String runId, {
+    String? runName,
+    String? placeName,
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+    String? localStartDay,
+  }) async {
+    final values = <String, Object?>{};
+    if (runName != null) values['run_name'] = runName;
+    if (placeName != null) values['place_name'] = placeName;
+    if (temperatureC != null) values['weather_temp_c'] = temperatureC;
+    if (windKmh != null) values['weather_wind_kmh'] = windKmh;
+    if (weatherCode != null) values['weather_code'] = weatherCode;
+    if (localStartDay != null) values['local_start_day'] = localStartDay;
+
+    if (values.isEmpty) return;
+
+    final db = await _database.database;
+    await db.update(
+      AppDatabase.tableRuns,
+      values,
+      where: '${AppDatabase.colRunId} = ?',
+      whereArgs: [runId],
+    );
+  }
+
+  @override
+  Future<List<BadgeAward>> getBadgesForRun(String runId) async {
+    final db = await _database.database;
+    final rows = await db.query(
+      AppDatabase.tableRunBadges,
+      where: 'run_id = ?',
+      whereArgs: [runId],
+    );
+    return rows.map((r) {
+      return BadgeAward(
+        r['run_id'] as String,
+        BadgeTypeExtension.fromKey(r['badge_type'] as String),
+      );
+    }).toList();
+  }
+
+  @override
+  Future<int> getCurrentStreak() async {
+    final allRuns = await list();
+    return currentDailyStreak(allRuns);
+  }
+
+  @override
+  Future<void> recalculateBadges() async {
+    final allRuns = await list();
+    final bestKmMap = <String, int?>{};
+    for (final run in allRuns) {
+      final points = await getPoints(run.id);
+      final pauses = await getPauses(run.id);
+      bestKmMap[run.id] = bestFullKmMs(points, pauses);
+    }
+
+    final awards = calculateAwards(allRuns, bestKmMap);
+
+    final db = await _database.database;
+    await db.transaction((txn) async {
+      await txn.delete(AppDatabase.tableRunBadges);
+      final nowUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+      for (final award in awards) {
+        await txn.insert(AppDatabase.tableRunBadges, {
+          'run_id': award.runId,
+          'badge_type': award.type.key,
+          'awarded_at_utc_ms': nowUtc,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
     });
   }
 
@@ -477,3 +519,9 @@ class SqliteRunRepository implements RunRepository {
     return null;
   }
 }
+
+/// Formats a local date as YYYY-MM-DD for daily streak calculations.
+String localDay(DateTime localStart) =>
+    '${localStart.year.toString().padLeft(4, '0')}-'
+    '${localStart.month.toString().padLeft(2, '0')}-'
+    '${localStart.day.toString().padLeft(2, '0')}';

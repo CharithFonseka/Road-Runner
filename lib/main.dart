@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Split;
 import 'package:flutter/services.dart';
@@ -14,7 +15,10 @@ import 'core/theme/app_theme.dart';
 import 'data/run.dart';
 import 'data/run_repository.dart';
 import 'data/planned_route_repository.dart';
+import 'data/run_enrichment_service.dart';
 import 'domain/stats/stats.dart';
+import 'features/account/account_gateway.dart';
+import 'features/account/account_models.dart';
 import 'features/app_strings.dart';
 import 'features/history/history_run.dart';
 import 'features/history/history_screen.dart';
@@ -35,8 +39,13 @@ import 'features/summary/summary_screen.dart';
 // Road Runner — application entry point & integration shell.
 // Owner: Praveen (integration shell) / Tharushi (screens & theme)
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {
+    // Allow offline/local-first startup if Firebase is not configured.
+  }
   runApp(const RoadRunnerApp());
 }
 
@@ -49,6 +58,7 @@ class RoadRunnerApp extends StatefulWidget {
     this.bridge,
     this.repository,
     this.permissionGateway,
+    this.accountGateway,
     this.checkStartupState = true,
   });
 
@@ -61,6 +71,10 @@ class RoadRunnerApp extends StatefulWidget {
   /// Optional permission gateway override for testing; defaults to
   /// [PermissionHandlerGateway].
   final PermissionGateway? permissionGateway;
+
+  /// Optional account gateway override for testing; defaults to
+  /// [FirebaseAccountGateway] when Firebase is initialized.
+  final AccountGateway? accountGateway;
 
   /// Whether to query native state, unfinished runs, and saved runs on startup.
   /// Can be disabled in isolated smoke tests.
@@ -79,7 +93,11 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   late final TrackingBridge _bridge;
   late final bool _ownsBridge;
   late final RunRepository _repository;
+  late final RunEnrichmentService _enrichment;
+  final Map<String, Future<void>> _pendingEnrichments = {};
   late final PermissionGateway _permissionGateway;
+  late final AccountGateway? _accountGateway;
+  StreamSubscription<AccountUser?>? _authSub;
 
   static const MethodChannel _debugSimChannel = MethodChannel(
     'roadrunner/debug_sim',
@@ -91,6 +109,10 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   bool _startupStarted = false;
   bool _isStartingRun = false;
   bool _debugSimulationEnabled = false;
+  AccountUser? _accountUser;
+  CloudUserProfile? _accountProfile;
+  bool _accountBusy = false;
+  String? _accountError;
 
   @override
   void initState() {
@@ -98,8 +120,27 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     _ownsBridge = widget.bridge == null;
     _bridge = widget.bridge ?? NativeTrackingBridge();
     _repository = widget.repository ?? SqliteRunRepository();
+    _enrichment = RunEnrichmentService(repository: _repository);
     _permissionGateway =
         widget.permissionGateway ?? const PermissionHandlerGateway();
+    _accountGateway = widget.accountGateway ??
+        (Firebase.apps.isNotEmpty ? FirebaseAccountGateway() : null);
+
+    if (_accountGateway != null) {
+      _accountUser = _accountGateway.currentUser;
+      _authSub = _accountGateway.authStateChanges.listen((user) {
+        _accountUser = user;
+        if (user == null) {
+          _accountProfile = null;
+        } else {
+          unawaited(_syncAccount());
+        }
+        _notifyShell();
+      });
+      if (_accountUser != null) {
+        unawaited(_syncAccount());
+      }
+    }
 
     if (widget.checkStartupState) {
       unawaited(_initializeAppFlow());
@@ -108,6 +149,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _shellRevision.dispose();
     _runsRevision.dispose();
     if (_ownsBridge) {
@@ -119,6 +161,16 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   void _notifyShell() {
     if (!mounted) return;
     _shellRevision.value++;
+  }
+
+  Future<void> _enrichRun(String runId) {
+    if (_repository is! SqliteRunRepository) return Future<void>.value();
+    final pending = _pendingEnrichments[runId];
+    if (pending != null) return pending;
+    final operation = _enrichment.enrichRun(runId);
+    _pendingEnrichments[runId] = operation;
+    operation.whenComplete(() => _pendingEnrichments.remove(runId)).ignore();
+    return operation;
   }
 
   Future<void> _initializeAppFlow() async {
@@ -350,6 +402,70 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     }
   }
 
+  Future<void> _signInWithGoogle() async {
+    final AccountGateway? gateway = _accountGateway;
+    if (gateway == null || _accountBusy) return;
+    _accountBusy = true;
+    _accountError = null;
+    _notifyShell();
+    try {
+      final AccountUser? user = await gateway.signInWithGoogle();
+      if (!mounted) return;
+      _accountUser = user;
+      if (user != null) {
+        _accountProfile = await gateway.loadProfile(user.uid);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _accountError = 'Could not sign in with Google. Please try again.';
+    } finally {
+      _accountBusy = false;
+      _notifyShell();
+    }
+  }
+
+  Future<void> _signOut() async {
+    final AccountGateway? gateway = _accountGateway;
+    if (gateway == null || _accountBusy) return;
+    _accountBusy = true;
+    _accountError = null;
+    _notifyShell();
+    try {
+      await gateway.signOut();
+      if (!mounted) return;
+      _accountUser = null;
+      _accountProfile = null;
+    } catch (_) {
+      if (!mounted) return;
+      _accountError = 'Could not sign out. Please try again.';
+    } finally {
+      _accountBusy = false;
+      _notifyShell();
+    }
+  }
+
+  Future<void> _syncAccount() async {
+    final AccountGateway? gateway = _accountGateway;
+    final AccountUser? user = _accountUser;
+    if (gateway == null || user == null) return;
+    _accountBusy = true;
+    _accountError = null;
+    _notifyShell();
+    try {
+      final CloudUserProfile profile = await gateway.loadProfile(user.uid) ??
+          CloudUserProfile(updatedAtMs: DateTime.now().millisecondsSinceEpoch);
+      await gateway.saveProfile(user, profile);
+      if (!mounted) return;
+      _accountProfile = profile;
+    } catch (_) {
+      if (!mounted) return;
+      _accountError = 'Cloud sync failed. Check your connection and try again.';
+    } finally {
+      _accountBusy = false;
+      _notifyShell();
+    }
+  }
+
   void _openSettings({bool replaceCurrent = false}) {
     final route = MaterialPageRoute<void>(
       builder: (context) => ListenableBuilder(
@@ -366,6 +482,15 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
               kDebugMode && _ownsBridge
                   ? (value) => unawaited(_setDebugSimulation(value))
                   : null,
+          accountUser: _accountUser,
+          accountProfile: _accountProfile,
+          accountBusy: _accountBusy,
+          accountError: _accountError,
+          onSignInWithGoogle:
+              _accountGateway != null ? () => unawaited(_signInWithGoogle()) : null,
+          onSignOut: _accountGateway != null ? () => unawaited(_signOut()) : null,
+          onSyncAccount:
+              _accountGateway != null ? () => unawaited(_syncAccount()) : null,
         ),
       ),
     );
@@ -430,6 +555,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     while (mounted) {
       try {
         await _repository.saveFromFile(result.runId, result.filePath);
+        unawaited(_enrichRun(result.runId));
         try {
           await _bridge.discardRun(result.runId);
         } catch (_) {
@@ -446,11 +572,8 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
         }
 
         final route = MaterialPageRoute<void>(
-          builder: (context) => _buildSummaryScreen(
-            context,
-            summary,
-            fromHistory: false,
-          ),
+          builder: (context) =>
+              _buildSummaryScreen(context, summary, fromHistory: false),
         );
         if (replaceTop) {
           _navigatorKey.currentState?.pushReplacement(route);
@@ -543,11 +666,8 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
       }
       _navigatorKey.currentState?.push(
         MaterialPageRoute<void>(
-          builder: (context) => _buildSummaryScreen(
-            context,
-            summary,
-            fromHistory: fromHistory,
-          ),
+          builder: (context) =>
+              _buildSummaryScreen(context, summary, fromHistory: fromHistory),
         ),
       );
     } catch (_) {
@@ -576,8 +696,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
         .toList();
 
     final List<Split> allSplits = computeSplits(points, pauses: pauses);
-    final List<Split> fullSplits =
-        allSplits.where((s) => !s.isPartial).toList();
+    final List<Split> fullSplits = allSplits
+        .where((s) => !s.isPartial)
+        .toList();
     final Split? partial = allSplits.where((s) => s.isPartial).lastOrNull;
 
     int? fastestMs;
@@ -597,8 +718,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
         )
         .toList();
 
-    final double? avgSpeedMps =
-        run.movingMs > 0 ? run.distanceM / (run.movingMs / 1000.0) : null;
+    final double? avgSpeedMps = run.movingMs > 0
+        ? run.distanceM / (run.movingMs / 1000.0)
+        : null;
 
     return RunSummary(
       runId: run.id,
@@ -627,13 +749,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   }
 
   Future<RunSummary?> _enrichAndReloadSummary(String runId) async {
-    final repository = _repository;
-    if (repository is! SqliteRunRepository) return null;
+    if (_repository is! SqliteRunRepository) return null;
     try {
-      final points = await repository.getPoints(runId);
-      final start = points.where((p) => p.accepted).firstOrNull;
-      if (start == null) return null;
-      await repository.enrichDetails(runId, start);
+      await _enrichRun(runId);
       await _refreshRecentRuns();
       return await _loadRunSummary(runId);
     } on Exception {
@@ -692,9 +810,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
       if (!mounted) return;
       final BuildContext? errCtx = _navigatorKey.currentContext;
       if (errCtx != null && errCtx.mounted) {
-        ScaffoldMessenger.maybeOf(errCtx)?.showSnackBar(
-          const SnackBar(content: Text('Could not delete run.')),
-        );
+        ScaffoldMessenger.maybeOf(
+          errCtx,
+        )?.showSnackBar(const SnackBar(content: Text('Could not delete run.')));
       }
     }
   }
@@ -769,14 +887,17 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
             (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
                 .copyWith(
                   statusBarColor: Colors.transparent,
-                  statusBarIconBrightness:
-                      isDark ? Brightness.light : Brightness.dark,
-                  statusBarBrightness:
-                      isDark ? Brightness.dark : Brightness.light,
+                  statusBarIconBrightness: isDark
+                      ? Brightness.light
+                      : Brightness.dark,
+                  statusBarBrightness: isDark
+                      ? Brightness.dark
+                      : Brightness.light,
                   systemNavigationBarColor: palette.background,
                   systemNavigationBarDividerColor: Colors.transparent,
-                  systemNavigationBarIconBrightness:
-                      isDark ? Brightness.light : Brightness.dark,
+                  systemNavigationBarIconBrightness: isDark
+                      ? Brightness.light
+                      : Brightness.dark,
                 );
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: overlayStyle,
@@ -800,9 +921,8 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
             onOpenPermissions: _openPermissions,
             onOpenSettings: _openSettings,
             onRetry: () => unawaited(_refreshRecentRuns(showLoading: true)),
-            onRunSelected: (runId) => unawaited(
-              _openSummaryForRunId(runId, fromHistory: false),
-            ),
+            onRunSelected: (runId) =>
+                unawaited(_openSummaryForRunId(runId, fromHistory: false)),
           );
         },
       ),

@@ -253,7 +253,7 @@ void main() {
       );
     });
 
-    test('version 3 to 4 migration preserves existing runs and creates route tables', () async {
+    test('version 3 to 6 migration preserves existing runs and creates route tables', () async {
       final migrationDbPath = '${tempDir.path}/migration_v3.db';
 
       // 1. Create a version 3 database with an existing run
@@ -271,11 +271,12 @@ void main() {
               ${AppDatabase.colAvgPaceSecPerKm} REAL NOT NULL,
               ${AppDatabase.colMaxSpeedMps} REAL NOT NULL,
               ${AppDatabase.colStatus} TEXT NOT NULL,
-              ${AppDatabase.colName} TEXT,
+              ${AppDatabase.colRunName} TEXT,
               ${AppDatabase.colPlaceName} TEXT,
               ${AppDatabase.colWeatherTempC} REAL,
               ${AppDatabase.colWeatherWindKmh} REAL,
-              ${AppDatabase.colWeatherCode} INTEGER
+              ${AppDatabase.colWeatherCode} INTEGER,
+              ${AppDatabase.colLocalStartDay} TEXT
             );
           ''');
           await db.execute('''
@@ -304,30 +305,30 @@ void main() {
         AppDatabase.colAvgPaceSecPerKm: 300.0,
         AppDatabase.colMaxSpeedMps: 4.5,
         AppDatabase.colStatus: 'completed',
-        AppDatabase.colName: 'Legacy Run',
+        AppDatabase.colRunName: 'Legacy Run',
       });
       await v3Db.close();
 
-      // 2. Open via AppDatabase, which triggers _onUpgrade from 3 -> 4
+      // 2. Open via AppDatabase, which triggers _onUpgrade from 3 -> 6
       final upgradedAppDb = AppDatabase();
-      final v4Db = await upgradedAppDb.open(path: migrationDbPath);
+      final v6Db = await upgradedAppDb.open(path: migrationDbPath);
 
       // Verify existing run remains
-      final runs = await v4Db.query(
+      final runs = await v6Db.query(
         AppDatabase.tableRuns,
         where: '${AppDatabase.colRunId} = ?',
         whereArgs: ['v3-run-999'],
       );
       expect(runs.length, equals(1));
-      expect(runs.first[AppDatabase.colName], equals('Legacy Run'));
+      expect(runs.first[AppDatabase.colRunName], equals('Legacy Run'));
 
       // Verify planned_routes table exists and works
       final upgradedRepo = PlannedRouteRepository(
-        database: AppDatabase(database: v4Db),
+        database: AppDatabase(database: v6Db),
       );
       const newRoute = PlannedRoute(
-        id: 'new-v4-route',
-        name: 'V4 Migration Route',
+        id: 'new-v6-route',
+        name: 'V6 Migration Route',
         createdAtUtcMs: 1731650000000,
         points: [
           PlannedRoutePoint(lat: 6.9, lon: 79.8),
@@ -335,11 +336,84 @@ void main() {
         ],
       );
       await upgradedRepo.save(newRoute);
-      final loadedNewRoute = await upgradedRepo.get('new-v4-route');
+      final loadedNewRoute = await upgradedRepo.get('new-v6-route');
       expect(loadedNewRoute, isNotNull);
-      expect(loadedNewRoute!.name, equals('V4 Migration Route'));
+      expect(loadedNewRoute!.name, equals('V6 Migration Route'));
 
-      await v4Db.close();
+      await v6Db.close();
+    });
+
+    test('early route preview migrates run names and cached places', () async {
+      final previewPath = '${tempDir.path}/early_route_preview.db';
+      final previewDb = await openDatabase(
+        previewPath,
+        version: 4,
+        onCreate: (db, _) async {
+          await db.execute('''
+            CREATE TABLE ${AppDatabase.tableRuns} (
+              id TEXT PRIMARY KEY, started_at_utc_ms INTEGER NOT NULL,
+              ended_at_utc_ms INTEGER NOT NULL, moving_ms INTEGER NOT NULL,
+              distance_m REAL NOT NULL, status TEXT NOT NULL, name TEXT
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE ${AppDatabase.tablePlaceCache} (
+              coordinate_key TEXT PRIMARY KEY, place_name TEXT NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE ${AppDatabase.tablePlannedRoutes} (
+              id TEXT PRIMARY KEY, name TEXT NOT NULL,
+              created_at_utc_ms INTEGER NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE ${AppDatabase.tablePlannedRoutePoints} (
+              route_id TEXT NOT NULL, seq INTEGER NOT NULL,
+              lat REAL NOT NULL, lon REAL NOT NULL,
+              PRIMARY KEY (route_id, seq)
+            )
+          ''');
+        },
+      );
+      await previewDb.insert(AppDatabase.tableRuns, {
+        'id': 'preview-run',
+        'started_at_utc_ms': 1730000000000,
+        'ended_at_utc_ms': 1730000001000,
+        'moving_ms': 1000,
+        'distance_m': 100.0,
+        'status': 'saved',
+        'name': 'Morning run in Colombo',
+      });
+      await previewDb.insert(AppDatabase.tablePlaceCache, {
+        'coordinate_key': '6.927,79.861',
+        'place_name': 'Colombo',
+      });
+      await previewDb.insert(AppDatabase.tablePlannedRoutes, {
+        'id': 'saved-plan',
+        'name': 'City loop',
+        'created_at_utc_ms': 1730000000000,
+      });
+      await previewDb.insert(AppDatabase.tablePlannedRoutePoints, {
+        'route_id': 'saved-plan',
+        'seq': 0,
+        'lat': 6.927,
+        'lon': 79.861,
+      });
+      await previewDb.close();
+
+      final upgraded = await AppDatabase().open(path: previewPath);
+      final runs = await upgraded.query(AppDatabase.tableRuns);
+      expect(runs.single[AppDatabase.colRunName], 'Morning run in Colombo');
+      final places = await upgraded.query(AppDatabase.tablePlaceCache);
+      expect(places.single['lat_bucket'], 6927);
+      expect(places.single['lon_bucket'], 79861);
+      expect(places.single['place_name'], 'Colombo');
+      final plan = await upgraded.query(AppDatabase.tablePlannedRoutes);
+      final points = await upgraded.query(AppDatabase.tablePlannedRoutePoints);
+      expect(plan.single['name'], 'City loop');
+      expect(points.single['lat'], 6.927);
+      await upgraded.close();
     });
   });
 }
