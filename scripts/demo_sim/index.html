@@ -163,6 +163,7 @@
       </div>
     </div>
 
+    <button id="newRouteBtn">New Random Street Route</button>
     <button id="resetBtn">Reset Map Trail</button>
     <div class="hint">
       Start a run on the phone with <strong>Settings → Simulate runner route</strong> enabled.
@@ -179,18 +180,8 @@
       attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
-    // Draw planned loop outline matching DebugRouteSimulator.kt
-    const mLat = 111132.0;
-    const mLon = 111132.0 * Math.cos((center[0] * Math.PI) / 180);
-    const loopPts = [];
-    for (let i = 0; i <= 128; i++) {
-      const t = (2 * Math.PI * (i % 128)) / 128;
-      const e = 210 * Math.cos(t) + 22 * Math.sin(2 * t);
-      const n = 155 * Math.sin(t) + 14 * Math.cos(3 * t);
-      loopPts.push([center[0] + n / mLat, center[1] + e / mLon]);
-    }
-    L.polyline(loopPts, { color: "#b7a289", weight: 3, dashArray: "6 6" }).addTo(map);
-
+    // Planned random street route fetched from /route
+    const plannedLine = L.polyline([], { color: "#8c745b", weight: 3, dashArray: "6 6" }).addTo(map);
     const trailLine = L.polyline([], { color: "#d95d24", weight: 5 }).addTo(map);
     const runnerDot = L.circleMarker(center, {
       radius: 9,
@@ -199,6 +190,21 @@
       fillColor: "#187a71",
       fillOpacity: 1
     }).addTo(map);
+
+    let currentRouteId = null;
+
+    async function loadRoute(routeId) {
+      try {
+        const res = await fetch("/route", { cache: "no-store" });
+        const data = await res.json();
+        if (Array.isArray(data.points) && data.points.length > 0) {
+          currentRouteId = data.routeId ?? routeId;
+          plannedLine.setLatLngs(data.points);
+          runnerDot.setLatLng(data.points[0]);
+          map.fitBounds(plannedLine.getBounds(), { padding: [30, 30], maxZoom: 17 });
+        }
+      } catch (_) {}
+    }
 
     const slider = document.getElementById("speedSlider");
     const targetKmhEl = document.getElementById("targetKmh");
@@ -248,6 +254,17 @@
       btn.addEventListener("click", () => setTargetKmh(Number(btn.dataset.kmh)))
     );
 
+    document.getElementById("newRouteBtn").addEventListener("click", async () => {
+      trailLine.setLatLngs([]);
+      const res = await fetch("/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newRoute: true })
+      });
+      const data = await res.json();
+      await loadRoute(data.routeId);
+    });
+
     document.getElementById("resetBtn").addEventListener("click", async () => {
       trailLine.setLatLngs([]);
       await fetch("/control", {
@@ -261,6 +278,9 @@
       try {
         const res = await fetch("/state", { cache: "no-store" });
         const data = await res.json();
+        if (data.routeId != null && data.routeId !== currentRouteId) {
+          await loadRoute(data.routeId);
+        }
         const tel = data.telemetry;
         if (tel) {
           runnerDot.setLatLng([tel.lat, tel.lon]);
@@ -268,7 +288,10 @@
           document.getElementById("statTime").textContent = formatDuration(tel.movingMs);
           document.getElementById("statSpeed").textContent = `${(tel.smoothedSpeedMps * 3.6).toFixed(1)} km/h`;
           document.getElementById("statPace").textContent = formatPaceSec(tel.paceSecPerKm);
-          if (tel.accepted) {
+          if (!data.connected) {
+            statusBadge.textContent = "Device disconnected";
+            statusBadge.className = "badge";
+          } else if (tel.accepted) {
             statusBadge.textContent = "Live • Accepted";
             statusBadge.className = "badge live";
           } else {
