@@ -113,6 +113,8 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
 
   List<HistoryRun> _recentRuns = const [];
   RecentRunsStatus _recentRunsStatus = RecentRunsStatus.ready;
+  double? _weeklyDistanceKm;
+  double? _weeklyGoalKm;
   late bool _startupCompleted = !widget.checkStartupState;
   bool _startupStarted = false;
   bool _isStartingRun = false;
@@ -128,14 +130,16 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     _ownsBridge = widget.bridge == null;
     _bridge = widget.bridge ?? NativeTrackingBridge();
     _repository = widget.repository ?? SqliteRunRepository();
-    _goalRepository = widget.goalRepository ??
+    _goalRepository =
+        widget.goalRepository ??
         (widget.repository != null
             ? _InMemoryGoalRepository()
             : SqliteGoalRepository());
     _enrichment = RunEnrichmentService(repository: _repository);
     _permissionGateway =
         widget.permissionGateway ?? const PermissionHandlerGateway();
-    _accountGateway = widget.accountGateway ??
+    _accountGateway =
+        widget.accountGateway ??
         (Firebase.apps.isNotEmpty ? FirebaseAccountGateway() : null);
 
     if (_accountGateway != null) {
@@ -284,6 +288,13 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
       final List<Run> runs = await _repository.list();
       if (!mounted) return;
       _recentRuns = _mapSortedRuns(runs);
+      _weeklyDistanceKm = weeklyDistanceKm(runs);
+      try {
+        _weeklyGoalKm = await _goalRepository.getWeeklyGoalKm();
+      } catch (_) {
+        _weeklyGoalKm = null;
+      }
+      if (!mounted) return;
       _recentRunsStatus = RecentRunsStatus.ready;
       _notifyShell();
       _runsRevision.value++;
@@ -461,8 +472,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     final double goalKm = await _goalRepository.getWeeklyGoalKm();
     final Map<BadgeType, BadgeAward> earned = <BadgeType, BadgeAward>{};
     for (final Run run in runs) {
-      final List<BadgeAward> runBadges =
-          await _repository.getBadgesForRun(run.id);
+      final List<BadgeAward> runBadges = await _repository.getBadgesForRun(
+        run.id,
+      );
       for (final BadgeAward award in runBadges) {
         earned.putIfAbsent(award.type, () => award);
       }
@@ -494,6 +506,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
                     await _buildAchievementsSnapshot();
                 if (!context.mounted) return;
                 setScreenState(() => snapshot = refreshed);
+                unawaited(_refreshRecentRuns());
                 if (_accountUser != null) {
                   unawaited(_syncAccount());
                 }
@@ -516,13 +529,14 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
       final AchievementsSnapshot local = await _buildAchievementsSnapshot();
       final CloudUserProfile? remote = await gateway.loadProfile(user.uid);
       final int nowMs = DateTime.now().millisecondsSinceEpoch;
-      final List<String> badgeKeys =
-          local.earnedBadges.keys.map((b) => b.key).toList();
+      final List<String> badgeKeys = local.earnedBadges.keys
+          .map((b) => b.key)
+          .toList();
       final CloudUserProfile profile = CloudUserProfile(
         weeklyGoalKm: local.weeklyGoalKm,
         currentStreakDays: local.currentStreakDays,
-        longestStreakDays: local.longestStreakDays >
-                (remote?.longestStreakDays ?? 0)
+        longestStreakDays:
+            local.longestStreakDays > (remote?.longestStreakDays ?? 0)
             ? local.longestStreakDays
             : (remote?.longestStreakDays ?? 0),
         badges: badgeKeys,
@@ -565,22 +579,27 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
           onBack: () => _navigatorKey.currentState?.maybePop(),
           onOpenHome: _popToHome,
           onOpenHistory: () => unawaited(_openHistory(replaceCurrent: true)),
+          onOpenGoals: () => unawaited(_openGoals()),
           onManagePermissions: _openPermissions,
-          debugSimulationEnabled:
-              kDebugMode && _ownsBridge ? _debugSimulationEnabled : null,
-          onDebugSimulationChanged:
-              kDebugMode && _ownsBridge
-                  ? (value) => unawaited(_setDebugSimulation(value))
-                  : null,
+          debugSimulationEnabled: kDebugMode && _ownsBridge
+              ? _debugSimulationEnabled
+              : null,
+          onDebugSimulationChanged: kDebugMode && _ownsBridge
+              ? (value) => unawaited(_setDebugSimulation(value))
+              : null,
           accountUser: _accountUser,
           accountProfile: _accountProfile,
           accountBusy: _accountBusy,
           accountError: _accountError,
-          onSignInWithGoogle:
-              _accountGateway != null ? () => unawaited(_signInWithGoogle()) : null,
-          onSignOut: _accountGateway != null ? () => unawaited(_signOut()) : null,
-          onSyncAccount:
-              _accountGateway != null ? () => unawaited(_syncAccount()) : null,
+          onSignInWithGoogle: _accountGateway != null
+              ? () => unawaited(_signInWithGoogle())
+              : null,
+          onSignOut: _accountGateway != null
+              ? () => unawaited(_signOut())
+              : null,
+          onSyncAccount: _accountGateway != null
+              ? () => unawaited(_syncAccount())
+              : null,
         ),
       ),
     );
@@ -660,9 +679,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
           // Completed files or already-removed temp files may ignore discard.
         }
         await _refreshRecentRuns();
-    if (kDebugMode && _ownsBridge) {
-      await _loadDebugSimulation();
-    }
+        if (kDebugMode && _ownsBridge) {
+          await _loadDebugSimulation();
+        }
         final RunSummary? summary = await _loadRunSummary(result.runId);
         if (!mounted) return;
         if (summary == null) {
@@ -706,6 +725,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
         onBackToHome: _popToHome,
         onOpenHome: _popToHome,
         onOpenSettings: () => _openSettings(replaceCurrent: true),
+        onOpenGoals: () => unawaited(_openGoals()),
         onStartRun: () {
           _popToHome();
           unawaited(_handleStartRun());
@@ -895,9 +915,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
         // Ignore if there is no corresponding temp file.
       }
       await _refreshRecentRuns();
-    if (kDebugMode && _ownsBridge) {
-      await _loadDebugSimulation();
-    }
+      if (kDebugMode && _ownsBridge) {
+        await _loadDebugSimulation();
+      }
       if (!mounted) return;
       if (fromHistory) {
         _navigatorKey.currentState?.pop();
@@ -956,10 +976,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
                 icon: Icons.delete_outline_rounded,
                 tooltip: 'Delete run',
                 onPressed: () => unawaited(
-                  _confirmAndDeleteRun(
-                    summary.runId,
-                    fromHistory: fromHistory,
-                  ),
+                  _confirmAndDeleteRun(summary.runId, fromHistory: fromHistory),
                 ),
               ),
             ),
@@ -1011,6 +1028,8 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
           return HomeScreen(
             recentRuns: _recentRuns,
             recentRunsStatus: _recentRunsStatus,
+            weeklyDistanceKm: _weeklyDistanceKm,
+            weeklyGoalKm: _weeklyGoalKm,
             isStartingRun: _isStartingRun,
             formatter: _formatter,
             onStartRun: () => unawaited(_handleStartRun()),
@@ -1083,6 +1102,7 @@ class _HistoryRouteScreen extends StatefulWidget {
     required this.onBackToHome,
     required this.onOpenHome,
     required this.onOpenSettings,
+    required this.onOpenGoals,
     required this.onStartRun,
     this.referenceDate,
   });
@@ -1094,6 +1114,7 @@ class _HistoryRouteScreen extends StatefulWidget {
   final VoidCallback onBackToHome;
   final VoidCallback onOpenHome;
   final VoidCallback onOpenSettings;
+  final VoidCallback onOpenGoals;
   final VoidCallback onStartRun;
   final DateTime? referenceDate;
 
@@ -1188,6 +1209,7 @@ class _HistoryRouteScreenState extends State<_HistoryRouteScreen> {
       onBackToHome: widget.onBackToHome,
       onOpenHome: widget.onOpenHome,
       onOpenSettings: widget.onOpenSettings,
+      onOpenGoals: widget.onOpenGoals,
       onStartRun: widget.onStartRun,
     );
   }

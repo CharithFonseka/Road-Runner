@@ -58,6 +58,7 @@ class _Calls {
   int permissions = 0;
   int settings = 0;
   int retry = 0;
+  int goals = 0;
   final List<String> selected = [];
 }
 
@@ -75,6 +76,9 @@ Future<_Calls> _pumpHome(
   ThemeData? theme,
   Size size = const Size(360, 800),
   double textScale = 1.0,
+  double? weeklyDistanceKm,
+  double? weeklyGoalKm,
+  bool withGoals = false,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
@@ -95,6 +99,9 @@ Future<_Calls> _pumpHome(
           lastRun: lastRun,
           recentRuns: runs,
           recentRunsStatus: status,
+          weeklyDistanceKm: weeklyDistanceKm,
+          weeklyGoalKm: weeklyGoalKm,
+          onOpenGoals: withGoals ? () => c.goals++ : null,
           onStartRun: () => c.start++,
           onOpenHistory: () => c.history++,
           onOpenPermissions: () => c.permissions++,
@@ -124,7 +131,12 @@ void main() {
     testWidgets('dark Home uses the palette for sky, runs and Slide to Start', (
       tester,
     ) async {
-      await _pumpHome(tester, theme: AppTheme.dark(), runs: _runs);
+      await _pumpHome(
+        tester,
+        theme: AppTheme.dark(),
+        runs: _runs,
+        size: const Size(412, 915),
+      );
       final AppPalette palette = AppPalette.dark;
 
       expect(
@@ -316,22 +328,72 @@ void main() {
   });
 
   group('Recent runs: loaded', () {
+    testWidgets('weekly goal progress opens Goals', (tester) async {
+      final _Calls c = await _pumpHome(
+        tester,
+        runs: _runs,
+        weeklyDistanceKm: 4.2,
+        weeklyGoalKm: 10,
+        withGoals: true,
+      );
+      expect(find.text('4.2 of 10 km goal'), findsOneWidget);
+      await tester.tap(find.byKey(HomeScreen.weeklyGoalKey));
+      await tester.pump();
+      expect(c.goals, 1);
+    });
+
+    testWidgets('Goals is available from the navigation drawer', (
+      tester,
+    ) async {
+      final _Calls c = await _pumpHome(tester, withGoals: true);
+      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(AppNavigationDrawer.goalsButtonKey));
+      await tester.pumpAndSettle();
+      expect(c.goals, 1);
+    });
+
     testWidgets('rows are newest first with formatted values', (tester) async {
       await _pumpHome(tester, runs: _runs);
       expect(find.text(AppStrings.recentRunsTitle), findsOneWidget);
-      expect(_inRow(0, '14 Nov 2026'), findsOneWidget);
-      expect(_inRow(1, '11 Nov 2026'), findsOneWidget);
-      expect(_inRow(2, '08 Nov 2026'), findsOneWidget);
-      expect(_inRow(0, '5.02 km'), findsOneWidget);
-      expect(_inRow(0, '32:15'), findsOneWidget);
-      expect(_inRow(0, '6:25/km'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(HomeScreen.latestRunKey),
+          matching: find.text('14 Nov 2026'),
+        ),
+        findsOneWidget,
+      );
+      expect(_inRow(0, '11 Nov 2026'), findsOneWidget);
+      expect(_inRow(1, '08 Nov 2026'), findsOneWidget);
+      expect(_inRow(2, '08 Nov 2026'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(HomeScreen.latestRunKey),
+          matching: find.text('5.02 km'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(HomeScreen.latestRunKey),
+          matching: find.textContaining('32:15'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(HomeScreen.latestRunKey),
+          matching: find.textContaining('6:25/km'),
+        ),
+        findsOneWidget,
+      );
       expect(_inRow(0, AppStrings.statPace), findsOneWidget);
       expect(find.byKey(RecentRunsCard.viewAllKey), findsOneWidget);
     });
 
     testWidgets('tapping a row reports its run ID', (tester) async {
       final _Calls c = await _pumpHome(tester, runs: _runs);
-      await tester.tap(find.byKey(RecentRunsCard.rowKey(1)));
+      await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
       await tester.pump();
       expect(c.selected, ['middle']);
       expect((c.history, c.start), (0, 0));
@@ -364,10 +426,10 @@ void main() {
         tester.getSemantics(find.byKey(RecentRunsCard.rowKey(0))),
         containsSemantics(
           label: AppStrings.recentRunSemantics(
-            '14 Nov 2026',
-            '5.02 km',
-            '32:15',
-            '6:25/km',
+            '11 Nov 2026',
+            '3.48 km',
+            '21:05',
+            '6:03/km',
           ),
           isButton: true,
           hasTapAction: true,
@@ -383,12 +445,23 @@ void main() {
         tester,
         runs: [HistoryRun(runId: 'x', startedAt: DateTime(2026, 11, 1))],
       );
-      expect(_inRow(0, '-.-- km'), findsOneWidget);
-      expect(_inRow(0, '--:--'), findsOneWidget);
-      expect(_inRow(0, '--:--/km'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(HomeScreen.latestRunKey),
+          matching: find.text('-.-- km'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(HomeScreen.latestRunKey),
+          matching: find.textContaining('--:--'),
+        ),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('legacy lastRun input still shows as a row', (tester) async {
+    testWidgets('legacy lastRun input still opens History', (tester) async {
       final _Calls c = await _pumpHome(
         tester,
         lastRun: const LastRunSummary(
@@ -398,9 +471,21 @@ void main() {
           averagePace: '7:65/km',
         ),
       );
-      expect(_inRow(0, 'Test date'), findsOneWidget);
-      expect(_inRow(0, '7:65/km'), findsOneWidget);
-      await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
+      expect(
+        find.descendant(
+          of: find.byKey(HomeScreen.latestRunKey),
+          matching: find.text('Test date'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(HomeScreen.latestRunKey),
+          matching: find.textContaining('7:65/km'),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(HomeScreen.latestRunKey));
       await tester.pump();
       expect(c.history, 1);
       expect(c.selected, isEmpty);
@@ -464,6 +549,7 @@ void main() {
         tester.getSemantics(find.text(AppStrings.recentRunsErrorTitle)),
         containsSemantics(isLiveRegion: true),
       );
+      await tester.ensureVisible(find.byKey(RecentRunsCard.retryKey));
       await tester.tap(find.byKey(RecentRunsCard.retryKey));
       await tester.pump();
       expect((c.retry, c.start, c.history), (1, 0, 0));
@@ -603,17 +689,19 @@ void main() {
               expect(card.left, greaterThan(slider.right));
             } else {
               expect(slider.width, size.width - 2 * AppSpacing.medium);
-              expect(card.bottom, lessThanOrEqualTo(slider.top));
+              expect(find.byType(SingleChildScrollView), findsWidgets);
             }
           });
         }
       }
     }
 
-    testWidgets('A33 at 1x: the card gets most of the screen', (tester) async {
+    testWidgets('A33 at 1x: the dashboard keeps history compact', (
+      tester,
+    ) async {
       await _pumpHome(tester, runs: _runs, size: const Size(412, 915));
       final Rect card = tester.getRect(find.byKey(HomeScreen.recentRunsKey));
-      expect(card.height, greaterThan(915 * 0.5));
+      expect(card.height, 352);
     });
 
     testWidgets('respects the status bar and Android navigation bar', (

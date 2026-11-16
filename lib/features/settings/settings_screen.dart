@@ -52,6 +52,7 @@ class SettingsScreen extends StatefulWidget {
     this.onSignInWithGoogle,
     this.onSignOut,
     this.onSyncAccount,
+    this.onOpenGoals,
   });
 
   /// Reads permission status and opens the app's system settings page.
@@ -85,6 +86,7 @@ class SettingsScreen extends StatefulWidget {
   final VoidCallback? onSignInWithGoogle;
   final VoidCallback? onSignOut;
   final VoidCallback? onSyncAccount;
+  final VoidCallback? onOpenGoals;
 
   static const Key backButtonKey = Key('settings.back');
   static const Key menuButtonKey = Key('settings.menu');
@@ -169,6 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onOpenHome: widget.onOpenHome,
         onOpenHistory: widget.onOpenHistory,
         onOpenSettings: () {}, // current page: the drawer only closes
+        onOpenGoals: widget.onOpenGoals,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

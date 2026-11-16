@@ -1,0 +1,257 @@
+// Run explicitly with: flutter test tool/ui_review_preview_test.dart
+// Writes sample-data phone previews to build/ui-review/ for local UI review.
+
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_map_vector_tiles/flutter_map_vector_tiles.dart' as vt;
+import 'package:latlong2/latlong.dart';
+import 'package:road_runner/bridge/mock_tracking_bridge.dart';
+import 'package:road_runner/core/theme/app_theme.dart';
+import 'package:road_runner/core/theme/app_text_styles.dart';
+import 'package:road_runner/data/planned_route.dart';
+import 'package:road_runner/data/planned_route_repository.dart';
+import 'package:road_runner/features/history/history_run.dart';
+import 'package:road_runner/features/home/home_screen.dart';
+import 'package:road_runner/features/route_planning/ors_directions_client.dart';
+import 'package:road_runner/features/route_planning/route_planning_screen.dart';
+import 'package:road_runner/features/run/active_run_screen.dart';
+import 'package:road_runner/features/summary/run_summary.dart';
+import 'package:road_runner/features/summary/summary_screen.dart';
+
+const Key previewKey = Key('ui-review.preview');
+
+String flutterFontsPath() {
+  final configuredRoot = Platform.environment['FLUTTER_ROOT'];
+  if (configuredRoot != null) {
+    return '$configuredRoot/bin/cache/artifacts/material_fonts';
+  }
+  var directory = File(Platform.resolvedExecutable).parent;
+  for (var i = 0; i < 10; i++) {
+    final fonts = Directory(
+      '${directory.path}/bin/cache/artifacts/material_fonts',
+    );
+    if (fonts.existsSync()) return fonts.path;
+    directory = directory.parent;
+  }
+  throw StateError('Flutter material fonts not found');
+}
+
+class _PreviewRoutes extends PlannedRouteRepository {
+  @override
+  Future<void> save(PlannedRoute route) async {}
+}
+
+ThemeData reviewTheme() {
+  final base = AppTheme.light();
+  final buttonText = WidgetStatePropertyAll<TextStyle>(
+    AppTextStyles.button.copyWith(fontFamily: 'Roboto'),
+  );
+  return base.copyWith(
+    appBarTheme: base.appBarTheme.copyWith(
+      titleTextStyle: base.appBarTheme.titleTextStyle?.copyWith(
+        fontFamily: 'Roboto',
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: base.filledButtonTheme.style!.copyWith(textStyle: buttonText),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: base.outlinedButtonTheme.style!.copyWith(textStyle: buttonText),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: base.textButtonTheme.style!.copyWith(textStyle: buttonText),
+    ),
+  );
+}
+
+void phoneSize(WidgetTester tester) {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(393, 852);
+  addTearDown(tester.view.reset);
+}
+
+Future<void> savePreview(WidgetTester tester, String name) async {
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(previewKey),
+  );
+  await tester.runAsync(() async {
+    final image = await boundary.toImage(pixelRatio: 1);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    final output = File('build/ui-review/$name.png');
+    output.parent.createSync(recursive: true);
+    await output.writeAsBytes(data!.buffer.asUint8List());
+  });
+}
+
+void main() {
+  setUpAll(() async {
+    final fonts = flutterFontsPath();
+    Future<ByteData> font(String path) async =>
+        ByteData.sublistView(await File(path).readAsBytes());
+    await Future.wait([
+      (FontLoader('Roboto')
+            ..addFont(font('$fonts/roboto-regular.ttf'))
+            ..addFont(font('$fonts/roboto-bold.ttf')))
+          .load(),
+      (FontLoader('Ahem')..addFont(font('$fonts/roboto-regular.ttf'))).load(),
+      (FontLoader(
+        'MaterialIcons',
+      )..addFont(font('$fonts/materialicons-regular.otf'))).load(),
+    ]);
+  });
+
+  testWidgets('Home preview', (tester) async {
+    phoneSize(tester);
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: previewKey,
+        child: MaterialApp(
+          theme: reviewTheme(),
+          home: HomeScreen(
+            recentRuns: [
+              HistoryRun(
+                runId: 'morning',
+                runName: 'Morning run',
+                startedAt: DateTime(2026, 11, 17, 7, 10),
+                distanceM: 5020,
+                movingMs: 1935000,
+                averagePaceSecPerKm: 385,
+              ),
+              HistoryRun(
+                runId: 'sunday',
+                runName: 'Sunday loop',
+                startedAt: DateTime(2026, 11, 15, 6, 55),
+                distanceM: 3480,
+                movingMs: 1265000,
+                averagePaceSecPerKm: 363,
+              ),
+            ],
+            weeklyDistanceKm: 8.5,
+            weeklyGoalKm: 15,
+            onStartRun: () {},
+            onOpenHistory: () {},
+            onOpenPermissions: () {},
+            onOpenGoals: () {},
+            onPlanRoute: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await savePreview(tester, 'home');
+  });
+
+  testWidgets('Active Run preview', (tester) async {
+    phoneSize(tester);
+    final bridge = MockTrackingBridge();
+    addTearDown(bridge.dispose);
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: previewKey,
+        child: MaterialApp(
+          theme: reviewTheme(),
+          home: ActiveRunScreen(
+            bridge: bridge,
+            onRunFinished: (_) {},
+            onExit: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 9));
+    await tester.pump();
+    await savePreview(tester, 'active-run');
+    await bridge.stopRun();
+    await tester.pump();
+  });
+
+  testWidgets('Summary preview', (tester) async {
+    phoneSize(tester);
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: previewKey,
+        child: MaterialApp(
+          theme: reviewTheme(),
+          home: SummaryScreen(
+            summary: RunSummary(
+              runId: 'morning',
+              runName: 'Morning run',
+              startedAt: DateTime(2026, 11, 17, 7, 10),
+              distanceM: 5020,
+              movingMs: 1935000,
+              averagePaceSecPerKm: 385,
+              averageSpeedMps: 2.59,
+              route: const [
+                RoutePoint(lat: 6.9271, lon: 79.8612, speedMps: 2.5),
+                RoutePoint(lat: 6.9321, lon: 79.8652, speedMps: 2.8),
+                RoutePoint(lat: 6.9301, lon: 79.8702, speedMps: 2.6),
+                RoutePoint(lat: 6.9271, lon: 79.8612, speedMps: 2.7),
+              ],
+              splits: const [
+                SplitSummary(km: 1, durationMs: 380000),
+                SplitSummary(km: 2, durationMs: 391000),
+                SplitSummary(km: 3, durationMs: 378000, isFastest: true),
+              ],
+            ),
+            onBackToHome: () {},
+            onOpenHistory: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await savePreview(tester, 'summary');
+  });
+
+  testWidgets('Route planner preview', (tester) async {
+    phoneSize(tester);
+    final style = Completer<vt.Style>();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: previewKey,
+        child: MaterialApp(
+          theme: reviewTheme(),
+          home: RoutePlanningScreen(
+            repository: _PreviewRoutes(),
+            directions: OrsDirectionsClient(
+              apiKey: 'preview-key',
+              post: (_, _, _) async => {
+                'features': [
+                  {
+                    'geometry': {
+                      'type': 'LineString',
+                      'coordinates': [
+                        [79.8612, 6.9271],
+                        [79.8652, 6.9321],
+                        [79.8702, 6.9301],
+                      ],
+                    },
+                  },
+                ],
+              },
+            ),
+            initialCenter: const LatLng(6.9271, 79.8612),
+            styleFuture: style.future,
+          ),
+        ),
+      ),
+    );
+    final map = find.byKey(RoutePlanningScreen.mapKey);
+    final topLeft = tester.getTopLeft(map);
+    await tester.tapAt(topLeft + const Offset(80, 130));
+    await tester.pump();
+    await tester.tapAt(topLeft + const Offset(240, 260));
+    await tester.pump();
+    await tester.tap(find.byKey(RoutePlanningScreen.findKey));
+    await tester.pump();
+    await savePreview(tester, 'route-planner');
+  });
+}

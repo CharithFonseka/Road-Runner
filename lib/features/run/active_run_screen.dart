@@ -247,16 +247,20 @@ class _ActiveRunScreenState extends State<ActiveRunScreen> {
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
-                      LiveRunMap(route: state.route, snapshot: state.snapshot),
-                      if (state.route.isNotEmpty ||
-                          (state.snapshot?.lat != null &&
-                              state.snapshot?.lon != null))
-                        const SizedBox(height: AppSpacing.itemGap),
                       _StatsCard(
                         snapshot: state.snapshot,
                         paused: paused,
                         formatter: widget.formatter,
                       ),
+                      if (state.route.isNotEmpty ||
+                          (state.snapshot?.lat != null &&
+                              state.snapshot?.lon != null)) ...[
+                        const SizedBox(height: AppSpacing.itemGap),
+                        LiveRunMap(
+                          route: state.route,
+                          snapshot: state.snapshot,
+                        ),
+                      ],
                     ],
                   ),
                 ),

@@ -56,6 +56,7 @@ class HistoryScreen extends StatefulWidget {
     this.onStartRun,
     this.onOpenHome,
     this.onOpenSettings,
+    this.onOpenGoals,
   });
 
   /// Saved runs in any order; shown newest first.
@@ -89,6 +90,7 @@ class HistoryScreen extends StatefulWidget {
   final VoidCallback? onStartRun;
   final VoidCallback? onOpenHome;
   final VoidCallback? onOpenSettings;
+  final VoidCallback? onOpenGoals;
 
   static const Key backButtonKey = Key('history.back');
   static const Key menuButtonKey = Key('history.menu');
@@ -165,6 +167,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         onOpenHome: widget.onOpenHome ?? widget.onBackToHome,
         onOpenHistory: _doNothing,
         onOpenSettings: widget.onOpenSettings ?? _doNothing,
+        onOpenGoals: widget.onOpenGoals,
       ),
       body: Column(
         children: [

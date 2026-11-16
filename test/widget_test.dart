@@ -285,7 +285,7 @@ void main() {
   });
 
   testWidgets(
-    'Home shows full recent runs sorted newest-first and opens Summary with partial split',
+    'Home highlights the latest run and opens Summary with partial split',
     (WidgetTester tester) async {
       _usePhoneViewport(tester);
       final bridge = _StubTrackingBridge();
@@ -336,12 +336,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.byKey(HomeScreen.latestRunKey), findsOneWidget);
       expect(find.byKey(RecentRunsCard.rowKey(0)), findsOneWidget);
-      expect(find.byKey(RecentRunsCard.rowKey(1)), findsOneWidget);
       expect(find.text('1.50 km'), findsOneWidget);
       expect(find.text('5.00 km'), findsOneWidget);
 
-      await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
+      await tester.tap(find.byKey(HomeScreen.latestRunKey));
       await tester.pumpAndSettle();
 
       expect(find.byType(SummaryScreen), findsOneWidget);
@@ -401,7 +401,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
+      await tester.tap(find.byKey(HomeScreen.latestRunKey));
       await tester.pumpAndSettle();
 
       expect(find.byType(SummaryScreen), findsOneWidget);

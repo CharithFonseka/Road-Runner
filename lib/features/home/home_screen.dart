@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
 import '../history/history_run.dart';
 import '../history/history_screen.dart';
@@ -46,6 +47,8 @@ class HomeScreen extends StatelessWidget {
     this.onOpenSettings,
     this.onPlanRoute,
     this.onOpenGoals,
+    this.weeklyDistanceKm,
+    this.weeklyGoalKm,
     this.isStartingRun = false,
     this.startRunEnabled = true,
     this.formatter = const LiveRunFormatter(),
@@ -92,6 +95,8 @@ class HomeScreen extends StatelessWidget {
   /// Opens the walking route planner when available.
   final VoidCallback? onPlanRoute;
   final VoidCallback? onOpenGoals;
+  final double? weeklyDistanceKm;
+  final double? weeklyGoalKm;
 
   /// The parent's "starting a run" flag (for example while it checks
   /// permissions). True shows "Starting run"; turning it back to false
@@ -111,6 +116,8 @@ class HomeScreen extends StatelessWidget {
   static const Key recentRunsKey = Key('home.recentRuns');
   static const Key planRouteButtonKey = Key('home.planRoute');
   static const Key goalsButtonKey = Key('home.goals');
+  static const Key latestRunKey = Key('home.latestRun');
+  static const Key weeklyGoalKey = Key('home.weeklyGoal');
 
   /// Below this height (phone in landscape) the desert strip is left out
   /// so the Recent runs card keeps usable space.
@@ -188,6 +195,7 @@ class HomeScreen extends StatelessWidget {
         onOpenHome: () {}, // Home is the current page: the drawer only closes.
         onOpenHistory: onOpenHistory,
         onOpenSettings: _openSettings,
+        onOpenGoals: onOpenGoals,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -236,8 +244,8 @@ class HomeScreen extends StatelessWidget {
     BoxConstraints constraints,
   ) {
     final double bottomInset = MediaQuery.paddingOf(context).bottom;
-    final bool tall =
-        MediaQuery.sizeOf(context).height >= compactHeightBreakpoint;
+    final List<RecentRunRow> rows = _rows();
+    final bool tall = MediaQuery.sizeOf(context).height >= 900;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -261,33 +269,67 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.medium,
-              6,
-              AppSpacing.medium,
-              0,
-            ),
-            child: RecentRunsCard(
-              key: recentRunsKey,
-              status: recentRunsStatus,
-              rows: _rows(),
-              onViewAll: onOpenHistory,
-              onRowSelected: _onRowSelected,
-              onRetry: onRetry,
-            ),
-          ),
-        ),
-        if (onPlanRoute != null || onOpenGoals != null)
-          Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.medium,
               AppSpacing.small,
               AppSpacing.medium,
               0,
             ),
-            child: _buildActionRow(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (recentRunsStatus == RecentRunsStatus.ready &&
+                    rows.isNotEmpty) ...[
+                  _LatestRunCard(
+                    row: rows.first,
+                    onTap: () => _onRowSelected(rows.first),
+                  ),
+                  const SizedBox(height: AppSpacing.itemGap),
+                ],
+                if (weeklyDistanceKm != null &&
+                    weeklyGoalKm != null &&
+                    weeklyGoalKm! > 0 &&
+                    onOpenGoals != null) ...[
+                  _WeeklyGoalCard(
+                    distanceKm: weeklyDistanceKm!,
+                    goalKm: weeklyGoalKm!,
+                    onTap: onOpenGoals!,
+                  ),
+                  const SizedBox(height: AppSpacing.itemGap),
+                ],
+                if (onPlanRoute != null)
+                  OutlinedButton.icon(
+                    key: planRouteButtonKey,
+                    onPressed: onPlanRoute,
+                    icon: const Icon(Icons.route_outlined),
+                    label: const Text(AppStrings.planRoute),
+                  ),
+                if (onPlanRoute != null)
+                  const SizedBox(height: AppSpacing.itemGap),
+                if (recentRunsStatus != RecentRunsStatus.ready ||
+                    rows.length != 1)
+                  SizedBox(
+                    height: recentRunsStatus == RecentRunsStatus.ready
+                        ? (rows.length > 2
+                              ? 352
+                              : (rows.length > 1 ? 205 : 190))
+                        : 190,
+                    child: RecentRunsCard(
+                      key: recentRunsKey,
+                      status: recentRunsStatus,
+                      rows: rows.length > 1
+                          ? rows.skip(1).take(2).toList()
+                          : rows,
+                      onViewAll: onOpenHistory,
+                      onRowSelected: _onRowSelected,
+                      onRetry: onRetry,
+                    ),
+                  ),
+              ],
+            ),
           ),
+        ),
         Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.medium,
@@ -420,6 +462,149 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LatestRunCard extends StatelessWidget {
+  const _LatestRunCard({required this.row, required this.onTap});
+
+  final RecentRunRow row;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette palette = context.palette;
+    return Semantics(
+      key: HomeScreen.latestRunKey,
+      button: true,
+      label: AppStrings.recentRunSemantics(
+        row.dateLabel,
+        row.distance,
+        row.duration,
+        row.pace,
+      ),
+      onTap: onTap,
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.medium),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.directions_run_rounded, color: palette.accent),
+                    const SizedBox(width: AppSpacing.small),
+                    Expanded(
+                      child: Text(
+                        AppStrings.lastRunTitle,
+                        style: AppTextStyles.of(context).sectionHeading,
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: palette.textSecondary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.small),
+                Text(
+                  row.distance,
+                  style: AppTextStyles.of(context).statValue
+                      .copyWith(fontSize: 32, color: palette.stat),
+                ),
+                Text(
+                  row.runName ?? row.dateLabel,
+                  style: AppTextStyles.of(context).body
+                      .copyWith(fontWeight: FontWeight.w700),
+                ),
+                if (row.runName != null)
+                  Text(row.dateLabel, style: AppTextStyles.of(context).caption),
+                const SizedBox(height: AppSpacing.small),
+                Text(
+                  '${AppStrings.statDuration}: ${row.duration}  •  '
+                  '${AppStrings.statAveragePace}: ${row.pace}',
+                  style: AppTextStyles.of(context).caption,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WeeklyGoalCard extends StatelessWidget {
+  const _WeeklyGoalCard({
+    required this.distanceKm,
+    required this.goalKm,
+    required this.onTap,
+  });
+
+  final double distanceKm;
+  final double goalKm;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette palette = context.palette;
+    final double progress = (distanceKm / goalKm).clamp(0.0, 1.0);
+    return Semantics(
+      key: HomeScreen.weeklyGoalKey,
+      button: true,
+      label: AppStrings.weeklyGoalProgress(distanceKm, goalKm),
+      onTap: onTap,
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.medium),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.emoji_events_outlined, color: palette.accent),
+                    const SizedBox(width: AppSpacing.small),
+                    Expanded(
+                      child: Text(
+                        AppStrings.weeklyGoalTitle,
+                        style: AppTextStyles.of(context).sectionHeading,
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: palette.textSecondary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.small),
+                Text(
+                  AppStrings.weeklyGoalProgress(distanceKm, goalKm),
+                  style: AppTextStyles.of(context).body,
+                ),
+                const SizedBox(height: AppSpacing.small),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 8,
+                    backgroundColor: palette.iconButtonFill,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      palette.primaryFill,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

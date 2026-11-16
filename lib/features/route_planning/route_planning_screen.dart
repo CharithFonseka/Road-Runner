@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import '../../core/theme/app_palette.dart';
 import '../../data/planned_route.dart';
 import '../../data/planned_route_repository.dart';
+import '../app_strings.dart';
 import 'ors_directions_client.dart';
 
 /// Pick two map points, preview the walking route, then save it locally.
@@ -85,11 +86,11 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
           ),
         );
       }
-    } catch (error) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not plan route: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(AppStrings.routeFindFailed)),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -111,11 +112,11 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
         ),
       );
       if (mounted) Navigator.of(context).pop();
-    } catch (error) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not save route: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(AppStrings.routeSaveFailed)),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -127,8 +128,16 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
     final preview = _preview;
     final hasRouteService = widget.directions.apiKey.trim().isNotEmpty;
     final palette = AppPalette.of(context);
+    final step = _start == null ? 1 : (_finish == null ? 2 : 3);
+    final instruction = _start == null
+        ? AppStrings.routeChooseStart
+        : _finish == null
+        ? AppStrings.routeChooseFinish
+        : preview == null
+        ? AppStrings.routePreviewPrompt
+        : AppStrings.routeSavePrompt;
     return Scaffold(
-      appBar: AppBar(title: const Text('Plan a route')),
+      appBar: AppBar(title: const Text(AppStrings.planRoute)),
       body: Column(
         children: [
           Expanded(
@@ -205,6 +214,15 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                         palette: palette,
                       ),
                     ),
+                  if (styleSnapshot.connectionState == ConnectionState.waiting)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: _MapNote(
+                        AppStrings.routeStreetMapLoading,
+                        palette: palette,
+                      ),
+                    ),
                   Positioned(
                     bottom: 6,
                     left: 6,
@@ -225,51 +243,105 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Tap the map for start, then tap for finish.'),
-                  if (!hasRouteService)
-                    const Text('Walking route service is not configured.'),
-                  TextField(
-                    controller: _name,
-                    decoration: const InputDecoration(labelText: 'Route name'),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      OutlinedButton(
-                        onPressed: _busy
-                            ? null
-                            : () => setState(() {
-                                _start = null;
-                                _finish = null;
-                                _preview = null;
-                              }),
-                        child: const Text('Clear'),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: palette.primaryFill,
+                          foregroundColor: palette.onPrimaryFill,
+                          child: Text('$step'),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            instruction,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (!hasRouteService)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text(AppStrings.routeServiceUnavailable),
                       ),
-                      FilledButton(
-                        key: RoutePlanningScreen.findKey,
-                        onPressed:
-                            hasRouteService &&
-                                _start != null &&
-                                _finish != null &&
-                                !_busy
-                            ? _findRoute
-                            : null,
-                        child: const Text('Find walking route'),
-                      ),
-                      FilledButton.tonal(
-                        key: RoutePlanningScreen.saveKey,
-                        onPressed: preview != null && !_busy ? _save : null,
-                        child: const Text('Save route'),
+                    if (_start != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _finish == null
+                            ? AppStrings.routeStartSelected
+                            : AppStrings.routeBothSelected,
                       ),
                     ],
-                  ),
-                ],
+                    if (preview != null) ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _name,
+                        textInputAction: TextInputAction.done,
+                        decoration: const InputDecoration(
+                          labelText: AppStrings.routeName,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        if (_start != null) ...[
+                          TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () => setState(() {
+                                    _start = null;
+                                    _finish = null;
+                                    _preview = null;
+                                  }),
+                            child: const Text(AppStrings.routeClear),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: preview == null
+                              ? FilledButton(
+                                  key: RoutePlanningScreen.findKey,
+                                  onPressed:
+                                      hasRouteService &&
+                                          _start != null &&
+                                          _finish != null &&
+                                          !_busy
+                                      ? _findRoute
+                                      : null,
+                                  child: _busy
+                                      ? const SizedBox.square(
+                                          dimension: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Text(AppStrings.routeFind),
+                                )
+                              : FilledButton(
+                                  key: RoutePlanningScreen.saveKey,
+                                  onPressed: _busy ? null : _save,
+                                  child: _busy
+                                      ? const SizedBox.square(
+                                          dimension: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Text(AppStrings.routeSave),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

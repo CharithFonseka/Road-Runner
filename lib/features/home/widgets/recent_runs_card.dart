@@ -118,6 +118,7 @@ class RecentRunsCard extends StatelessWidget {
                           end: 4,
                         ),
                         textStyle: const TextStyle(
+                          fontFamily: 'Roboto',
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
