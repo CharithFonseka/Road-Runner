@@ -367,7 +367,7 @@ class _MonthlySummaryCard extends StatelessWidget {
                       if (summary.averagePaceSecPerKm != null)
                         Text(
                           '${AppStrings.statAveragePace} ${formatter.pace(summary.averagePaceSecPerKm)}/km',
-                          style: AppTextStyles.caption,
+                          style: text.caption,
                         ),
                     ],
                   ),
