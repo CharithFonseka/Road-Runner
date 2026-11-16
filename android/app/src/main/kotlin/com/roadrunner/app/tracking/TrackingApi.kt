@@ -55,6 +55,9 @@ data class TrackingStatus(
         put("state", state.wireValue)
         runId?.let { put("runId", it) }
         snapshot?.let { put("snapshot", it.toMap()) }
+        if (state == TrackingRunState.STOPPED) {
+            filePath?.let { put("filePath", it) }
+        }
     }
 }
 
