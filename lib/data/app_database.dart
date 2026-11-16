@@ -7,7 +7,7 @@ import 'package:sqflite/sqflite.dart';
 /// Manages the SQLite database lifecycle, schema initialization, and connections.
 class AppDatabase {
   static const String databaseName = 'road_runner.db';
-  static const int databaseVersion = 2;
+  static const int databaseVersion = 3;
 
   // Table names
   static const String tableRuns = 'runs';
@@ -23,6 +23,12 @@ class AppDatabase {
   static const String colAvgPaceSecPerKm = 'avg_pace_sec_per_km';
   static const String colMaxSpeedMps = 'max_speed_mps';
   static const String colStatus = 'status';
+  static const String colRunName = 'run_name';
+  static const String colPlaceName = 'place_name';
+  static const String colWeatherTempC = 'weather_temp_c';
+  static const String colWeatherWindKmh = 'weather_wind_kmh';
+  static const String colWeatherCode = 'weather_code';
+  static const String colLocalStartDay = 'local_start_day';
 
   // Run points table columns
   static const String colPointRunId = 'run_id';
@@ -97,7 +103,13 @@ class AppDatabase {
         $colDistanceM REAL NOT NULL,
         $colAvgPaceSecPerKm REAL,
         $colMaxSpeedMps REAL,
-        $colStatus TEXT NOT NULL
+        $colStatus TEXT NOT NULL,
+        $colRunName TEXT,
+        $colPlaceName TEXT,
+        $colWeatherTempC REAL,
+        $colWeatherWindKmh REAL,
+        $colWeatherCode INTEGER,
+        $colLocalStartDay TEXT
       );
     ''');
 
@@ -141,13 +153,26 @@ class AppDatabase {
   ) async {
     if (oldVersion < 2) {
       await db.execute('''
-        CREATE TABLE $tableRunPauses (
+        CREATE TABLE IF NOT EXISTS $tableRunPauses (
           $colPauseRunId TEXT NOT NULL,
           $colPauseStartMs INTEGER NOT NULL,
           $colPauseEndMs INTEGER NOT NULL,
           FOREIGN KEY ($colPauseRunId) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
         );
       ''');
+    }
+
+    if (oldVersion < 3) {
+      for (final sql in [
+        'ALTER TABLE $tableRuns ADD COLUMN $colRunName TEXT',
+        'ALTER TABLE $tableRuns ADD COLUMN $colPlaceName TEXT',
+        'ALTER TABLE $tableRuns ADD COLUMN $colWeatherTempC REAL',
+        'ALTER TABLE $tableRuns ADD COLUMN $colWeatherWindKmh REAL',
+        'ALTER TABLE $tableRuns ADD COLUMN $colWeatherCode INTEGER',
+        'ALTER TABLE $tableRuns ADD COLUMN $colLocalStartDay TEXT',
+      ]) {
+        await db.execute(sql);
+      }
     }
   }
 

@@ -148,6 +148,29 @@ class _StubRunRepository implements RunRepository {
 
   @override
   Future<String?> getUnfinishedRunPath() async => null;
+
+  @override
+  Future<void> updateDetails(
+    String runId, {
+    String? runName,
+    String? placeName,
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+    String? localStartDay,
+  }) async {
+    final index = runs.indexWhere((r) => r.id == runId);
+    if (index != -1) {
+      runs[index] = runs[index].copyWith(
+        runName: runName,
+        placeName: placeName,
+        weatherTempC: temperatureC,
+        weatherWindKmh: windKmh,
+        weatherCode: weatherCode,
+        localStartDay: localStartDay,
+      );
+    }
+  }
 }
 
 class _StubPermissionGateway implements PermissionGateway {

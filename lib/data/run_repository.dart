@@ -20,6 +20,15 @@ abstract class RunRepository {
   Future<List<PauseInterval>> getPauses(String runId);
   Future<void> delete(String runId);
   Future<String?> getUnfinishedRunPath();
+  Future<void> updateDetails(
+    String runId, {
+    String? runName,
+    String? placeName,
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+    String? localStartDay,
+  });
 }
 
 /// SQLite-backed implementation of [RunRepository] using [AppDatabase].
@@ -141,10 +150,11 @@ class SqliteRunRepository implements RunRepository {
       );
     }
 
-        // 3. Compute running statistics using the pure Dart stats module.
+    // 3. Compute running statistics using the pure Dart stats module.
     // Start a new distance segment after every pause.
-    final List<Point> acceptedPoints =
-        points.where((point) => point.accepted).toList();
+    final List<Point> acceptedPoints = points
+        .where((point) => point.accepted)
+        .toList();
 
     double distanceM = 0.0;
     int pauseIndex = 0;
@@ -156,8 +166,7 @@ class SqliteRunRepository implements RunRepository {
           pauses[pauseIndex].endMs <= point.tUtcMs) {
         final pause = pauses[pauseIndex];
 
-        if (previousPoint != null &&
-            previousPoint.tUtcMs <= pause.startMs) {
+        if (previousPoint != null && previousPoint.tUtcMs <= pause.startMs) {
           previousPoint = null;
         }
 
@@ -165,7 +174,8 @@ class SqliteRunRepository implements RunRepository {
       }
 
       // Ignore points recorded during a pause.
-      final isInsidePause = pauseIndex < pauses.length &&
+      final isInsidePause =
+          pauseIndex < pauses.length &&
           point.tUtcMs >= pauses[pauseIndex].startMs &&
           point.tUtcMs < pauses[pauseIndex].endMs;
 
@@ -191,13 +201,14 @@ class SqliteRunRepository implements RunRepository {
       previousPoint = point;
     }
 
-    final int movingMs =
-        computeMovingMs(startedAtUtcMs, endedAtUtcMs, pauses);
+    final int movingMs = computeMovingMs(startedAtUtcMs, endedAtUtcMs, pauses);
 
-    final double? avgPaceSecPerKm =
-        computeAvgPaceSecPerKm(distanceM, movingMs);
+    final double? avgPaceSecPerKm = computeAvgPaceSecPerKm(distanceM, movingMs);
 
     final double? maxSpeedMps = computeMaxSpeedMps(points);
+    final localStart = DateTime.fromMillisecondsSinceEpoch(startedAtUtcMs)
+        .toLocal();
+    final existing = await get(runId);
     final run = Run(
       id: runId,
       startedAtUtcMs: startedAtUtcMs,
@@ -207,6 +218,13 @@ class SqliteRunRepository implements RunRepository {
       avgPaceSecPerKm: avgPaceSecPerKm,
       maxSpeedMps: maxSpeedMps,
       status: kStateSaved,
+      runName:
+          existing?.runName ?? makeRunName(localStart, existing?.placeName),
+      placeName: existing?.placeName,
+      weatherTempC: existing?.weatherTempC,
+      weatherWindKmh: existing?.weatherWindKmh,
+      weatherCode: existing?.weatherCode,
+      localStartDay: existing?.localStartDay ?? localDay(localStart),
     );
 
     // 4. Save to SQLite in a single transaction with a Batch for points and pauses
@@ -320,6 +338,35 @@ class SqliteRunRepository implements RunRepository {
   }
 
   @override
+  Future<void> updateDetails(
+    String runId, {
+    String? runName,
+    String? placeName,
+    double? temperatureC,
+    double? windKmh,
+    int? weatherCode,
+    String? localStartDay,
+  }) async {
+    final values = <String, Object?>{};
+    if (runName != null) values['run_name'] = runName;
+    if (placeName != null) values['place_name'] = placeName;
+    if (temperatureC != null) values['weather_temp_c'] = temperatureC;
+    if (windKmh != null) values['weather_wind_kmh'] = windKmh;
+    if (weatherCode != null) values['weather_code'] = weatherCode;
+    if (localStartDay != null) values['local_start_day'] = localStartDay;
+
+    if (values.isEmpty) return;
+
+    final db = await _database.database;
+    await db.update(
+      AppDatabase.tableRuns,
+      values,
+      where: '${AppDatabase.colRunId} = ?',
+      whereArgs: [runId],
+    );
+  }
+
+  @override
   Future<String?> getUnfinishedRunPath() async {
     final String runsDirPath =
         runsDirectoryPath ?? '/data/user/0/com.roadrunner.app/files/runs';
@@ -386,3 +433,21 @@ class SqliteRunRepository implements RunRepository {
     return null;
   }
 }
+
+/// Builds a run name based on time of day and optional location name.
+String makeRunName(DateTime localStart, String? placeName) {
+  final hour = localStart.hour;
+  final period = hour < 12
+      ? 'Morning'
+      : hour < 17
+      ? 'Afternoon'
+      : 'Evening';
+
+  return placeName == null ? '$period run' : '$period run in $placeName';
+}
+
+/// Formats a local date as YYYY-MM-DD for daily streak calculations.
+String localDay(DateTime localStart) =>
+    '${localStart.year.toString().padLeft(4, '0')}-'
+    '${localStart.month.toString().padLeft(2, '0')}-'
+    '${localStart.day.toString().padLeft(2, '0')}';
