@@ -24,7 +24,6 @@ import 'package:road_runner/features/profile/profile_screen.dart';
 import 'package:road_runner/features/run/active_run_screen.dart';
 import 'package:road_runner/features/run/widgets/stop_run_dialog.dart';
 import 'package:road_runner/features/settings/settings_screen.dart';
-import 'package:road_runner/features/shared/app_navigation_drawer.dart';
 import 'package:road_runner/features/shared/app_bottom_navigation.dart';
 import 'package:road_runner/features/splash/splash_screen.dart';
 import 'package:road_runner/features/summary/summary_screen.dart';
@@ -91,6 +90,7 @@ class _StubRunRepository implements RunRepository {
   Completer<void>? listGate;
   int failListRemaining = 0;
   int failSaveRemaining = 0;
+  final bool awardFirstRun;
 
   _StubRunRepository({
     List<Run>? runs,
@@ -99,6 +99,7 @@ class _StubRunRepository implements RunRepository {
     this.listGate,
     this.failListRemaining = 0,
     this.failSaveRemaining = 0,
+    this.awardFirstRun = false,
   }) : runs = runs ?? [],
        pointsByRun = pointsByRun ?? {},
        pausesByRun = pausesByRun ?? {};
@@ -203,7 +204,10 @@ class _StubRunRepository implements RunRepository {
   }
 
   @override
-  Future<List<BadgeAward>> getBadgesForRun(String runId) async => [];
+  Future<List<BadgeAward>> getBadgesForRun(String runId) async =>
+      awardFirstRun && runs.any((run) => run.id == runId)
+      ? [BadgeAward(runId, BadgeType.firstRun)]
+      : [];
 
   @override
   Future<int> getCurrentStreak() async => 0;
@@ -495,7 +499,7 @@ void main() {
   );
 
   testWidgets(
-    'SettingsScreen is reachable from Home and History drawer without stacking',
+    'SettingsScreen is reachable from Home and History without stacking',
     (WidgetTester tester) async {
       _usePhoneViewport(tester);
       final bridge = _StubTrackingBridge();
@@ -520,20 +524,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(HomeScreen), findsOneWidget);
 
-      // From Home drawer -> History -> History drawer -> Settings.
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
+      // From Home bottom navigation -> History -> Settings gear.
       await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.history)),
+        find.byKey(AppBottomNavigation.destinationKey(MainDestination.history)),
       );
       await tester.pumpAndSettle();
       expect(find.byType(HistoryScreen), findsOneWidget);
 
-      await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.settings)),
-      );
+      await tester.tap(find.byKey(HistoryScreen.settingsButtonKey));
       await tester.pumpAndSettle();
       expect(find.byType(SettingsScreen), findsOneWidget);
       expect(find.byType(HistoryScreen), findsNothing);
@@ -598,10 +596,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.history)),
+        find.byKey(AppBottomNavigation.destinationKey(MainDestination.history)),
       );
       await tester.pumpAndSettle();
       expect(find.byType(HistoryScreen), findsOneWidget);
@@ -849,10 +845,8 @@ void main() {
     expect(find.byKey(RecentRunsCard.retryKey), findsOneWidget);
 
     // Open History while failListRemaining is still 1 -> shows error + retry.
-    await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-    await tester.pumpAndSettle();
     await tester.tap(
-      find.byKey(AppNavigationDrawer.destinationKey(AppDestination.history)),
+      find.byKey(AppBottomNavigation.destinationKey(MainDestination.history)),
     );
     await tester.pumpAndSettle();
 
@@ -879,6 +873,35 @@ void main() {
 
     expect(find.byType(SummaryScreen), findsOneWidget);
     bridge.dispose();
+  });
+
+  testWidgets('a newly earned badge pops up after saving a run', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final bridge = _StubTrackingBridge();
+    addTearDown(bridge.dispose);
+    final repo = _StubRunRepository(awardFirstRun: true);
+    await tester.pumpWidget(
+      RoadRunnerApp(
+        bridge: bridge,
+        repository: repo,
+        permissionGateway: _StubPermissionGateway(),
+        checkStartupState: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _slideToStart(tester);
+    await tester.tap(find.byKey(ActiveRunScreen.stopButtonKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(StopRunDialog.finishButtonKey));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.byType(SummaryScreen), findsOneWidget);
+    expect(find.byKey(const Key('milestone.popup')), findsOneWidget);
+    expect(find.text('First Run unlocked!'), findsOneWidget);
   });
 
   testWidgets('Start Run routes to Permissions when location is denied', (

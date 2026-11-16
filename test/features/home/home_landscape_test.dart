@@ -446,16 +446,11 @@ void main() {
   });
 
   group('Home Landscape — Header Controls & Insets', () {
-    testWidgets('menu button opens navigation drawer in landscape', (
-      tester,
-    ) async {
+    testWidgets('no navigation drawer appears in landscape', (tester) async {
       await _pumpLandscapeHome(tester, size: const Size(800, 360));
       expect(find.byType(AppNavigationDrawer), findsNothing);
-
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(AppNavigationDrawer), findsOneWidget);
+      expect(find.byIcon(Icons.menu_rounded), findsNothing);
+      expect(find.byKey(HomeScreen.settingsButtonKey), findsOneWidget);
     });
 
     testWidgets('settings button invokes onOpenSettings in landscape', (

@@ -457,55 +457,10 @@ void main() {
       expect((c.back, c.home), (1, 0));
     });
 
-    testWidgets('menu opens the drawer with Settings selected', (tester) async {
-      final SemanticsHandle handle = tester.ensureSemantics();
+    testWidgets('Settings has no navigation drawer', (tester) async {
       await _pump(tester, _Gateway());
-      await tester.tap(find.byKey(SettingsScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<AppNavigationDrawer>(find.byType(AppNavigationDrawer))
-            .selected,
-        AppDestination.settings,
-      );
-      expect(
-        tester.getSemantics(
-          find.byKey(
-            AppNavigationDrawer.destinationKey(AppDestination.settings),
-          ),
-        ),
-        containsSemantics(isSelected: true),
-      );
-      handle.dispose();
-    });
-
-    for (final AppDestination d in AppDestination.values) {
-      testWidgets('drawer ${d.name}', (tester) async {
-        final _Calls c = await _pump(tester, _Gateway());
-        await tester.tap(find.byKey(SettingsScreen.menuButtonKey));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(AppNavigationDrawer.destinationKey(d)));
-        await tester.pumpAndSettle();
-        expect(find.byType(AppNavigationDrawer), findsNothing);
-        expect(
-          (c.home, c.history, c.back),
-          switch (d) {
-            AppDestination.home => (1, 0, 0),
-            AppDestination.history => (0, 1, 0),
-            AppDestination.settings => (0, 0, 0),
-          },
-        );
-      });
-    }
-
-    testWidgets('system Back closes the drawer first', (tester) async {
-      await _pump(tester, _Gateway());
-      await tester.tap(find.byKey(SettingsScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
       expect(find.byType(AppNavigationDrawer), findsNothing);
-      expect(find.byType(SettingsScreen), findsOneWidget);
+      expect(tester.widget<Scaffold>(find.byType(Scaffold)).drawer, isNull);
     });
   });
 
@@ -623,7 +578,6 @@ void main() {
       );
       for (final Key k in [
         SettingsScreen.backButtonKey,
-        SettingsScreen.menuButtonKey,
         SettingsScreen.manageButtonKey,
         SettingsScreen.openAppSettingsKey,
       ]) {
@@ -672,7 +626,6 @@ void main() {
       );
       for (final (Key k, String tip) in [
         (SettingsScreen.backButtonKey, AppStrings.settingsBack),
-        (SettingsScreen.menuButtonKey, AppStrings.homeOpenMenu),
       ]) {
         expect(
           tester.getSemantics(find.byKey(k)),

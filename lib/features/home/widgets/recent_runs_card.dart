@@ -224,7 +224,12 @@ class _RunRow extends StatelessWidget {
             minHeight: AppSpacing.minTouchTarget,
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              compact ? 8 : 10,
+              16,
+              compact ? 8 : 10,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -233,24 +238,36 @@ class _RunRow extends StatelessWidget {
                     Expanded(
                       child: Text(
                         row.runName ?? row.dateLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.of(context).body.copyWith(
-                          fontSize: 16,
+                          fontSize: compact ? 15 : 16,
                           fontWeight: FontWeight.w700,
                           height: 1.3,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    if (compact && row.runName != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        row.dateLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.of(context).caption
+                            .copyWith(fontSize: 11),
+                      ),
+                    ],
+                    const SizedBox(width: 4),
                     Icon(
                       Icons.chevron_right_rounded,
-                      size: 20,
+                      size: compact ? 18 : 20,
                       color: palette.textSecondary,
                     ),
                   ],
                 ),
-                if (row.runName != null)
+                if (!compact && row.runName != null)
                   Text(row.dateLabel, style: AppTextStyles.of(context).caption),
-                const SizedBox(height: 6),
+                SizedBox(height: compact ? 4 : 6),
                 _Trio(
                   compact: compact,
                   stats: [

@@ -27,7 +27,7 @@ import '../app_strings.dart';
 import '../home/widgets/sky_header.dart';
 import '../permissions/permission_gateway.dart';
 import '../permissions/permissions_controller.dart';
-import '../shared/app_navigation_drawer.dart';
+import '../shared/app_navigation_drawer.dart' show DrawerLandscapePainter;
 import '../shared/permission_status_chip.dart';
 
 /// The three permission rows.
@@ -63,7 +63,7 @@ class SettingsScreen extends StatefulWidget {
   /// Header Back button.
   final VoidCallback onBack;
 
-  /// Drawer destinations. Settings itself only closes the drawer.
+  /// Optional navigation callbacks retained for callers of this screen.
   final VoidCallback onOpenHome;
   final VoidCallback onOpenHistory;
 
@@ -92,7 +92,6 @@ class SettingsScreen extends StatefulWidget {
   final ValueChanged<ThemeMode>? onThemeModeChanged;
 
   static const Key backButtonKey = Key('settings.back');
-  static const Key menuButtonKey = Key('settings.menu');
   static const Key manageButtonKey = Key('settings.manage');
   static const Key openAppSettingsKey = Key('settings.openAppSettings');
   static const Key retryButtonKey = Key('settings.retry');
@@ -170,13 +169,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final double bottomInset = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
       backgroundColor: palette.background,
-      drawer: AppNavigationDrawer(
-        selected: AppDestination.settings,
-        onOpenHome: widget.onOpenHome,
-        onOpenHistory: widget.onOpenHistory,
-        onOpenSettings: () {}, // current page: the drawer only closes
-        onOpenGoals: widget.onOpenGoals,
-      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final bool isLandscape =
@@ -210,12 +202,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.arrow_back_rounded,
               tooltip: AppStrings.settingsBack,
               onPressed: widget.onBack,
-            ),
-            trailing: HeaderIconButton(
-              key: SettingsScreen.menuButtonKey,
-              icon: Icons.menu_rounded,
-              tooltip: AppStrings.homeOpenMenu,
-              onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           ),
         ),
@@ -283,12 +269,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.arrow_back_rounded,
               tooltip: AppStrings.settingsBack,
               onPressed: widget.onBack,
-            ),
-            trailing: HeaderIconButton(
-              key: SettingsScreen.menuButtonKey,
-              icon: Icons.menu_rounded,
-              tooltip: AppStrings.homeOpenMenu,
-              onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           ),
         ),

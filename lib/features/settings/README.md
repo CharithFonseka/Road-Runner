@@ -9,14 +9,14 @@ SRS reference: Section 8.4, FR-40, FR-41, NFR-09, NFR-14
 SettingsScreen(
   gateway: const PermissionHandlerGateway(), // or a fake in tests
   onBack: ...,               // header Back button
-  onOpenHome: ...,           // drawer Home
-  onOpenHistory: ...,        // drawer History
+  onOpenHome: ...,           // retained for existing callers
+  onOpenHistory: ...,        // retained for existing callers
   onManagePermissions: ...,  // open the existing PermissionsScreen
   appVersion: '1.0.0 (3)',   // optional; real value only, null hides the row
 )
 ```
 
-Keys: `backButtonKey`, `menuButtonKey`, `manageButtonKey`, `openAppSettingsKey`, `retryButtonKey`, `checkFailedKey`, `settingsFailedKey`, `versionKey`, `rowKey(SettingsPermissionRow)`.
+Keys: `backButtonKey`, `manageButtonKey`, `openAppSettingsKey`, `retryButtonKey`, `checkFailedKey`, `settingsFailedKey`, `versionKey`, `rowKey(SettingsPermissionRow)`.
 
 ## What it shows
 
@@ -52,9 +52,9 @@ Firebase account gateway is available.
 
 ## Integration notes (app shell)
 
-- **Reaching Settings:** pass `onOpenSettings` to `HomeScreen` and push or replace to `SettingsScreen`. Home's gear and the drawer's Settings entry both use it.
-- **Drawer navigation:** replace the current main page (Home, History or Settings) rather than stacking copies.
-- **Back:** `onBack` is the header Back button. System Back is handled by the parent's `Navigator`. An open drawer is closed first.
+- **Reaching Settings:** pass `onOpenSettings` to `HomeScreen` and push or replace to `SettingsScreen`. Home and History both show a Settings gear.
+- **Navigation:** use the bottom bar for main destinations and the header Back button to leave Settings.
+- **Back:** `onBack` is the header Back button. System Back is handled by the parent's `Navigator`.
 - **Manage permissions:** push `PermissionsScreen(gateway: ..., onContinue: pop, onNotNow: pop)`. Settings refreshes on its own when it is shown again after the user returns from Android Settings.
 - **Version:** reading the app version needs `package_info_plus`, which is not a current dependency. Until the team approves it, leave `appVersion` null and the row stays hidden.
-- **During a run:** Settings must not be reachable. Active Run has no drawer and no Settings entry; keep it that way in routing.
+- **During a run:** Settings must not be reachable. Active Run has no Settings entry; keep it that way in routing.

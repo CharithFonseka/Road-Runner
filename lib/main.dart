@@ -22,6 +22,7 @@ import 'data/planned_route.dart';
 import 'data/planned_route_repository.dart';
 import 'data/run_enrichment_service.dart';
 import 'domain/achievements/goals_summary.dart';
+import 'domain/achievements/milestone_notice.dart';
 import 'domain/stats/stats.dart';
 import 'features/account/account_gateway.dart';
 import 'features/account/account_models.dart';
@@ -824,6 +825,12 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     RunResult result, {
     required bool replaceTop,
   }) async {
+    AchievementsSnapshot? beforeRun;
+    try {
+      beforeRun = await _buildAchievementsSnapshot();
+    } catch (_) {
+      // A missing progress snapshot must never prevent a run from saving.
+    }
     while (mounted) {
       try {
         await _repository.saveFromFile(result.runId, result.filePath);
@@ -851,6 +858,22 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
           throw StateError('Saved run ${result.runId} was not found.');
         }
 
+        var notices = <MilestoneNotice>[];
+        if (beforeRun != null) {
+          try {
+            final afterRun = await _buildAchievementsSnapshot();
+            final awards = await _repository.getBadgesForRun(result.runId);
+            notices = milestoneNoticesAfterRun(
+              before: beforeRun,
+              after: afterRun,
+              runAwards: awards,
+              runDistanceKm: (summary.distanceM ?? 0) / 1000,
+            );
+          } catch (_) {
+            // Milestone messages are optional; the saved summary still opens.
+          }
+        }
+
         final route = MaterialPageRoute<void>(
           builder: (context) =>
               _buildSummaryScreen(context, summary, fromHistory: false),
@@ -859,6 +882,11 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
           _navigatorKey.currentState?.pushReplacement(route);
         } else {
           _navigatorKey.currentState?.push(route);
+        }
+        if (notices.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _showMilestonePopup(notices),
+          );
         }
         return;
       } catch (_) {
@@ -870,6 +898,45 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
         }
       }
     }
+  }
+
+  void _showMilestonePopup(List<MilestoneNotice> notices) {
+    if (!mounted) return;
+    final context = _navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        key: const Key('milestone.popup'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 7),
+        content: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.emoji_events_rounded, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final notice in notices) ...[
+                    Text(
+                      notice.title,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(notice.message),
+                    if (notice != notices.last) const SizedBox(height: 8),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _openHistory({

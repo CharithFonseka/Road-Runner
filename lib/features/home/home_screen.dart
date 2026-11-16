@@ -3,7 +3,7 @@
 // SRS reference: Section 8.4, FR-01 (trigger), FR-61, FR-71, NFR-09, NFR-14
 //
 // Layout, top to bottom:
-//   * compact sky header with menu, appearance and Settings shortcuts;
+//   * compact sky header with appearance and Settings shortcuts;
 //   * route/weather, weekly goal/streak, badge and two-run preview cards;
 //   * a fixed 72dp Slide to Start control and five-destination bottom bar.
 //
@@ -26,7 +26,6 @@ import '../history/history_run.dart';
 import '../history/history_screen.dart';
 import '../run/live_run_formatter.dart';
 import '../shared/app_bottom_navigation.dart';
-import '../shared/app_navigation_drawer.dart';
 import 'last_run_summary.dart';
 import 'widgets/recent_runs_card.dart';
 import 'widgets/sky_header.dart';
@@ -72,13 +71,13 @@ class HomeScreen extends StatelessWidget {
   /// the Run screen; there is no extra confirmation on Home.
   final VoidCallback onStartRun;
 
-  /// "View all", the drawer's History entry, and run rows when
+  /// "View all", bottom navigation, and run rows when
   /// [onRunSelected] is not supplied.
   final VoidCallback onOpenHistory;
 
   /// Kept for compatibility. Home has no Permissions row any more
   /// (Permissions is reached from Settings or when starting a run). Used
-  /// for the Settings shortcut and the drawer's Settings entry until the
+  /// for the Settings shortcut until the
   /// shell supplies [onOpenSettings].
   final VoidCallback onOpenPermissions;
 
@@ -96,7 +95,7 @@ class HomeScreen extends StatelessWidget {
   /// Called with a tapped run's ID (the parent opens Summary).
   final ValueChanged<String>? onRunSelected;
 
-  /// Settings shortcut and drawer entry. Falls back to [onOpenPermissions].
+  /// Settings shortcut. Falls back to [onOpenPermissions].
   final VoidCallback? onOpenSettings;
 
   /// Opens the walking route planner when available.
@@ -123,7 +122,6 @@ class HomeScreen extends StatelessWidget {
 
   /// Key of the Slide to Start control (was the Start Run button).
   static const Key startRunButtonKey = Key('home_start_run_button');
-  static const Key menuButtonKey = Key('home.menu');
   static const Key settingsButtonKey = Key('home.settings');
   static const Key recentRunsKey = Key('home.recentRuns');
   static const Key planRouteButtonKey = Key('home.planRoute');
@@ -229,13 +227,6 @@ class HomeScreen extends StatelessWidget {
     final AppPalette palette = AppPalette.of(context);
     return Scaffold(
       backgroundColor: palette.background,
-      drawer: AppNavigationDrawer(
-        selected: AppDestination.home,
-        onOpenHome: () {},
-        onOpenHistory: onOpenHistory,
-        onOpenSettings: _openSettings,
-        onOpenGoals: onOpenGoals,
-      ),
       bottomNavigationBar: onPlanRoute != null && onOpenProfile != null
           ? AppBottomNavigation(
               selected: MainDestination.home,
@@ -302,12 +293,6 @@ class HomeScreen extends StatelessWidget {
           title: AppStrings.appName,
           subtitle: AppStrings.homeTagline,
           showLandscape: tall,
-          leading: HeaderIconButton(
-            key: menuButtonKey,
-            icon: Icons.menu_rounded,
-            tooltip: AppStrings.homeOpenMenu,
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
           trailing: _headerActions(palette),
         ),
         Expanded(
@@ -348,7 +333,7 @@ class HomeScreen extends StatelessWidget {
                   height:
                       recentRunsStatus == RecentRunsStatus.ready &&
                           rows.length > 1
-                      ? 264
+                      ? 214
                       : 190,
                   child: RecentRunsCard(
                     key: recentRunsKey,
@@ -421,12 +406,6 @@ class HomeScreen extends StatelessWidget {
                     subtitle: AppStrings.homeTagline,
                     showLandscape: showArtwork,
                     landscapeHeight: artworkHeight,
-                    leading: HeaderIconButton(
-                      key: menuButtonKey,
-                      icon: Icons.menu_rounded,
-                      tooltip: AppStrings.homeOpenMenu,
-                      onPressed: () => Scaffold.of(context).openDrawer(),
-                    ),
                     trailing: _headerActions(palette),
                   ),
                 ),

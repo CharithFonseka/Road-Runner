@@ -209,13 +209,11 @@ void main() {
   });
 
   group('Header', () {
-    testWidgets('shows the name, tagline, menu and Settings buttons', (
-      tester,
-    ) async {
+    testWidgets('shows the name, tagline and Settings button', (tester) async {
       await _pumpHome(tester);
       expect(find.text(AppStrings.appName), findsOneWidget);
       expect(find.text(AppStrings.homeTagline), findsOneWidget);
-      expect(find.byKey(HomeScreen.menuButtonKey), findsOneWidget);
+      expect(find.byIcon(Icons.menu_rounded), findsNothing);
       expect(find.byKey(HomeScreen.settingsButtonKey), findsOneWidget);
       expect(find.byType(Image), findsNothing); // no image assets
     });
@@ -237,93 +235,11 @@ void main() {
     });
   });
 
-  group('Navigation drawer', () {
-    testWidgets('menu opens the drawer with Home selected; close closes', (
-      tester,
-    ) async {
-      final SemanticsHandle handle = tester.ensureSemantics();
+  group('Navigation', () {
+    testWidgets('Home has no navigation drawer', (tester) async {
       await _pumpHome(tester);
       expect(find.byType(AppNavigationDrawer), findsNothing);
-
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      expect(find.byType(AppNavigationDrawer), findsOneWidget);
-      expect(
-        tester
-            .widget<AppNavigationDrawer>(find.byType(AppNavigationDrawer))
-            .selected,
-        AppDestination.home,
-      );
-      expect(
-        tester.getSemantics(
-          find.byKey(AppNavigationDrawer.destinationKey(AppDestination.home)),
-        ),
-        containsSemantics(isSelected: true),
-      );
-
-      await tester.tap(find.byKey(AppNavigationDrawer.closeButtonKey));
-      await tester.pumpAndSettle();
-      expect(find.byType(AppNavigationDrawer), findsNothing);
-      handle.dispose();
-    });
-
-    testWidgets('Home entry only closes the drawer', (tester) async {
-      final _Calls c = await _pumpHome(tester);
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.home)),
-      );
-      await tester.pumpAndSettle();
-      expect(find.byType(AppNavigationDrawer), findsNothing);
-      expect((c.history, c.settings, c.permissions, c.start), (0, 0, 0, 0));
-    });
-
-    for (final (AppDestination d, String name) in [
-      (AppDestination.history, 'History'),
-      (AppDestination.settings, 'Settings'),
-    ]) {
-      testWidgets('$name entry closes the drawer and navigates once', (
-        tester,
-      ) async {
-        final _Calls c = await _pumpHome(tester);
-        await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(AppNavigationDrawer.destinationKey(d)));
-        await tester.pumpAndSettle();
-        expect(find.byType(AppNavigationDrawer), findsNothing);
-        expect(
-          (c.history, c.settings),
-          switch (d) {
-            AppDestination.history => (1, 0),
-            _ => (0, 1),
-          },
-        );
-        expect(c.start, 0);
-      });
-    }
-
-    testWidgets('drawer Settings falls back to onOpenPermissions', (
-      tester,
-    ) async {
-      final _Calls c = await _pumpHome(tester, withSettings: false);
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.settings)),
-      );
-      await tester.pumpAndSettle();
-      expect(c.permissions, 1);
-    });
-
-    testWidgets('Back closes the open drawer first', (tester) async {
-      await _pumpHome(tester);
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.byType(AppNavigationDrawer), findsNothing);
-      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(tester.widget<Scaffold>(find.byType(Scaffold)).drawer, isNull);
     });
   });
 
@@ -342,14 +258,15 @@ void main() {
       expect(c.goals, 1);
     });
 
-    testWidgets('Goals is available from the navigation drawer', (
-      tester,
-    ) async {
-      final _Calls c = await _pumpHome(tester, withGoals: true);
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(AppNavigationDrawer.goalsButtonKey));
-      await tester.pumpAndSettle();
+    testWidgets('Goals is available from the Home card', (tester) async {
+      final _Calls c = await _pumpHome(
+        tester,
+        withGoals: true,
+        weeklyDistanceKm: 4.2,
+        weeklyGoalKm: 10,
+      );
+      await tester.tap(find.byKey(HomeScreen.weeklyGoalKey));
+      await tester.pump();
       expect(c.goals, 1);
     });
 
@@ -664,7 +581,7 @@ void main() {
     ) async {
       await _pumpHome(tester, runs: _runs, size: const Size(412, 915));
       final Rect card = tester.getRect(find.byKey(HomeScreen.recentRunsKey));
-      expect(card.height, 264);
+      expect(card.height, 214);
     });
 
     testWidgets('respects the status bar and Android navigation bar', (
@@ -682,19 +599,18 @@ void main() {
       final Rect slider = tester.getRect(_slider);
       expect(slider.bottom, closeTo(800 - navBar - AppSpacing.medium, 0.5));
       expect(
-        tester.getRect(find.byKey(HomeScreen.menuButtonKey)).top,
+        tester.getRect(find.byKey(HomeScreen.settingsButtonKey)).top,
         greaterThanOrEqualTo(statusBar),
       );
     });
   });
 
   group('NFR-09 targets and screen readers', () {
-    testWidgets('menu, Settings, View all and rows are at least 48dp', (
+    testWidgets('Settings, View all and rows are at least 48dp', (
       tester,
     ) async {
       await _pumpHome(tester, runs: _runs);
       for (final Key key in [
-        HomeScreen.menuButtonKey,
         HomeScreen.settingsButtonKey,
         RecentRunsCard.viewAllKey,
         RecentRunsCard.rowKey(0),
@@ -739,7 +655,6 @@ void main() {
         containsSemantics(isHeader: true),
       );
       for (final (Key key, String name) in [
-        (HomeScreen.menuButtonKey, AppStrings.homeOpenMenu),
         (HomeScreen.settingsButtonKey, AppStrings.homeSettings),
       ]) {
         expect(
