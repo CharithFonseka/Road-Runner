@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Split;
 import 'package:flutter/services.dart';
+import 'package:latlong2/latlong.dart';
 
 import 'bridge/native_tracking_bridge.dart';
 import 'bridge/tracking_bridge.dart';
@@ -12,6 +13,7 @@ import 'core/theme/app_spacing.dart';
 import 'core/theme/app_theme.dart';
 import 'data/run.dart';
 import 'data/run_repository.dart';
+import 'data/planned_route_repository.dart';
 import 'domain/stats/stats.dart';
 import 'features/app_strings.dart';
 import 'features/history/history_run.dart';
@@ -21,6 +23,8 @@ import 'features/home/home_screen.dart';
 import 'features/home/widgets/sky_header.dart' show HeaderIconButton;
 import 'features/permissions/permission_gateway.dart';
 import 'features/permissions/permissions_screen.dart';
+import 'features/route_planning/ors_directions_client.dart';
+import 'features/route_planning/route_planning_screen.dart';
 import 'features/run/active_run_screen.dart';
 import 'features/run/live_run_formatter.dart';
 import 'features/settings/settings_screen.dart';
@@ -494,6 +498,38 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     }
   }
 
+  Future<void> _openRoutePlanner() async {
+    // A previous run gives the map a useful starting area without requiring
+    // another location permission request before planning.
+    var center = const LatLng(0, 0);
+    var zoom = 2.0;
+    if (_recentRuns.isNotEmpty) {
+      try {
+        final points = await _repository.getPoints(_recentRuns.first.runId);
+        final first = points.where((point) => point.accepted).firstOrNull;
+        if (first != null) {
+          center = LatLng(first.lat, first.lon);
+          zoom = 13;
+        }
+      } on Exception {
+        // The world map remains available if a previous run cannot be read.
+      }
+    }
+    if (!mounted) return;
+    _navigatorKey.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (_) => RoutePlanningScreen(
+          repository: PlannedRouteRepository(),
+          directions: OrsDirectionsClient(
+            apiKey: const String.fromEnvironment('ORS_API_KEY'),
+          ),
+          initialCenter: center,
+          initialZoom: zoom,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openSummaryForRunId(
     String runId, {
     required bool fromHistory,
@@ -759,6 +795,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
             isStartingRun: _isStartingRun,
             formatter: _formatter,
             onStartRun: () => unawaited(_handleStartRun()),
+            onPlanRoute: () => unawaited(_openRoutePlanner()),
             onOpenHistory: () => unawaited(_openHistory()),
             onOpenPermissions: _openPermissions,
             onOpenSettings: _openSettings,
