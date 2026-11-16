@@ -13,6 +13,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../app_strings.dart';
 import '../../run/widgets/live_stat.dart' show measureStatWidth;
+import '../../shared/skeleton_shimmer.dart';
 
 /// Where the parent is with loading the recent runs.
 enum RecentRunsStatus { loading, ready, error }
@@ -339,8 +340,7 @@ class _Trio extends StatelessWidget {
 
 // ─── Loading ────────────────────────────────────────────────────────────────
 
-/// Static skeleton rows the size of real rows. No shimmer, so nothing moves
-/// for users who asked for reduced motion. Read as "Loading recent runs".
+/// Skeleton rows the size of real rows. Read as "Loading recent runs".
 class _Loading extends StatelessWidget {
   const _Loading({super.key});
 
@@ -351,12 +351,14 @@ class _Loading extends StatelessWidget {
       liveRegion: true,
       label: AppStrings.recentRunsLoading,
       excludeSemantics: true,
-      child: ListView.separated(
-        physics: const NeverScrollableScrollPhysics(),
-        padding: EdgeInsets.zero,
-        itemCount: RecentRunsCard.skeletonRows,
-        separatorBuilder: (_, _) => const Divider(height: 1),
-        itemBuilder: (_, _) => const _SkeletonRow(),
+      child: SkeletonShimmer(
+        child: ListView.separated(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          itemCount: RecentRunsCard.skeletonRows,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (_, _) => const _SkeletonRow(),
+        ),
       ),
     );
   }
@@ -365,14 +367,16 @@ class _Loading extends StatelessWidget {
 class _SkeletonRow extends StatelessWidget {
   const _SkeletonRow();
 
-  static Widget _block(double width, double height) => Align(
-    alignment: AlignmentDirectional.centerStart,
-    child: Container(
-      width: width,
-      height: height,
-      decoration: const BoxDecoration(
-        color: Color(0x1A5B3A29), // canyonBrown 10%
-        borderRadius: BorderRadius.all(Radius.circular(8)),
+  static Widget _block(double width, double height) => SkeletonShimmerBlock(
+    child: Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: Container(
+        width: width,
+        height: height,
+        decoration: const BoxDecoration(
+          color: Color(0x1A5B3A29), // canyonBrown 10%
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+        ),
       ),
     ),
   );

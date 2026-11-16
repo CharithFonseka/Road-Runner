@@ -10,6 +10,7 @@ import 'package:road_runner/features/app_strings.dart';
 import 'package:road_runner/features/history/history_run.dart';
 import 'package:road_runner/features/history/history_screen.dart';
 import 'package:road_runner/features/shared/app_navigation_drawer.dart';
+import 'package:road_runner/features/shared/skeleton_shimmer.dart';
 
 // Test fixtures only — not real application data. Deliberately out of
 // order to exercise sorting.
@@ -78,6 +79,7 @@ Future<_Calls> _pump(
   bool hasError = false,
   bool withRetryAction = false,
   bool withStartRunAction = false,
+  bool reduceMotion = false,
   VoidCallback? onRetry,
   VoidCallback? onStartRun,
   VoidCallback? onOpenHome,
@@ -86,6 +88,9 @@ Future<_Calls> _pump(
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
   addTearDown(tester.view.reset);
+  tester.platformDispatcher.accessibilityFeaturesTestValue =
+      FakeAccessibilityFeatures(disableAnimations: reduceMotion);
+  addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
 
   final _Calls calls = _Calls();
   await tester.pumpWidget(
@@ -360,13 +365,28 @@ void main() {
   });
 
   group('Load states', () {
-    testWidgets('loading shows a summary and skeleton run cards', (
-      tester,
-    ) async {
+    testWidgets('loading skeletons shimmer', (tester) async {
       await _pump(tester, [_newest], isLoading: true);
       expect(find.byKey(HistoryScreen.loadingStateKey), findsOneWidget);
       expect(find.byType(Card), findsNWidgets(4));
       expect(_tile('run-c'), findsNothing);
+      expect(find.byType(SkeletonShimmer), findsOneWidget);
+      expect(find.byType(ShaderMask), findsWidgets);
+      expect(tester.binding.hasScheduledFrame, isTrue);
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(tester.binding.hasScheduledFrame, isTrue);
+    });
+
+    testWidgets('reduced motion leaves History skeletons visible and static', (
+      tester,
+    ) async {
+      await _pump(tester, [_newest], isLoading: true, reduceMotion: true);
+      expect(find.byKey(HistoryScreen.loadingStateKey), findsOneWidget);
+      expect(find.byType(Card), findsNWidgets(4));
+      expect(find.byType(ShaderMask), findsNothing);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byKey(HistoryScreen.loadingStateKey), findsOneWidget);
+      expect(tester.binding.hasScheduledFrame, isFalse);
     });
 
     testWidgets('error offers retry when a callback is provided', (
@@ -648,8 +668,14 @@ void main() {
         initialFilter: HistoryRunFilter.thisMonth,
         thisMonthSummary: longSummary,
       ),
-      'loading': (t, size, scale) =>
-          _pump(t, const [], size: size, textScale: scale, isLoading: true),
+      'loading': (t, size, scale) => _pump(
+        t,
+        const [],
+        size: size,
+        textScale: scale,
+        isLoading: true,
+        reduceMotion: true,
+      ),
       'error': (t, size, scale) => _pump(
         t,
         const [],

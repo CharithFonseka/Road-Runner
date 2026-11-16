@@ -56,6 +56,11 @@ Future<void> _pump(
 CircularProgressIndicator _indicator(WidgetTester tester) => tester
     .widget<CircularProgressIndicator>(find.byType(CircularProgressIndicator));
 
+double _spinnerTurns(WidgetTester tester) => tester
+    .widget<RotationTransition>(find.byKey(SplashScreen.spinnerKey))
+    .turns
+    .value;
+
 void main() {
   group('Branding', () {
     testWidgets('shows the runner icon, the name and the landscape', (
@@ -80,23 +85,39 @@ void main() {
   });
 
   group('Loading indicator', () {
-    testWidgets('is a spinning CircularProgressIndicator by default', (
-      tester,
-    ) async {
+    testWidgets('spinner completes one revolution per second', (tester) async {
       await _pump(tester);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(_indicator(tester).value, isNull); // indeterminate
+      expect(_indicator(tester).value, 0.25);
       expect(tester.binding.hasScheduledFrame, isTrue); // animating
+
+      final double start = _spinnerTurns(tester);
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(_spinnerTurns(tester) - start, closeTo(0.25, 0.02));
     });
 
-    testWidgets('reduced motion: a still arc, no animation frames', (
+    testWidgets('reduced motion keeps rotating at a slower speed', (
       tester,
     ) async {
       await _pump(tester, reduceMotion: true);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(_indicator(tester).value, SplashScreen.reducedMotionArc);
-      await tester.pump(const Duration(seconds: 1));
+      expect(_indicator(tester).value, 0.25);
+      expect(tester.binding.hasScheduledFrame, isTrue);
+
+      final double start = _spinnerTurns(tester);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(_spinnerTurns(tester) - start, closeTo(0.25, 0.02));
+      expect(tester.binding.hasScheduledFrame, isTrue);
+    });
+
+    testWidgets('spinner controller disposes when SplashScreen is removed', (
+      tester,
+    ) async {
+      await _pump(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       expect(tester.binding.hasScheduledFrame, isFalse);
+      expect(tester.takeException(), isNull);
     });
   });
 

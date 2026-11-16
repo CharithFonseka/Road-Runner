@@ -141,12 +141,63 @@ class SqliteRunRepository implements RunRepository {
       );
     }
 
-    // 3. Compute running statistics using the pure Dart stats module
-    final double distanceM = computeDistance(points);
-    final int movingMs = computeMovingMs(startedAtUtcMs, endedAtUtcMs, pauses);
-    final double? avgPaceSecPerKm = computeAvgPaceSecPerKm(distanceM, movingMs);
-    final double? maxSpeedMps = computeMaxSpeedMps(points);
+        // 3. Compute running statistics using the pure Dart stats module.
+    // Start a new distance segment after every pause.
+    final List<Point> acceptedPoints =
+        points.where((point) => point.accepted).toList();
 
+    double distanceM = 0.0;
+    int pauseIndex = 0;
+    Point? previousPoint;
+
+    for (final point in acceptedPoints) {
+      // Check whether a pause occurred before this point.
+      while (pauseIndex < pauses.length &&
+          pauses[pauseIndex].endMs <= point.tUtcMs) {
+        final pause = pauses[pauseIndex];
+
+        if (previousPoint != null &&
+            previousPoint.tUtcMs <= pause.startMs) {
+          previousPoint = null;
+        }
+
+        pauseIndex++;
+      }
+
+      // Ignore points recorded during a pause.
+      final isInsidePause = pauseIndex < pauses.length &&
+          point.tUtcMs >= pauses[pauseIndex].startMs &&
+          point.tUtcMs < pauses[pauseIndex].endMs;
+
+      if (isInsidePause) {
+        previousPoint = null;
+        continue;
+      }
+
+      // Calculate distance within the same running segment.
+      if (previousPoint != null) {
+        final step = haversineM(
+          previousPoint.lat,
+          previousPoint.lon,
+          point.lat,
+          point.lon,
+        );
+
+        if (!step.isNaN && !step.isInfinite && step > 0.0) {
+          distanceM += step;
+        }
+      }
+
+      previousPoint = point;
+    }
+
+    final int movingMs =
+        computeMovingMs(startedAtUtcMs, endedAtUtcMs, pauses);
+
+    final double? avgPaceSecPerKm =
+        computeAvgPaceSecPerKm(distanceM, movingMs);
+
+    final double? maxSpeedMps = computeMaxSpeedMps(points);
     final run = Run(
       id: runId,
       startedAtUtcMs: startedAtUtcMs,

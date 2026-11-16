@@ -49,12 +49,16 @@ Future<_Calls> _pump(
   RunSummary summary, {
   bool loading = false,
   bool withBack = true,
+  bool reduceMotion = false,
   Size size = const Size(360, 800),
   double textScale = 1.0,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
   addTearDown(tester.view.reset);
+  tester.platformDispatcher.accessibilityFeaturesTestValue =
+      FakeAccessibilityFeatures(disableAnimations: reduceMotion);
+  addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
   final _Calls c = _Calls();
   await tester.pumpWidget(
     MaterialApp(
@@ -403,7 +407,9 @@ void main() {
   });
 
   group('Loading', () {
-    testWidgets('skeletons replace stats, route and splits', (tester) async {
+    testWidgets('skeletons shimmer and replace stats, route and splits', (
+      tester,
+    ) async {
       final SemanticsHandle handle = tester.ensureSemantics();
       await _pump(tester, _run, loading: true);
       expect(find.byKey(SummaryScreen.loadingKey), findsOneWidget);
@@ -415,10 +421,22 @@ void main() {
         tester.getSemantics(find.byKey(SummaryScreen.loadingKey)),
         containsSemantics(label: AppStrings.summaryLoading),
       );
-      // No shimmer: nothing animates.
-      await tester.pump(const Duration(seconds: 1));
-      expect(tester.binding.hasScheduledFrame, isFalse);
+      expect(find.byType(ShaderMask), findsWidgets);
+      expect(tester.binding.hasScheduledFrame, isTrue);
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(tester.binding.hasScheduledFrame, isTrue);
       handle.dispose();
+    });
+
+    testWidgets('reduced motion leaves Summary skeletons visible and static', (
+      tester,
+    ) async {
+      await _pump(tester, _run, loading: true, reduceMotion: true);
+      expect(find.byKey(SummaryScreen.loadingKey), findsOneWidget);
+      expect(find.byType(ShaderMask), findsNothing);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byKey(SummaryScreen.loadingKey), findsOneWidget);
+      expect(tester.binding.hasScheduledFrame, isFalse);
     });
 
     testWidgets('header and navigation still work while loading', (

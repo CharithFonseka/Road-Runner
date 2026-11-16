@@ -1,3 +1,4 @@
+
 // Road Runner — Domain Models for Statistics and Storage (Pure Dart)
 // Owner: Nadeesha
 // SRS reference: Section 4.4, 4.7, 8.5
@@ -59,6 +60,8 @@ class Point {
 
   /// Factory to parse a v1 JSONL point line (`k: "p"`).
   factory Point.fromJsonl(Map<String, dynamic> map) {
+    final ok = map[kRunFileKeyAccepted];
+
     return Point(
       seq: (map[kRunFileKeySeq] as num?)?.toInt() ?? 0,
       tUtcMs: (map[kRunFileKeyTime] as num?)?.toInt() ?? 0,
@@ -67,7 +70,7 @@ class Point {
       accM: (map[kRunFileKeyAcc] as num?)?.toDouble() ?? 0.0,
       speedMps: (map[kRunFileKeySpeed] as num?)?.toDouble(),
       altM: (map[kRunFileKeyAlt] as num?)?.toDouble(),
-      accepted: ((map[kRunFileKeyAccepted] as num?)?.toInt() ?? 0) == 1,
+      accepted: ok == true || ok == 1,
     );
   }
 }
