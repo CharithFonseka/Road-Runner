@@ -7,6 +7,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_colors.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/features/app_strings.dart';
@@ -41,6 +42,7 @@ Future<_Calls> _pump(
   WidgetTester tester,
   FakePermissionGateway gateway, {
   String? version,
+  ThemeData? theme,
   Size size = const Size(360, 800),
   double textScale = 1.0,
   bool settle = true,
@@ -52,7 +54,7 @@ Future<_Calls> _pump(
   final _Calls c = _Calls();
   await tester.pumpWidget(
     MaterialApp(
-      theme: AppTheme.light(),
+      theme: theme ?? AppTheme.light(),
       home: MediaQuery.withClampedTextScaling(
         minScaleFactor: textScale,
         maxScaleFactor: textScale,
@@ -129,6 +131,72 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
+  group('Theme', () {
+    testWidgets('dark Settings uses night surfaces and permission colors', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _Gateway(notification: PermissionAccess.granted),
+        theme: AppTheme.dark(),
+      );
+      final AppPalette palette = AppPalette.dark;
+
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+        palette.background,
+      );
+      expect(
+        tester.widget<Text>(find.text(AppStrings.settingsTitle)).style!.color,
+        palette.textPrimary,
+      );
+      final CustomPaint artwork = tester.widget<CustomPaint>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is CustomPaint && widget.painter is DrawerLandscapePainter,
+        ),
+      );
+      expect(
+        (artwork.painter as DrawerLandscapePainter).palette,
+        same(palette),
+      );
+
+      final Finder chip = find.descendant(
+        of: find.byKey(
+          SettingsScreen.rowKey(SettingsPermissionRow.notification),
+        ),
+        matching: find.byType(PermissionStatusChip),
+      );
+      final Container chipContainer = tester.widget<Container>(
+        find.descendant(of: chip, matching: find.byType(Container)).first,
+      );
+      expect(
+        (chipContainer.decoration as ShapeDecoration).color,
+        palette.statLiveTint,
+      );
+      expect(
+        tester
+            .widget<Text>(find.text(AppStrings.permissionStatusAllowed))
+            .style!
+            .color,
+        palette.statLive,
+      );
+    });
+
+    testWidgets('dark Settings fits a narrow screen with larger text', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _Gateway(location: PermissionAccess.permanentlyDenied),
+        theme: AppTheme.dark(),
+        size: const Size(320, 568),
+        textScale: 1.3,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('Permission status', () {
     testWidgets('shows Checking while the status is read', (tester) async {
       final SemanticsHandle handle = tester.ensureSemantics();

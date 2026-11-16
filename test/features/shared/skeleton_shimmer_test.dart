@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:road_runner/core/theme/app_palette.dart';
+import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/features/shared/skeleton_shimmer.dart';
 
 const Key _blockKey = Key('skeleton.block');
@@ -7,6 +9,7 @@ const Key _blockKey = Key('skeleton.block');
 Future<void> _pumpShimmer(
   WidgetTester tester, {
   bool reduceMotion = false,
+  ThemeData? theme,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(240, 100);
@@ -17,14 +20,17 @@ Future<void> _pumpShimmer(
 
   await tester.pumpWidget(
     MaterialApp(
-      home: Center(
-        child: SkeletonShimmer(
-          child: SkeletonShimmerBlock(
-            child: Container(
-              key: _blockKey,
-              width: 160,
-              height: 24,
-              color: const Color(0x1A5B3A29),
+      theme: theme,
+      home: Builder(
+        builder: (context) => Center(
+          child: SkeletonShimmer(
+            child: SkeletonShimmerBlock(
+              child: Container(
+                key: _blockKey,
+                width: 160,
+                height: 24,
+                color: AppPalette.of(context).skeleton,
+              ),
             ),
           ),
         ),
@@ -46,6 +52,39 @@ double _shimmerProgress(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('dark shimmer keeps the night skeleton and animates', (
+    tester,
+  ) async {
+    await _pumpShimmer(tester, theme: AppTheme.dark());
+    expect(
+      tester.widget<Container>(find.byKey(_blockKey)).color,
+      AppPalette.dark.skeleton,
+    );
+    expect(find.byType(ShaderMask), findsOneWidget);
+    final double start = _shimmerProgress(tester);
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(_shimmerProgress(tester) - start, closeTo(0.5, 0.02));
+  });
+
+  testWidgets('dark reduced-motion skeleton stays visible and static', (
+    tester,
+  ) async {
+    await _pumpShimmer(
+      tester,
+      theme: AppTheme.dark(),
+      reduceMotion: true,
+    );
+    expect(
+      tester.widget<Container>(find.byKey(_blockKey)).color,
+      AppPalette.dark.skeleton,
+    );
+    expect(find.byType(ShaderMask), findsNothing);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byKey(_blockKey), findsOneWidget);
+    expect(tester.binding.hasScheduledFrame, isFalse);
+  });
+
   testWidgets('highlight sweeps across skeletons while loading', (
     tester,
   ) async {

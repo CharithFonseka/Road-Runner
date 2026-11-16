@@ -22,7 +22,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
 
@@ -92,9 +92,10 @@ class _AppNavigationDrawerState extends State<AppNavigationDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return Drawer(
       width: AppNavigationDrawer.width,
-      backgroundColor: AppColors.sandLight,
+      backgroundColor: palette.surface,
       surfaceTintColor: Colors.transparent,
       clipBehavior: Clip.antiAlias,
       semanticLabel: AppStrings.navMenuLabel,
@@ -125,7 +126,10 @@ class _AppNavigationDrawerState extends State<AppNavigationDrawer> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: Text(AppStrings.navRunNote, style: AppTextStyles.caption),
+              child: Text(
+                AppStrings.navRunNote,
+                style: AppTextStyles.of(context).caption,
+              ),
             ),
           ),
         ],
@@ -137,8 +141,7 @@ class _AppNavigationDrawerState extends State<AppNavigationDrawer> {
 // ─── Header ─────────────────────────────────────────────────────────────────
 
 /// Sky header: runner icon, name, tagline, close button and a slim desert
-/// strip. Text on the sky uses [AppColors.canyonBrown] (5.56:1 or better;
-/// the muted caption colour is too faint there).
+/// strip. Text and artwork use the active [AppPalette] for either sky.
 class _DrawerHeader extends StatelessWidget {
   const _DrawerHeader({required this.onClose});
 
@@ -146,16 +149,10 @@ class _DrawerHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     final double topInset = MediaQuery.paddingOf(context).top;
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppColors.skyTop, AppColors.skyMid, AppColors.sand],
-          stops: [0.0, 0.52, 1.0],
-        ),
-      ),
+      decoration: BoxDecoration(gradient: palette.skyGradient),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -163,11 +160,11 @@ class _DrawerHeader extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(20, topInset + 16, 8, 0),
             child: Row(
               children: [
-                const ExcludeSemantics(
+                ExcludeSemantics(
                   child: Icon(
                     Icons.directions_run_rounded,
                     size: 34,
-                    color: AppColors.burntOrangeDeep,
+                    color: palette.accent,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -177,23 +174,18 @@ class _DrawerHeader extends StatelessWidget {
                     children: [
                       Semantics(
                         header: true,
-                        child: const Text(
+                        child: Text(
                           AppStrings.appName,
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            height: 1.2,
-                            color: AppColors.canyonBrown,
-                          ),
+                          style: AppTextStyles.of(context).heading
+                              .copyWith(fontSize: 22, height: 1.2),
                         ),
                       ),
-                      const Text(
+                      Text(
                         AppStrings.navTagline,
-                        style: TextStyle(
+                        style: AppTextStyles.of(context).body.copyWith(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                           height: 1.4,
-                          color: AppColors.canyonBrown,
                         ),
                       ),
                     ],
@@ -203,17 +195,19 @@ class _DrawerHeader extends StatelessWidget {
                   key: AppNavigationDrawer.closeButtonKey,
                   onPressed: onClose,
                   tooltip: AppStrings.navCloseMenu,
-                  color: AppColors.canyonBrown,
+                  color: palette.textPrimary,
                   icon: const Icon(Icons.close_rounded),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 10),
-          const ExcludeSemantics(
+          ExcludeSemantics(
             child: SizedBox(
               height: 40,
-              child: CustomPaint(painter: DrawerLandscapePainter()),
+              child: CustomPaint(
+                painter: DrawerLandscapePainter(palette: palette),
+              ),
             ),
           ),
         ],
@@ -226,11 +220,8 @@ class _DrawerHeader extends StatelessWidget {
 
 /// One 56dp stadium-shaped row.
 ///
-/// Selected: [AppColors.iconTile] fill, bold [AppColors.canyonBrownDeep]
-/// text (9.88:1) and a filled icon in [AppColors.burntOrangeDeep] (4.19:1,
-/// icons need 3:1). The UI kit's orange label text on that fill is only
-/// 4.19:1, so it is not used. Unselected: [AppColors.canyonBrown] on
-/// [AppColors.sandLight]. Selection is also exposed to screen readers.
+/// Selected and unselected states use the corresponding palette roles.
+/// Selection is also exposed to screen readers.
 class _DestinationTile extends StatelessWidget {
   const _DestinationTile({
     super.key,
@@ -266,6 +257,7 @@ class _DestinationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     final (String label, IconData filled, IconData outlined) = _content;
     return Semantics(
       container: true,
@@ -275,7 +267,7 @@ class _DestinationTile extends StatelessWidget {
       excludeSemantics: true,
       onTap: onTap,
       child: Material(
-        color: selected ? AppColors.iconTile : Colors.transparent,
+        color: selected ? palette.iconTile : Colors.transparent,
         shape: const StadiumBorder(),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -290,9 +282,7 @@ class _DestinationTile extends StatelessWidget {
                   Icon(
                     selected ? filled : outlined,
                     size: 24,
-                    color: selected
-                        ? AppColors.burntOrangeDeep
-                        : AppColors.canyonBrown,
+                    color: selected ? palette.accent : palette.textPrimary,
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -305,8 +295,8 @@ class _DestinationTile extends StatelessWidget {
                             ? FontWeight.w700
                             : FontWeight.w500,
                         color: selected
-                            ? AppColors.canyonBrownDeep
-                            : AppColors.canyonBrown,
+                            ? palette.onIconTile
+                            : palette.textPrimary,
                       ),
                     ),
                   ),
@@ -322,38 +312,41 @@ class _DestinationTile extends StatelessWidget {
 
 // ─── Artwork ────────────────────────────────────────────────────────────────
 
-/// The UI kit's slim (40dp) desert strip: sun, a small bird, mesa and dunes.
-/// Drawn on a 360 × 40 grid and stretched to the available size, as in the
-/// kit; the sun is drawn as a true circle.
+/// The UI kit's slim (40dp) desert strip on a 360 × 40 grid.
 class DrawerLandscapePainter extends CustomPainter {
-  const DrawerLandscapePainter();
+  const DrawerLandscapePainter({this.palette});
+
+  final AppPalette? palette;
 
   static const double _w = 360;
   static const double _h = 40;
 
-  static const Color _sun = Color(0xFFFFD762);
-  static const Color _mesa = Color(0xFFC07358);
-  static const Color _dunes = Color(0xFFFFCF91);
-
   @override
   void paint(Canvas canvas, Size size) {
+    final AppPalette p = palette ?? AppPalette.light;
     final double sx = size.width / _w;
     final double sy = size.height / _h;
-    canvas.drawCircle(Offset(300 * sx, 14 * sy), 11 * sy, _fill(_sun));
+    if (p.isDark) {
+      _paintNightSky(canvas, sx, sy, p);
+    } else {
+      canvas.drawCircle(Offset(300 * sx, 14 * sy), 11 * sy, _fill(p.celestial));
+    }
 
     canvas.save();
     canvas.scale(sx, sy);
-    canvas.drawPath(
-      Path()
-        ..moveTo(206, 12)
-        ..relativeQuadraticBezierTo(6, -5, 12, 0)
-        ..relativeQuadraticBezierTo(5, -4, 10, 0),
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.8)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6
-        ..strokeCap = StrokeCap.round,
-    );
+    if (!p.isDark) {
+      canvas.drawPath(
+        Path()
+          ..moveTo(206, 12)
+          ..relativeQuadraticBezierTo(6, -5, 12, 0)
+          ..relativeQuadraticBezierTo(5, -4, 10, 0),
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.8)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6
+          ..strokeCap = StrokeCap.round,
+      );
+    }
     const List<Offset> mesa = [
       Offset(0, 20),
       Offset(30, 20),
@@ -372,7 +365,7 @@ class DrawerLandscapePainter extends CustomPainter {
       Offset(360, 40),
       Offset(0, 40),
     ];
-    canvas.drawPath(Path()..addPolygon(mesa, true), _fill(_mesa));
+    canvas.drawPath(Path()..addPolygon(mesa, true), _fill(p.mesa));
     canvas.drawPath(
       Path()
         ..moveTo(0, 32)
@@ -381,7 +374,7 @@ class DrawerLandscapePainter extends CustomPainter {
         ..lineTo(360, 40)
         ..lineTo(0, 40)
         ..close(),
-      _fill(_dunes),
+      _fill(p.dunes),
     );
     canvas.restore();
   }
@@ -391,6 +384,25 @@ class DrawerLandscapePainter extends CustomPainter {
     ..style = PaintingStyle.fill
     ..isAntiAlias = true;
 
+  void _paintNightSky(Canvas canvas, double sx, double sy, AppPalette p) {
+    const List<(Offset, double, double)> stars = [
+      (Offset(40, 8), 1, 0.7),
+      (Offset(150, 6), 1.2, 0.8),
+      (Offset(232, 10), 1, 0.6),
+    ];
+    for (final (Offset point, double radius, double opacity) in stars) {
+      canvas.drawCircle(
+        Offset(point.dx * sx, point.dy * sy),
+        radius * sy,
+        _fill(p.skyDecoration.withValues(alpha: opacity)),
+      );
+    }
+    final Offset moon = Offset(300 * sx, 14 * sy);
+    canvas.drawCircle(moon, 16 * sy, _fill(p.celestialGlow));
+    canvas.drawCircle(moon, 10 * sy, _fill(p.celestial));
+  }
+
   @override
-  bool shouldRepaint(covariant DrawerLandscapePainter oldDelegate) => false;
+  bool shouldRepaint(covariant DrawerLandscapePainter oldDelegate) =>
+      palette != oldDelegate.palette;
 }

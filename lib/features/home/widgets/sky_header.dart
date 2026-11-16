@@ -1,18 +1,17 @@
-// Road Runner — sky header with the day desert illustration.
+// Road Runner — sky header with theme-aware desert artwork.
 // Owner: Tharushi
 // SRS reference: Section 8.4, FR-70
 
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 
 /// Brand header: runner icon, title and subtitle on a sky gradient, with a
 /// desert landscape drawn underneath.
 ///
-/// Text on the sky uses [AppColors.canyonBrown] (5.56:1 on [AppColors.skyTop]);
-/// the muted caption colour is too faint there.
+/// Text and artwork use the active [AppPalette] for either sky.
 class SkyHeader extends StatelessWidget {
   const SkyHeader({super.key, required this.title, required this.subtitle});
 
@@ -24,16 +23,10 @@ class SkyHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     final double topInset = MediaQuery.paddingOf(context).top;
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppColors.skyTop, AppColors.skyMid, AppColors.sand],
-          stops: [0.0, 0.52, 1.0],
-        ),
-      ),
+      decoration: BoxDecoration(gradient: palette.skyGradient),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -46,11 +39,11 @@ class SkyHeader extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const ExcludeSemantics(
+                ExcludeSemantics(
                   child: Icon(
                     Icons.directions_run_rounded,
                     size: 40,
-                    color: AppColors.burntOrangeDeep,
+                    color: palette.accent,
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -60,14 +53,15 @@ class SkyHeader extends StatelessWidget {
                     children: [
                       Semantics(
                         header: true,
-                        child: Text(title, style: AppTextStyles.heading),
+                        child: Text(
+                          title,
+                          style: AppTextStyles.of(context).heading,
+                        ),
                       ),
                       Text(
                         subtitle,
-                        style: AppTextStyles.body.copyWith(
-                          fontSize: 14,
-                          color: AppColors.canyonBrown,
-                        ),
+                        style: AppTextStyles.of(context).body
+                            .copyWith(fontSize: 14),
                       ),
                     ],
                   ),
@@ -76,11 +70,13 @@ class SkyHeader extends StatelessWidget {
             ),
           ),
           // Decorative only — hidden from screen readers.
-          const ExcludeSemantics(
+          ExcludeSemantics(
             child: SizedBox(
               height: landscapeHeight,
               width: double.infinity,
-              child: CustomPaint(painter: DesertLandscapePainter()),
+              child: CustomPaint(
+                painter: DesertLandscapePainter(palette: palette),
+              ),
             ),
           ),
         ],
@@ -89,31 +85,32 @@ class SkyHeader extends StatelessWidget {
   }
 }
 
-/// Day desert landscape: clouds, sun, mesas, hills and dunes.
+/// Desert landscape: daytime clouds and sun or nighttime stars and moon,
+/// followed by mesas, hills and dunes.
 ///
 /// Drawn on a 360 × 110 design grid (from the UI kit) and stretched to the
 /// available size. Illustration colours are private: they are artwork, not
 /// reusable theme tokens.
 class DesertLandscapePainter extends CustomPainter {
-  const DesertLandscapePainter();
+  const DesertLandscapePainter({this.palette});
+
+  final AppPalette? palette;
 
   static const double _designWidth = 360;
   static const double _designHeight = 110;
 
-  static const Color _sun = Color(0xFFFFD762);
-  static const Color _cloud = Color(0xFFFFFFFF);
-  static const Color _mesa = Color(0xFFC07358);
-  static const Color _hills = Color(0xFFDF8583);
-  static const Color _dunes = Color(0xFFFFCF91);
-  static const Color _sandDune = Color(0xFFF2D6A6);
-
   @override
   void paint(Canvas canvas, Size size) {
+    final AppPalette p = palette ?? AppPalette.light;
     canvas.save();
     canvas.scale(size.width / _designWidth, size.height / _designHeight);
 
-    _paintClouds(canvas);
-    _paintSun(canvas);
+    if (p.isDark) {
+      _paintNightSky(canvas, p);
+    } else {
+      _paintClouds(canvas);
+      _paintSun(canvas, p);
+    }
 
     // Mesas (flat-topped rock formations).
     const List<Offset> mesa = [
@@ -135,7 +132,7 @@ class DesertLandscapePainter extends CustomPainter {
     ];
     canvas.drawPath(
       _closedToBottom(Path()..addPolygon(mesa, false)),
-      _fill(_mesa),
+      _fill(p.mesa),
     );
 
     canvas.drawPath(
@@ -145,36 +142,65 @@ class DesertLandscapePainter extends CustomPainter {
         Offset(300, 72),
         Offset(360, 70),
       ]),
-      _fill(_hills),
+      _fill(p.hills),
     );
     canvas.drawPath(
       _smoothCurve(const Offset(0, 92), const Offset(80, 80), const [
         Offset(170, 90),
         Offset(360, 88),
       ]),
-      _fill(_dunes),
+      _fill(p.dunes),
     );
     canvas.drawPath(
       _smoothCurve(const Offset(0, 102), const Offset(120, 94), const [
         Offset(240, 102),
         Offset(360, 100),
       ]),
-      _fill(_sandDune),
+      _fill(p.sandDune),
     );
 
     canvas.restore();
   }
 
-  void _paintSun(Canvas canvas) {
+  void _paintSun(Canvas canvas, AppPalette palette) {
     const Offset centre = Offset(296, 38);
-    canvas.drawCircle(centre, 32, _fill(_sun.withValues(alpha: 0.18)));
-    canvas.drawCircle(centre, 22, _fill(_sun.withValues(alpha: 0.30)));
-    canvas.drawCircle(centre, 16, _fill(_sun));
+    canvas.drawCircle(
+      centre,
+      32,
+      _fill(palette.celestial.withValues(alpha: 0.18)),
+    );
+    canvas.drawCircle(
+      centre,
+      22,
+      _fill(palette.celestial.withValues(alpha: 0.30)),
+    );
+    canvas.drawCircle(centre, 16, _fill(palette.celestial));
+  }
+
+  void _paintNightSky(Canvas canvas, AppPalette palette) {
+    const List<(Offset, double, double)> stars = [
+      (Offset(210, 10), 1.2, 0.7),
+      (Offset(250, 28), 1, 0.5),
+      (Offset(340, 8), 1.3, 0.7),
+      (Offset(168, 22), 1, 0.4),
+      (Offset(60, 14), 1, 0.5),
+    ];
+    for (final (Offset centre, double radius, double opacity) in stars) {
+      canvas.drawCircle(
+        centre,
+        radius,
+        _fill(palette.skyDecoration.withValues(alpha: opacity)),
+      );
+    }
+    const Offset moon = Offset(296, 38);
+    canvas.drawCircle(moon, 32, _fill(palette.celestialGlow));
+    canvas.drawCircle(moon, 22, _fill(palette.celestial));
+    canvas.drawCircle(const Offset(288, 33), 3, _fill(palette.celestialDetail));
   }
 
   void _paintClouds(Canvas canvas) {
     void cloud(double left, double base, double width, double alpha) {
-      final Paint paint = _fill(_cloud.withValues(alpha: alpha));
+      final Paint paint = _fill(Colors.white.withValues(alpha: alpha));
       final double h = width * 0.22;
       canvas.drawRRect(
         RRect.fromLTRBR(
@@ -227,7 +253,8 @@ class DesertLandscapePainter extends CustomPainter {
     ..isAntiAlias = true;
 
   @override
-  bool shouldRepaint(covariant DesertLandscapePainter oldDelegate) => false;
+  bool shouldRepaint(covariant DesertLandscapePainter oldDelegate) =>
+      palette != oldDelegate.palette;
 }
 
 // ─── Compact header (UI kit Revision 5, Home) ───────────────────────────────
@@ -267,16 +294,16 @@ class CompactSkyHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
+    final CustomPainter requestedPainter = landscapePainter;
+    final CustomPainter painter =
+        requestedPainter is CompactLandscapePainter &&
+            requestedPainter.palette == null
+        ? CompactLandscapePainter(palette: palette)
+        : requestedPainter;
     final double topInset = MediaQuery.paddingOf(context).top;
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppColors.skyTop, AppColors.skyMid, AppColors.sand],
-          stops: [0.0, 0.52, 1.0],
-        ),
-      ),
+      decoration: BoxDecoration(gradient: palette.skyGradient),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -303,12 +330,8 @@ class CompactSkyHeader extends StatelessWidget {
                           title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            height: 1.15,
-                            color: AppColors.canyonBrown,
-                          ),
+                          style: AppTextStyles.of(context).heading
+                              .copyWith(fontSize: 24, height: 1.15),
                         ),
                       ),
                       if (subtitle != null) ...[
@@ -317,11 +340,10 @@ class CompactSkyHeader extends StatelessWidget {
                           subtitle!,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: AppTextStyles.of(context).body.copyWith(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                             height: 1.3,
-                            color: AppColors.canyonBrown,
                           ),
                         ),
                       ],
@@ -340,7 +362,7 @@ class CompactSkyHeader extends StatelessWidget {
               child: SizedBox(
                 height: landscapeHeight,
                 width: double.infinity,
-                child: CustomPaint(painter: landscapePainter),
+                child: CustomPaint(painter: painter),
               ),
             )
           else
@@ -351,8 +373,7 @@ class CompactSkyHeader extends StatelessWidget {
   }
 }
 
-/// 48dp round icon button on a translucent card fill, for the sky header.
-/// [AppColors.canyonBrown] icons stay above 3:1 on the sky behind it.
+/// 48dp round icon button on a translucent surface fill, for the sky header.
 class HeaderIconButton extends StatelessWidget {
   const HeaderIconButton({
     super.key,
@@ -369,6 +390,7 @@ class HeaderIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return IconButton(
       onPressed: onPressed,
       tooltip: tooltip,
@@ -377,44 +399,47 @@ class HeaderIconButton extends StatelessWidget {
       style: IconButton.styleFrom(
         fixedSize: const Size.square(size),
         minimumSize: const Size.square(size),
-        backgroundColor: AppColors.sandLight.withValues(alpha: 0.72),
-        foregroundColor: AppColors.canyonBrown,
+        backgroundColor: palette.iconButtonFill,
+        foregroundColor: palette.textPrimary,
       ),
     );
   }
 }
 
-/// The UI kit's compact (72dp) desert strip: cloud, sun, mesa, hills and
-/// dunes, drawn on a 360 × 72 grid and stretched to fit; the sun stays round.
+/// The UI kit's compact (72dp) desert strip, drawn on a 360 × 72 grid and
+/// stretched to fit; the sun and moon stay round.
 class CompactLandscapePainter extends CustomPainter {
-  const CompactLandscapePainter();
+  const CompactLandscapePainter({this.palette});
+
+  final AppPalette? palette;
 
   static const double _w = 360;
   static const double _h = 72;
 
-  static const Color _sun = Color(0xFFFFD762);
-  static const Color _mesa = Color(0xFFC07358);
-  static const Color _hills = Color(0xFFDF8583);
-  static const Color _dunes = Color(0xFFFFCF91);
-  static const Color _sandDune = Color(0xFFF2D6A6);
-
   @override
   void paint(Canvas canvas, Size size) {
+    final AppPalette p = palette ?? AppPalette.light;
     final double sx = size.width / _w;
     final double sy = size.height / _h;
-    canvas.drawCircle(Offset(296 * sx, 22 * sy), 18 * sy, _fill(_sun));
+    if (p.isDark) {
+      _paintNightSky(canvas, sx, sy, p);
+    } else {
+      canvas.drawCircle(Offset(296 * sx, 22 * sy), 18 * sy, _fill(p.celestial));
+    }
 
     canvas.save();
     canvas.scale(sx, sy);
-    // Cloud.
-    final Paint cloud = _fill(Colors.white.withValues(alpha: 0.8));
-    canvas.drawRRect(
-      RRect.fromLTRBR(34, 28, 80, 34, const Radius.circular(3)),
-      cloud,
-    );
-    canvas.drawCircle(const Offset(55, 28), 10, cloud);
-    canvas.drawCircle(const Offset(68, 29), 7, cloud);
-    canvas.drawCircle(const Offset(42, 31), 5, cloud);
+    if (!p.isDark) {
+      // Cloud.
+      final Paint cloud = _fill(Colors.white.withValues(alpha: 0.8));
+      canvas.drawRRect(
+        RRect.fromLTRBR(34, 28, 80, 34, const Radius.circular(3)),
+        cloud,
+      );
+      canvas.drawCircle(const Offset(55, 28), 10, cloud);
+      canvas.drawCircle(const Offset(68, 29), 7, cloud);
+      canvas.drawCircle(const Offset(42, 31), 5, cloud);
+    }
 
     const List<Offset> mesa = [
       Offset(0, 30),
@@ -433,7 +458,7 @@ class CompactLandscapePainter extends CustomPainter {
       Offset(344, 30),
       Offset(360, 30),
     ];
-    canvas.drawPath(_toBottom(Path()..addPolygon(mesa, false)), _fill(_mesa));
+    canvas.drawPath(_toBottom(Path()..addPolygon(mesa, false)), _fill(p.mesa));
     canvas.drawPath(
       _curve(const Offset(0, 50), const Offset(50, 40), const [
         Offset(100, 50),
@@ -441,21 +466,21 @@ class CompactLandscapePainter extends CustomPainter {
         Offset(300, 48),
         Offset(360, 46),
       ]),
-      _fill(_hills),
+      _fill(p.hills),
     );
     canvas.drawPath(
       _curve(const Offset(0, 60), const Offset(80, 50), const [
         Offset(170, 60),
         Offset(360, 58),
       ]),
-      _fill(_dunes),
+      _fill(p.dunes),
     );
     canvas.drawPath(
       _curve(const Offset(0, 68), const Offset(120, 62), const [
         Offset(240, 68),
         Offset(360, 66),
       ]),
-      _fill(_sandDune),
+      _fill(p.sandDune),
     );
     canvas.restore();
   }
@@ -483,6 +508,32 @@ class CompactLandscapePainter extends CustomPainter {
     ..style = PaintingStyle.fill
     ..isAntiAlias = true;
 
+  void _paintNightSky(Canvas canvas, double sx, double sy, AppPalette p) {
+    const List<(Offset, double, double)> stars = [
+      (Offset(210, 10), 1.2, 0.7),
+      (Offset(250, 28), 1, 0.5),
+      (Offset(340, 8), 1.3, 0.7),
+      (Offset(168, 22), 1, 0.4),
+      (Offset(60, 14), 1, 0.5),
+    ];
+    for (final (Offset point, double radius, double opacity) in stars) {
+      canvas.drawCircle(
+        Offset(point.dx * sx, point.dy * sy),
+        radius * sy,
+        _fill(p.skyDecoration.withValues(alpha: opacity)),
+      );
+    }
+    final Offset moon = Offset(296 * sx, 22 * sy);
+    canvas.drawCircle(moon, 24 * sy, _fill(p.celestialGlow));
+    canvas.drawCircle(moon, 14 * sy, _fill(p.celestial));
+    canvas.drawCircle(
+      Offset(292 * sx, 19 * sy),
+      2.5 * sy,
+      _fill(p.celestialDetail),
+    );
+  }
+
   @override
-  bool shouldRepaint(covariant CompactLandscapePainter oldDelegate) => false;
+  bool shouldRepaint(covariant CompactLandscapePainter oldDelegate) =>
+      palette != oldDelegate.palette;
 }

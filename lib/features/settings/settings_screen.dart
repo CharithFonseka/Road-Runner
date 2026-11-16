@@ -20,7 +20,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
@@ -132,9 +132,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     final double bottomInset = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: palette.background,
       drawer: AppNavigationDrawer(
         selected: AppDestination.settings,
         onOpenHome: widget.onOpenHome,
@@ -149,7 +150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: AppStrings.settingsTitle,
               subtitle: AppStrings.settingsSubtitle,
               landscapeHeight: 40,
-              landscapePainter: const DrawerLandscapePainter(),
+              landscapePainter: DrawerLandscapePainter(palette: palette),
               leading: HeaderIconButton(
                 key: SettingsScreen.backButtonKey,
                 icon: Icons.arrow_back_rounded,
@@ -252,7 +253,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onPressed: widget.onManagePermissions,
                   icon: const Icon(Icons.tune_rounded, size: 20),
                   label: const Text(AppStrings.managePermissions),
-                  style: _outlinedStyle,
+                  style: _outlinedStyle(AppPalette.of(context)),
                 ),
                 if (_anyBlocked) ...[
                   const SizedBox(height: AppSpacing.itemGap),
@@ -263,7 +264,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         : _controller.openSettings,
                     icon: const Icon(Icons.open_in_new_rounded, size: 20),
                     label: const Text(AppStrings.openAppSettings),
-                    style: _outlinedStyle,
+                    style: _outlinedStyle(AppPalette.of(context)),
                   ),
                 ],
               ],
@@ -274,12 +275,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  static final ButtonStyle _outlinedStyle = OutlinedButton.styleFrom(
-    minimumSize: const Size.fromHeight(52),
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    side: const BorderSide(color: AppColors.burntOrangeDeep, width: 1.5),
-    backgroundColor: AppColors.sandLight,
-  );
+  static ButtonStyle _outlinedStyle(AppPalette palette) =>
+      OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(52),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        side: BorderSide(color: palette.buttonOutline, width: 1.5),
+        backgroundColor: palette.surface,
+      );
 }
 
 // ─── Pieces ─────────────────────────────────────────────────────────────────
@@ -299,10 +301,8 @@ class _SectionHeading extends StatelessWidget {
         excludeSemantics: true,
         child: Text(
           text.toUpperCase(),
-          style: AppTextStyles.caption.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1,
-          ),
+          style: AppTextStyles.of(context).caption
+              .copyWith(fontWeight: FontWeight.w700, letterSpacing: 1),
         ),
       ),
     );
@@ -316,33 +316,29 @@ class _IconTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return ExcludeSemantics(
       child: Container(
         width: 40,
         height: 40,
-        decoration: const BoxDecoration(
-          color: AppColors.iconTile,
+        decoration: BoxDecoration(
+          color: palette.iconTile,
           borderRadius: BorderRadius.all(
             Radius.circular(AppSpacing.radiusTile),
           ),
         ),
-        child: Icon(icon, size: 22, color: AppColors.burntOrangeDeep),
+        child: Icon(icon, size: 22, color: palette.accent),
       ),
     );
   }
 }
 
-const TextStyle _rowTitle = TextStyle(
-  fontSize: 16,
-  fontWeight: FontWeight.w700,
-  height: 1.3,
-  color: AppColors.canyonBrown,
-);
-const TextStyle _rowDetail = TextStyle(
-  fontSize: 13,
-  height: 18 / 13,
-  color: AppColors.canyonBrownMuted,
-);
+TextStyle _rowTitle(BuildContext context) =>
+    AppTextStyles.of(context).body
+        .copyWith(fontSize: 16, fontWeight: FontWeight.w700, height: 1.3);
+TextStyle _rowDetail(BuildContext context) =>
+    AppTextStyles.of(context).caption
+        .copyWith(fontSize: 13, fontWeight: FontWeight.normal, height: 18 / 13);
 
 /// Tile, title and detail, with the status chip on the right when it fits
 /// (at most 45% of the row) and below the text otherwise.
@@ -382,9 +378,9 @@ class _PermissionRow extends StatelessWidget {
                     final Widget text = Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: _rowTitle),
+                        Text(title, style: _rowTitle(context)),
                         const SizedBox(height: 2),
-                        Text(detail, style: _rowDetail),
+                        Text(detail, style: _rowDetail(context)),
                       ],
                     );
                     final bool inline =
@@ -430,7 +426,10 @@ class _Notice extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(text, style: AppTextStyles.body.copyWith(fontSize: 14)),
+            Text(
+              text,
+              style: AppTextStyles.of(context).body.copyWith(fontSize: 14),
+            ),
             ?action,
           ],
         ),
@@ -505,9 +504,9 @@ class _AboutRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: _rowTitle),
+                    Text(title, style: _rowTitle(context)),
                     const SizedBox(height: 2),
-                    Text(detail, style: _rowDetail),
+                    Text(detail, style: _rowDetail(context)),
                   ],
                 ),
               ),

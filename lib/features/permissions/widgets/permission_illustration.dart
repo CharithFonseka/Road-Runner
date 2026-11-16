@@ -16,6 +16,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_palette.dart';
 import '../../app_strings.dart';
 
 /// Which scene to draw.
@@ -70,6 +72,7 @@ class PermissionIllustration extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = context.palette;
     final String female = _running
         ? RunnerAssets.femaleRunning
         : RunnerAssets.femaleStanding;
@@ -90,11 +93,11 @@ class PermissionIllustration extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 Positioned.fill(
-                  child: CustomPaint(painter: _ScenePainter(scene)),
+                  child: CustomPaint(painter: _ScenePainter(scene, palette)),
                 ),
                 if (scene == PermissionScene.explain)
                   // Notification badge on the phone.
-                  const Positioned(
+                  Positioned(
                     left: 277,
                     top: 13,
                     width: 18,
@@ -102,30 +105,40 @@ class PermissionIllustration extends StatelessWidget {
                     child: Icon(
                       Icons.notifications_rounded,
                       size: 14,
-                      color: Colors.white,
+                      color: palette.illustrationBadgeIcon,
                     ),
                   ),
                 if (scene == PermissionScene.servicesOff)
-                  const Positioned(
+                  Positioned(
                     left: 228,
                     top: 40,
                     child: Icon(
                       Icons.location_on_outlined,
                       size: 28,
-                      color: _ScenePainter._muted,
+                      color: palette.illustrationMuted,
                     ),
                   ),
                 Positioned(
                   left: femaleX,
                   top: 12,
                   height: figureHeight,
-                  child: _Figure(key: femaleKey, asset: female),
+                  child: _Figure(
+                    key: femaleKey,
+                    asset: female,
+                    brightness: palette.illustrationBrightness,
+                    saturation: palette.illustrationSaturation,
+                  ),
                 ),
                 Positioned(
                   left: maleX,
                   top: 12,
                   height: figureHeight,
-                  child: _Figure(key: maleKey, asset: male),
+                  child: _Figure(
+                    key: maleKey,
+                    asset: male,
+                    brightness: palette.illustrationBrightness,
+                    saturation: palette.illustrationSaturation,
+                  ),
                 ),
               ],
             ),
@@ -137,13 +150,20 @@ class PermissionIllustration extends StatelessWidget {
 }
 
 class _Figure extends StatelessWidget {
-  const _Figure({super.key, required this.asset});
+  const _Figure({
+    super.key,
+    required this.asset,
+    required this.brightness,
+    required this.saturation,
+  });
 
   final String asset;
+  final double brightness;
+  final double saturation;
 
   @override
   Widget build(BuildContext context) {
-    return Image.asset(
+    final Widget image = Image.asset(
       asset,
       height: PermissionIllustration.figureHeight,
       fit: BoxFit.contain,
@@ -153,28 +173,67 @@ class _Figure extends StatelessWidget {
       errorBuilder: (context, error, stack) =>
           const SizedBox(height: PermissionIllustration.figureHeight),
     );
+    if (brightness == 1 && saturation == 1) return image;
+    return ColorFiltered(
+      colorFilter: ColorFilter.matrix(_filterMatrix()),
+      child: image,
+    );
+  }
+
+  List<double> _filterMatrix() {
+    const double redLuminance = 0.2126;
+    const double greenLuminance = 0.7152;
+    const double blueLuminance = 0.0722;
+    final double inverseSaturation = 1 - saturation;
+    double channel(double luminance) =>
+        (inverseSaturation * luminance + saturation) * brightness;
+    double crossChannel(double luminance) =>
+        inverseSaturation * luminance * brightness;
+    return [
+      channel(redLuminance),
+      crossChannel(greenLuminance),
+      crossChannel(blueLuminance),
+      0,
+      0,
+      crossChannel(redLuminance),
+      channel(greenLuminance),
+      crossChannel(blueLuminance),
+      0,
+      0,
+      crossChannel(redLuminance),
+      crossChannel(greenLuminance),
+      channel(blueLuminance),
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+    ];
   }
 }
 
 /// Backdrop drawn on the 328 × 160 kit grid.
 class _ScenePainter extends CustomPainter {
-  const _ScenePainter(this.scene);
+  const _ScenePainter(this.scene, this.palette);
 
   final PermissionScene scene;
+  final AppPalette palette;
 
-  static const Color _dunes = Color(0xFFFFCF91);
-  static const Color _sandDune = Color(0xFFF2D6A6);
-  static const Color _pink = Color(0xFFE58C8A);
-  static const Color _shadow = Color(0x245B3A29); // canyonBrown 14%
-  static const Color _phone = Color(0xFFFBF3E6);
-  static const Color _outline = Color(0xFF5B3A29);
-  static const Color _grid = Color(0xFFEBDAC0);
-  static const Color _blue = Color(0xFF2E5AAE);
-  static const Color _orange = Color(0xFFA34A20);
-  static const Color _muted = Color(0xFFB49A86);
-  static const Color _cactus = Color(0xFFC07358);
-  static const Color _label = Color(0xFF6E4F3E);
-  static const Color _badgeRing = Color(0xFFF4E4C8);
+  Color get _dunes => palette.dunes;
+  Color get _sandDune => palette.sandDune;
+  Color get _pink => palette.isDark ? palette.accent : AppColors.duskPink;
+  Color get _shadow => palette.illustrationShadow;
+  Color get _phone => palette.illustrationPhone;
+  Color get _outline => palette.illustrationOutline;
+  Color get _grid => palette.illustrationGrid;
+  Color get _blue => palette.statLive;
+  Color get _orange => palette.primaryFill;
+  Color get _muted => palette.illustrationMuted;
+  Color get _cactus => palette.illustrationCactus;
+  Color get _label => palette.textSecondary;
+  Color get _badgeRing => palette.illustrationBadgeRing;
 
   bool get _running => scene == PermissionScene.explain;
 
@@ -264,7 +323,7 @@ class _ScenePainter extends CustomPainter {
         final TextPainter off = TextPainter(
           text: TextSpan(
             text: AppStrings.permissionStatusOff.toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
               color: _label,
@@ -370,5 +429,6 @@ class _ScenePainter extends CustomPainter {
     ..isAntiAlias = true;
 
   @override
-  bool shouldRepaint(_ScenePainter old) => old.scene != scene;
+  bool shouldRepaint(_ScenePainter old) =>
+      old.scene != scene || old.palette != palette;
 }

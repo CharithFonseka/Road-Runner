@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:road_runner/core/theme/app_colors.dart';
+import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_spacing.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/features/app_strings.dart';
@@ -26,6 +27,7 @@ final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 Future<_Calls> _pump(
   WidgetTester tester, {
   AppDestination selected = AppDestination.home,
+  ThemeData? theme,
   Size size = const Size(360, 800),
   double textScale = 1.0,
 }) async {
@@ -50,7 +52,7 @@ Future<_Calls> _pump(
   );
   await tester.pumpWidget(
     MaterialApp(
-      theme: AppTheme.light(),
+      theme: theme ?? AppTheme.light(),
       home: Builder(
         builder: (context) => Scaffold(
           body: Center(
@@ -91,6 +93,78 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
+  testWidgets('dark drawer uses night surfaces and selected-state colors', (
+    tester,
+  ) async {
+    final SemanticsHandle handle = tester.ensureSemantics();
+    final _Calls calls = await _pump(
+      tester,
+      selected: AppDestination.history,
+      theme: AppTheme.dark(),
+    );
+    final AppPalette palette = AppPalette.dark;
+    expect(
+      tester.widget<Drawer>(find.byType(Drawer)).backgroundColor,
+      palette.surface,
+    );
+
+    final Material selected = tester.widget<Material>(
+      find.descendant(
+        of: _tile(AppDestination.history),
+        matching: find.byType(Material),
+      ),
+    );
+    expect(selected.color, palette.iconTile);
+    final Text selectedLabel = tester.widget<Text>(
+      find.descendant(
+        of: _tile(AppDestination.history),
+        matching: find.text(AppStrings.navHistory),
+      ),
+    );
+    expect(selectedLabel.style!.color, palette.onIconTile);
+    final Text unselectedLabel = tester.widget<Text>(
+      find.descendant(
+        of: _tile(AppDestination.home),
+        matching: find.text(AppStrings.navHome),
+      ),
+    );
+    expect(unselectedLabel.style!.color, palette.textPrimary);
+
+    final CustomPaint artwork = tester.widget<CustomPaint>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is CustomPaint && widget.painter is DrawerLandscapePainter,
+      ),
+    );
+    expect((artwork.painter as DrawerLandscapePainter).palette, same(palette));
+    expect(
+      tester.getSemantics(_tile(AppDestination.history)),
+      containsSemantics(isButton: true, isSelected: true, hasTapAction: true),
+    );
+    await tester.tap(_tile(AppDestination.settings));
+    await tester.pumpAndSettle();
+    expect(calls.settings, 1);
+    handle.dispose();
+  });
+
+  testWidgets('dark drawer fits a narrow screen with larger text', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      selected: AppDestination.settings,
+      theme: AppTheme.dark(),
+      size: const Size(320, 568),
+      textScale: 1.3,
+    );
+    expect(tester.takeException(), isNull);
+    final Rect drawer = tester.getRect(find.byType(Drawer));
+    expect(drawer.right, lessThanOrEqualTo(320));
+    for (final AppDestination destination in AppDestination.values) {
+      expect(tester.getRect(_tile(destination)).bottom, lessThanOrEqualTo(568));
+    }
+  });
+
   group('Content', () {
     testWidgets('exactly three destinations: Home, History, Settings', (
       tester,
