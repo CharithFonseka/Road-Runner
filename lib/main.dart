@@ -11,7 +11,7 @@ import 'core/theme/app_spacing.dart';
 import 'core/theme/app_theme.dart';
 import 'data/run.dart';
 import 'data/run_repository.dart';
-import 'data/run_weather_client.dart';
+import 'data/run_enrichment_service.dart';
 import 'domain/stats/stats.dart';
 import 'features/app_strings.dart';
 import 'features/history/history_run.dart';
@@ -75,6 +75,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   late final TrackingBridge _bridge;
   late final bool _ownsBridge;
   late final RunRepository _repository;
+  late final RunEnrichmentService _enrichment;
   late final PermissionGateway _permissionGateway;
 
   List<HistoryRun> _recentRuns = const [];
@@ -89,6 +90,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     _ownsBridge = widget.bridge == null;
     _bridge = widget.bridge ?? NativeTrackingBridge();
     _repository = widget.repository ?? SqliteRunRepository();
+    _enrichment = RunEnrichmentService(repository: _repository);
     _permissionGateway =
         widget.permissionGateway ?? const PermissionHandlerGateway();
 
@@ -383,7 +385,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     while (mounted) {
       try {
         await _repository.saveFromFile(result.runId, result.filePath);
-        unawaited(enrichRunWeather(result.runId, repository: _repository));
+        unawaited(_enrichment.enrichRun(result.runId));
         try {
           await _bridge.discardRun(result.runId);
         } catch (_) {
