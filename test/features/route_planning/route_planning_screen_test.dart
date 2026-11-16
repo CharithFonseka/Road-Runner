@@ -74,28 +74,72 @@ void main() {
     expect(routes.saved?.points.first.lat, 6.92);
   });
 
-  testWidgets('disables route lookup when no service key is configured', (
+  testWidgets('auto-plans road route without ORS key and saves & starts run', (
     tester,
   ) async {
+    final routes = _RecordingRoutes();
+    PlannedRoute? startedRoute;
+    final directions = OrsDirectionsClient(
+      apiKey: '',
+      fetchOsrm: (_) async => {
+        'routes': [
+          {
+            'geometry': {
+              'type': 'LineString',
+              'coordinates': [
+                [79.86, 6.92],
+                [79.865, 6.925],
+                [79.87, 6.93],
+              ],
+            },
+          },
+        ],
+      },
+    );
+
     await tester.pumpWidget(
       MaterialApp(
         home: RoutePlanningScreen(
-          repository: _RecordingRoutes(),
-          directions: OrsDirectionsClient(apiKey: ''),
-          initialCenter: const LatLng(0, 0),
+          repository: routes,
+          directions: directions,
+          initialCenter: const LatLng(6.9271, 79.8612),
           styleFuture: Completer<vt.Style>().future,
+          onStartRun: (route) => startedRoute = route,
         ),
       ),
     );
-    expect(
-      find.text('Walking route service is not configured.'),
-      findsOneWidget,
-    );
+
+    // Initially Save & Start run is disabled.
     expect(
       tester
-          .widget<FilledButton>(find.byKey(RoutePlanningScreen.findKey))
+          .widget<FilledButton>(find.byKey(RoutePlanningScreen.startRunKey))
           .onPressed,
       isNull,
     );
+
+    final map = find.byKey(RoutePlanningScreen.mapKey);
+    final topLeft = tester.getTopLeft(map);
+    await tester.tapAt(topLeft + const Offset(80, 80));
+    await tester.pump();
+    await tester.tapAt(topLeft + const Offset(180, 140));
+    await tester.pumpAndSettle();
+
+    // Auto-fetched route enables Save & Start run and displays road points.
+    expect(find.textContaining('Route ready ·'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(RoutePlanningScreen.startRunKey))
+          .onPressed,
+      isNotNull,
+    );
+
+    await tester.enterText(find.byType(TextField), 'Road loop');
+    await tester.tap(find.byKey(RoutePlanningScreen.startRunKey));
+    await tester.pumpAndSettle();
+
+    expect(routes.saved?.name, 'Road loop');
+    expect(routes.saved?.points.length, 3);
+    expect(startedRoute?.id, routes.saved?.id);
+    expect(startedRoute?.name, 'Road loop');
   });
 }

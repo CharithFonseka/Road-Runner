@@ -27,6 +27,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../data/planned_route.dart';
 import '../app_strings.dart';
 import 'active_run_controller.dart';
 import 'live_run_formatter.dart';
@@ -43,6 +44,7 @@ class ActiveRunScreen extends StatefulWidget {
     required this.onRunFinished,
     required this.onExit,
     this.formatter = const LiveRunFormatter(),
+    this.plannedRoute,
   });
 
   /// Owned by the parent. Read once in initState; this screen never
@@ -57,6 +59,9 @@ class ActiveRunScreen extends StatefulWidget {
 
   /// Display formatter. Replace with the domain formatters when merged.
   final LiveRunFormatter formatter;
+
+  /// Optional planned route to display as a guide on the live map.
+  final PlannedRoute? plannedRoute;
 
   static const Key pauseResumeButtonKey = Key('activeRun.pauseResume');
   static const Key stopButtonKey = Key('activeRun.stop');
@@ -247,7 +252,11 @@ class _ActiveRunScreenState extends State<ActiveRunScreen> {
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
-                      LiveRunMap(route: state.route, snapshot: state.snapshot),
+                      LiveRunMap(
+                        route: state.route,
+                        snapshot: state.snapshot,
+                        plannedRoute: widget.plannedRoute,
+                      ),
                       if (state.route.isNotEmpty ||
                           (state.snapshot?.lat != null &&
                               state.snapshot?.lon != null))
@@ -290,6 +299,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen> {
           child: LiveRunMap(
             route: state.route,
             snapshot: state.snapshot,
+            plannedRoute: widget.plannedRoute,
             height: null,
             showSearchingPlaceholder: true,
           ),

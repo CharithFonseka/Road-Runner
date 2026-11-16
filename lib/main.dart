@@ -15,6 +15,7 @@ import 'core/theme/app_theme.dart';
 import 'data/goal_repository.dart';
 import 'data/run.dart';
 import 'data/run_repository.dart';
+import 'data/planned_route.dart';
 import 'data/planned_route_repository.dart';
 import 'data/run_enrichment_service.dart';
 import 'domain/achievements/goals_summary.dart';
@@ -591,22 +592,26 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     }
   }
 
-  void _openActiveRun() {
-    _navigatorKey.currentState?.push(
-      MaterialPageRoute<void>(
-        builder: (context) => ActiveRunScreen(
-          bridge: _bridge,
-          formatter: _formatter,
-          onRunFinished: (result) {
-            unawaited(_saveAndOpenSummary(result, replaceTop: true));
-          },
-          onExit: () {
-            _popToHome();
-            unawaited(_refreshRecentRuns());
-          },
-        ),
+  void _openActiveRun({PlannedRoute? plannedRoute, bool replaceTop = false}) {
+    final route = MaterialPageRoute<void>(
+      builder: (context) => ActiveRunScreen(
+        bridge: _bridge,
+        formatter: _formatter,
+        plannedRoute: plannedRoute,
+        onRunFinished: (result) {
+          unawaited(_saveAndOpenSummary(result, replaceTop: true));
+        },
+        onExit: () {
+          _popToHome();
+          unawaited(_refreshRecentRuns());
+        },
       ),
     );
+    if (replaceTop) {
+      _navigatorKey.currentState?.pushReplacement(route);
+    } else {
+      _navigatorKey.currentState?.push(route);
+    }
   }
 
   Future<bool> _promptSaveRunFailed() async {
@@ -746,6 +751,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
           ),
           initialCenter: center,
           initialZoom: zoom,
+          onStartRun: (plannedRoute) {
+            _openActiveRun(plannedRoute: plannedRoute, replaceTop: true);
+          },
         ),
       ),
     );

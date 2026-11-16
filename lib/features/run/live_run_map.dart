@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../bridge/tracking_bridge.dart';
 import '../../core/theme/app_palette.dart';
+import '../../data/planned_route.dart';
 
 /// Street map for an active run. Coordinates are always local; only map tiles
 /// are fetched from OpenFreeMap. The route remains visible when tiles cannot load.
@@ -13,12 +14,14 @@ class LiveRunMap extends StatefulWidget {
     super.key,
     required this.route,
     required this.snapshot,
+    this.plannedRoute,
     this.height = 160,
     this.showSearchingPlaceholder = false,
   });
 
   final List<TrackingPoint> route;
   final TrackingSnapshot? snapshot;
+  final PlannedRoute? plannedRoute;
 
   /// Height of the map. Defaults to 160 in portrait; null allows the map to
   /// expand to fill the available height in landscape mode.
@@ -89,6 +92,10 @@ class _LiveRunMapState extends State<LiveRunMap> {
         .map((point) => _validPosition(point.lat, point.lon))
         .whereType<LatLng>()
         .toList(growable: false);
+    final plannedPoints = (widget.plannedRoute?.points ?? const <PlannedRoutePoint>[])
+        .map((point) => _validPosition(point.lat, point.lon))
+        .whereType<LatLng>()
+        .toList(growable: false);
 
     if (position == null) {
       if (widget.showSearchingPlaceholder) {
@@ -132,20 +139,38 @@ class _LiveRunMapState extends State<LiveRunMap> {
                       sprites: styleSnapshot.data!.sprites,
                       glyphs: styleSnapshot.data!.glyphs,
                     ),
-                  if (route.length >= 2)
+                  if (plannedPoints.length >= 2 || route.length >= 2)
                     PolylineLayer(
                       polylines: [
-                        Polyline(
-                          points: route,
-                          color: palette.routePlain,
-                          strokeWidth: 5,
-                          borderColor: palette.routeCasing,
-                          borderStrokeWidth: 2,
-                        ),
+                        if (plannedPoints.length >= 2)
+                          Polyline(
+                            points: plannedPoints,
+                            color: palette.accent.withValues(alpha: 0.45),
+                            strokeWidth: 4,
+                          ),
+                        if (route.length >= 2)
+                          Polyline(
+                            points: route,
+                            color: palette.routePlain,
+                            strokeWidth: 5,
+                            borderColor: palette.routeCasing,
+                            borderStrokeWidth: 2,
+                          ),
                       ],
                     ),
                   MarkerLayer(
                     markers: [
+                      if (plannedPoints.length >= 2)
+                        Marker(
+                          point: plannedPoints.last,
+                          width: 24,
+                          height: 24,
+                          child: Icon(
+                            Icons.flag,
+                            color: palette.routeFinish,
+                            size: 20,
+                          ),
+                        ),
                       if (route.isNotEmpty)
                         Marker(
                           point: route.first,

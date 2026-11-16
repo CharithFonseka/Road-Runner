@@ -43,15 +43,39 @@ void main() {
     expect(() => points.clear(), throwsUnsupportedError);
   });
 
-  test('rejects a missing key without making a request', () async {
+  test('uses free OSRM foot routing when no ORS API key is set', () async {
     final client = OrsDirectionsClient(
       apiKey: '',
-      post: (_, _, _) => throw StateError('Request should not be sent'),
+      post: (_, _, _) => throw StateError('ORS should not be called'),
+      fetchOsrm: (uri) async {
+        expect(uri.host, 'router.project-osrm.org');
+        expect(uri.path, '/route/v1/foot/79.8612,6.9271;79.864,6.93');
+        expect(uri.queryParameters['overview'], 'full');
+        expect(uri.queryParameters['geometries'], 'geojson');
+        return {
+          'routes': [
+            {
+              'geometry': {
+                'type': 'LineString',
+                'coordinates': [
+                  [79.8612, 6.9271],
+                  [79.8625, 6.9282],
+                  [79.864, 6.93],
+                ],
+              },
+            },
+          ],
+        };
+      },
     );
-    expect(
-      client.walkingRoute(const LatLng(1, 2), const LatLng(3, 4)),
-      throwsStateError,
+
+    final points = await client.walkingRoute(
+      const LatLng(6.9271, 79.8612),
+      const LatLng(6.93, 79.864),
     );
+    expect(points, hasLength(3));
+    expect(points[1].lat, 6.9282);
+    expect(points[1].lon, 79.8625);
   });
 
   test('rejects malformed and degenerate route geometry', () async {
