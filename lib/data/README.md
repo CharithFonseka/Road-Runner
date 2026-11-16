@@ -31,6 +31,12 @@ The cache key rounds start coordinates to three decimals. Summary requests
 missing details once when opened, after the run has already been saved. Failed
 network requests leave the local run usable and can retry on a later opening.
 
+Database version 4 adds `planned_routes(id, name, created_at_utc_ms)` and
+`planned_route_points(route_id, seq, lat, lon)`. Planned routes are separate
+from recorded runs. `PlannedRouteRepository` saves a route and its ordered
+points in one transaction, and supports loading, listing, replacing and
+deleting routes. The version 3 to 4 migration preserves existing runs.
+
 **`run_points` table**
 
 | Column | Type | Notes |

@@ -7,13 +7,15 @@ import 'package:sqflite/sqflite.dart';
 /// Manages the SQLite database lifecycle, schema initialization, and connections.
 class AppDatabase {
   static const String databaseName = 'road_runner.db';
-  static const int databaseVersion = 3;
+  static const int databaseVersion = 4;
 
   // Table names
   static const String tableRuns = 'runs';
   static const String tableRunPoints = 'run_points';
   static const String tableRunPauses = 'run_pauses';
   static const String tablePlaceCache = 'place_cache';
+  static const String tablePlannedRoutes = 'planned_routes';
+  static const String tablePlannedRoutePoints = 'planned_route_points';
 
   // Runs table columns
   static const String colRunId = 'id';
@@ -143,6 +145,7 @@ class AppDatabase {
       );
     ''');
     await _createPlaceCache(db);
+    await _createPlannedRouteTables(db);
   }
 
   static Future<void> _createPlaceCache(Database db) => db.execute('''
@@ -151,6 +154,26 @@ class AppDatabase {
       place_name TEXT NOT NULL
     );
   ''');
+
+  static Future<void> _createPlannedRouteTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE $tablePlannedRoutes (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at_utc_ms INTEGER NOT NULL
+      );
+    ''');
+    await db.execute('''
+      CREATE TABLE $tablePlannedRoutePoints (
+        route_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        lat REAL NOT NULL,
+        lon REAL NOT NULL,
+        PRIMARY KEY (route_id, seq),
+        FOREIGN KEY (route_id) REFERENCES $tablePlannedRoutes (id) ON DELETE CASCADE
+      );
+    ''');
+  }
 
   /// Handles schema migrations for future database versions.
   static Future<void> _onUpgrade(
@@ -181,6 +204,9 @@ class AppDatabase {
         'ALTER TABLE $tableRuns ADD COLUMN $colWeatherCode INTEGER;',
       );
       await _createPlaceCache(db);
+    }
+    if (oldVersion < 4) {
+      await _createPlannedRouteTables(db);
     }
   }
 
