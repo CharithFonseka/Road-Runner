@@ -185,7 +185,21 @@ void main() {
               );
               expect(
                 find.text(AppStrings.settingsBlockedHint),
-                blocked ? findsOneWidget : findsNothing,
+                location == PermissionAccess.permanentlyDenied
+                    ? findsOneWidget
+                    : findsNothing,
+              );
+              expect(
+                find.text(AppStrings.settingsNotificationDeniedHint),
+                notification == PermissionAccess.denied
+                    ? findsOneWidget
+                    : findsNothing,
+              );
+              expect(
+                find.text(AppStrings.settingsNotificationBlockedHint),
+                notification == PermissionAccess.permanentlyDenied
+                    ? findsOneWidget
+                    : findsNothing,
               );
               expect(g.locationRequests + g.notificationRequests, 0);
               handle.dispose();
@@ -274,7 +288,12 @@ void main() {
       final _Gateway g = _Gateway(location: PermissionAccess.permanentlyDenied);
       await _pump(tester, g);
 
-      await tester.ensureVisible(find.byKey(SettingsScreen.openAppSettingsKey));
+      await tester.scrollUntilVisible(
+        find.byKey(SettingsScreen.openAppSettingsKey),
+        200,
+      );
+      await tester.drag(find.byType(ListView), const Offset(0, -120));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(SettingsScreen.openAppSettingsKey));
       await tester.pumpAndSettle();
       expect(g.settingsCalls, 1);
@@ -299,7 +318,12 @@ void main() {
         notification: PermissionAccess.permanentlyDenied,
       )..settingsOpens = false;
       await _pump(tester, g);
-      await tester.ensureVisible(find.byKey(SettingsScreen.openAppSettingsKey));
+      await tester.scrollUntilVisible(
+        find.byKey(SettingsScreen.openAppSettingsKey),
+        200,
+      );
+      await tester.drag(find.byType(ListView), const Offset(0, -120));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(SettingsScreen.openAppSettingsKey));
       await tester.pumpAndSettle();
       expect(find.byKey(SettingsScreen.settingsFailedKey), findsOneWidget);
@@ -311,7 +335,12 @@ void main() {
       await _pump(tester, g);
       await _backgroundAndResume(tester);
       await tester.tap(find.byKey(SettingsScreen.manageButtonKey));
-      await tester.ensureVisible(find.byKey(SettingsScreen.openAppSettingsKey));
+      await tester.scrollUntilVisible(
+        find.byKey(SettingsScreen.openAppSettingsKey),
+        200,
+      );
+      await tester.drag(find.byType(ListView), const Offset(0, -120));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(SettingsScreen.openAppSettingsKey));
       await tester.pumpAndSettle();
       expect(g.locationRequests, 0);
@@ -391,6 +420,7 @@ void main() {
   group('About', () {
     testWidgets('describes the app and local storage', (tester) async {
       await _pump(tester, _Gateway());
+      await tester.scrollUntilVisible(find.text(AppStrings.navTagline), 200);
       expect(find.text(AppStrings.navTagline), findsOneWidget);
       expect(find.text(AppStrings.aboutTrackerDetail), findsOneWidget);
       expect(find.text(AppStrings.aboutStorageTitle), findsOneWidget);
@@ -409,7 +439,10 @@ void main() {
       expect(find.byKey(SettingsScreen.versionKey), findsNothing);
 
       await _pump(tester, _Gateway(), version: '1.0.0 (3)');
-      await tester.ensureVisible(find.byKey(SettingsScreen.versionKey));
+      await tester.scrollUntilVisible(
+        find.byKey(SettingsScreen.versionKey),
+        200,
+      );
       expect(find.text('1.0.0 (3)'), findsOneWidget);
     });
   });

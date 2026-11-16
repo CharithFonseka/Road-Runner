@@ -20,7 +20,7 @@ import '../shared/app_navigation_drawer.dart' show DrawerLandscapePainter;
 import 'run_summary.dart';
 import 'widgets/route_painter.dart';
 
-class SummaryScreen extends StatelessWidget {
+class SummaryScreen extends StatefulWidget {
   const SummaryScreen({
     super.key,
     required this.summary,
@@ -29,6 +29,7 @@ class SummaryScreen extends StatelessWidget {
     this.formatter = const LiveRunFormatter(),
     this.onBack,
     this.isLoading = false,
+    this.onDeleteRun,
   });
 
   final RunSummary summary;
@@ -47,8 +48,15 @@ class SummaryScreen extends StatelessWidget {
   /// a load is really in progress.
   final bool isLoading;
 
+  /// Deletes this run through the app shell. The caller must delete persisted
+  /// data, refresh Home/History, and navigate only after deletion succeeds.
+  final Future<void> Function(String runId)? onDeleteRun;
+
   static const Key homeButtonKey = Key('summary.home');
   static const Key historyButtonKey = Key('summary.history');
+  static const Key deleteButtonKey = Key('summary.delete');
+  static const Key deleteCancelButtonKey = Key('summary.delete.cancel');
+  static const Key deleteConfirmButtonKey = Key('summary.delete.confirm');
   static const Key routeAreaKey = Key('summary.route');
   static const Key dateKey = Key('summary.date');
   static const Key backButtonKey = Key('summary.back');
@@ -60,6 +68,56 @@ class SummaryScreen extends StatelessWidget {
   static Key statKey(SummaryStat stat) => Key('summary.stat.${stat.name}');
 
   @override
+  State<SummaryScreen> createState() => _SummaryScreenState();
+}
+
+class _SummaryScreenState extends State<SummaryScreen> {
+  bool _deletionPending = false;
+
+  Future<void> _confirmDelete() async {
+    final Future<void> Function(String runId)? deleteRun = widget.onDeleteRun;
+    if (deleteRun == null || _deletionPending) return;
+
+    setState(() => _deletionPending = true);
+    try {
+      final bool confirmed =
+          await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text(AppStrings.summaryDeleteTitle),
+              content: const Text(AppStrings.summaryDeleteMessage),
+              actions: [
+                TextButton(
+                  key: SummaryScreen.deleteCancelButtonKey,
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text(AppStrings.summaryDeleteCancel),
+                ),
+                FilledButton(
+                  key: SummaryScreen.deleteConfirmButtonKey,
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text(AppStrings.summaryDeleteConfirm),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!confirmed || !mounted) return;
+
+      await deleteRun(widget.summary.runId);
+    } on Exception {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text(AppStrings.summaryDeleteFailed)),
+          );
+      }
+    } finally {
+      if (mounted) setState(() => _deletionPending = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final double bottomInset = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
@@ -68,8 +126,8 @@ class SummaryScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _SummaryHeader(
-            startedAt: summary.startedAt,
-            onBack: onBack ?? onBackToHome,
+            startedAt: widget.summary.startedAt,
+            onBack: widget.onBack ?? widget.onBackToHome,
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -82,29 +140,60 @@ class SummaryScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (isLoading)
-                    const _LoadingBody(key: loadingKey)
+                  if (widget.isLoading)
+                    const _LoadingBody(key: SummaryScreen.loadingKey)
                   else ...[
-                    _StatsCard(summary: summary, formatter: formatter),
+                    _StatsCard(
+                      summary: widget.summary,
+                      formatter: widget.formatter,
+                    ),
                     const SizedBox(height: 10),
-                    _RouteCard(route: summary.route),
+                    _RouteCard(route: widget.summary.route),
                     const SizedBox(height: 10),
-                    _SplitsCard(summary: summary, formatter: formatter),
+                    _SplitsCard(
+                      summary: widget.summary,
+                      formatter: widget.formatter,
+                    ),
                   ],
                   const SizedBox(height: AppSpacing.large),
                   FilledButton.icon(
-                    key: homeButtonKey,
-                    onPressed: onBackToHome,
+                    key: SummaryScreen.homeButtonKey,
+                    onPressed: widget.onBackToHome,
                     icon: const Icon(Icons.home_outlined),
                     label: const Text(AppStrings.backToHome),
                   ),
                   const SizedBox(height: AppSpacing.itemGap),
                   OutlinedButton.icon(
-                    key: historyButtonKey,
-                    onPressed: onOpenHistory,
+                    key: SummaryScreen.historyButtonKey,
+                    onPressed: widget.onOpenHistory,
                     icon: const Icon(Icons.bar_chart),
                     label: const Text(AppStrings.viewHistory),
                   ),
+                  if (widget.onDeleteRun != null) ...[
+                    const SizedBox(height: AppSpacing.itemGap),
+                    OutlinedButton.icon(
+                      key: SummaryScreen.deleteButtonKey,
+                      onPressed: _deletionPending ? null : _confirmDelete,
+                      icon: _deletionPending
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.delete_outline_rounded),
+                      label: Text(
+                        _deletionPending
+                            ? AppStrings.summaryDeleting
+                            : AppStrings.summaryDeleteRun,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                        minimumSize: const Size.fromHeight(
+                          AppSpacing.minTouchTarget,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

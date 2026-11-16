@@ -124,6 +124,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         s.notification == PermissionAccess.permanentlyDenied;
   }
 
+  bool get _locationBlocked {
+    final PermissionSnapshot? s = _controller.snapshot;
+    return s?.location == PermissionAccess.permanentlyDenied &&
+        _controller.issue != PermissionIssue.checkFailed;
+  }
+
   @override
   Widget build(BuildContext context) {
     final double bottomInset = MediaQuery.paddingOf(context).bottom;
@@ -228,7 +234,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               key: SettingsScreen.settingsFailedKey,
               text: AppStrings.settingsOpenFailed,
             ),
-          if (_anyBlocked && issue != PermissionIssue.settingsFailed)
+          if (_controller.snapshot?.notification == PermissionAccess.denied)
+            const _Notice(text: AppStrings.settingsNotificationDeniedHint),
+          if (_controller.snapshot?.notification ==
+                  PermissionAccess.permanentlyDenied &&
+              issue != PermissionIssue.settingsFailed)
+            const _Notice(text: AppStrings.settingsNotificationBlockedHint),
+          if (_locationBlocked && issue != PermissionIssue.settingsFailed)
             const _Notice(text: AppStrings.settingsBlockedHint),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),

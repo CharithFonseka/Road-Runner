@@ -7,7 +7,7 @@ Owner: Tharushi
 ```dart
 PermissionsScreen(
   gateway: const PermissionHandlerGateway(), // or a fake in tests
-  onContinue: () {}, // location and notifications are allowed, Location is on
+  onContinue: () {}, // location is allowed and device Location is on
   onNotNow: () {},   // user left without granting
   onBack: () {},     // optional; header Back button (null uses onNotNow)
 )
@@ -28,9 +28,19 @@ The screen checks for problems in this order and shows the first one it finds:
 1. Location not allowed → **Continue** the first time (after the explanation); **Allow Location Access** after an ordinary denial
 2. Location blocked (permanently denied) → numbered steps and **Open app settings**
 3. The phone's Location setting is off → instructions and **Check Again**
-4. Notifications not allowed → **Allow Notifications**
-5. Notifications blocked → **Open app settings**
-6. Everything is ready → **Continue**
+4. Notifications not allowed → **Allow Notifications**, or **Continue without
+   notifications**
+5. Notifications blocked → **Open app settings**, or **Continue without
+   notifications**
+6. Location is ready and notifications are allowed → **Continue**
+
+Notifications provide lock-screen live updates; they are not required to
+record a GPS run. The screen never requests notification permission on open.
+An ordinary denial can be retried only after the user taps **Allow
+Notifications**. A permanently blocked status uses the existing gateway state
+and offers **Open app settings**. When the user explicitly continues without
+notifications, the parent may proceed with GPS tracking if location permission
+and device Location are ready.
 
 The main button and **Not Now** sit in a fixed bar above the Android navigation bar.
 
@@ -67,9 +77,13 @@ The tracking service should report this as `PERMISSION_DENIED` (or a dedicated c
 
 A shortcut that opens the Location settings page directly would need native support.
 
-### Is the notification permission required? (Praveen)
+### App-shell integration (Praveen)
 
-`onContinue` is offered only when notifications are allowed too. If the team decides runs may start without the notification, the parent can call the Run screen from `onNotNow`, or the readiness rule can be relaxed here.
+For the Home start flow, keep the permission check gated on location permission
+and device Location only. Pass `onContinue` to pop Permissions and open the
+Active Run route; it is now also called by **Continue without notifications**
+when location is ready. Do not gate GPS recording on notification permission.
+Keep `onNotNow` as the separate action that leaves the flow without starting.
 
 ### Wiring (Praveen)
 

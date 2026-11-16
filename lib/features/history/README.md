@@ -50,10 +50,17 @@ total moving time in milliseconds. If a summary is absent, its card is omitted;
 the screen does not invent totals. The All Runs filter does not display either
 monthly summary.
 
-The current app shell supplies the existing required arguments only, so it
-opens All Runs without summaries, loading/error state, Start a Run callback, or
-a Settings destination callback. Those remain optional for backward
-compatibility and should be wired when the integration supports them.
+The empty state already shows an accessible **Start a run** button when
+`onStartRun` is supplied and hides it otherwise. In `main.dart`, wire it to the
+same start flow used by Home:
+
+```dart
+onStartRun: () => unawaited(_handleStartRun()),
+```
+
+The current app shell omits this callback, so History currently cannot start a
+run from its empty state. The callback also makes the action available for an
+empty filtered month; it does not change run selection or filtering.
 
 `onRunSelected(runId)` remains responsible for loading the run and its points,
 then opening Summary. Loading/errors and retry behavior likewise belong to the
