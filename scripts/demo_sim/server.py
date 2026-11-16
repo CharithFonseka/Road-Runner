@@ -276,7 +276,7 @@ def main() -> None:
     global STATE
     STATE = SimState()
     print(f"Generated random street route with {len(STATE.route_points)} points.")
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), DemoSimHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), DemoSimHandler)
     print(f"Road Runner Demo Simulator running at http://localhost:{PORT}")
     print("Run `adb reverse tcp:8765 tcp:8765` to connect your Android device/emulator.")
     try:
