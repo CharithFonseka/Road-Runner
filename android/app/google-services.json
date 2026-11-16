@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "827523252477",
+    "project_id": "road-runner-app-7d632",
+    "storage_bucket": "road-runner-app-7d632.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:827523252477:android:aade0d11d789d74ea6be94",
+        "android_client_info": {
+          "package_name": "com.roadrunner.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "827523252477-ibfm7dkc94onk6enldmac7m2a35rq4qi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.roadrunner.app",
+            "certificate_hash": "ea98b564a903a9f8dc4afa1be1062bffc75e5817"
+          }
+        },
+        {
+          "client_id": "827523252477-3dq2ru4dja3gbda3edq1ge25297m890l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvLruS30i58d9bPAUO56_uMTnW-5-unFU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "827523252477-3dq2ru4dja3gbda3edq1ge25297m890l.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
