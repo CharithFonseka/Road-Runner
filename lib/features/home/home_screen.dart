@@ -43,6 +43,7 @@ class HomeScreen extends StatelessWidget {
     this.onRunSelected,
     this.onOpenSettings,
     this.onPlanRoute,
+    this.onOpenGoals,
     this.isStartingRun = false,
     this.startRunEnabled = true,
     this.formatter = const LiveRunFormatter(),
@@ -88,6 +89,7 @@ class HomeScreen extends StatelessWidget {
 
   /// Opens the walking route planner when available.
   final VoidCallback? onPlanRoute;
+  final VoidCallback? onOpenGoals;
 
   /// The parent's "starting a run" flag (for example while it checks
   /// permissions). True shows "Starting run"; turning it back to false
@@ -106,6 +108,7 @@ class HomeScreen extends StatelessWidget {
   static const Key settingsButtonKey = Key('home.settings');
   static const Key recentRunsKey = Key('home.recentRuns');
   static const Key planRouteButtonKey = Key('home.planRoute');
+  static const Key goalsButtonKey = Key('home.goals');
 
   /// Below this height (phone in landscape) the desert strip is left out
   /// so the Recent runs card keeps usable space.
@@ -209,16 +212,37 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
           ),
-          if (onPlanRoute != null)
+          if (onPlanRoute != null || onOpenGoals != null)
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.medium,
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.medium,
+                AppSpacing.small,
+                AppSpacing.medium,
+                0,
               ),
-              child: OutlinedButton.icon(
-                key: planRouteButtonKey,
-                onPressed: onPlanRoute,
-                icon: const Icon(Icons.route_outlined),
-                label: const Text('Plan a route'),
+              child: Row(
+                children: [
+                  if (onPlanRoute != null)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: planRouteButtonKey,
+                        onPressed: onPlanRoute,
+                        icon: const Icon(Icons.route_outlined, size: 18),
+                        label: const Text('Plan a route'),
+                      ),
+                    ),
+                  if (onPlanRoute != null && onOpenGoals != null)
+                    const SizedBox(width: AppSpacing.itemGap),
+                  if (onOpenGoals != null)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: goalsButtonKey,
+                        onPressed: onOpenGoals,
+                        icon: const Icon(Icons.emoji_events_outlined, size: 18),
+                        label: const Text('Goals & Badges'),
+                      ),
+                    ),
+                ],
               ),
             ),
           Padding(
