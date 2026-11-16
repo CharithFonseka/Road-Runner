@@ -42,6 +42,8 @@ class SettingsScreen extends StatefulWidget {
     required this.onOpenHistory,
     required this.onManagePermissions,
     this.appVersion,
+    this.debugSimulationEnabled,
+    this.onDebugSimulationChanged,
   });
 
   /// Reads permission status and opens the app's system settings page.
@@ -61,6 +63,10 @@ class SettingsScreen extends StatefulWidget {
   /// Real version text from the app shell (for example "1.0.0 (3)"). Null
   /// or blank hides the Version row; nothing is invented.
   final String? appVersion;
+
+  /// Optional debug-only route simulation toggle. Null hides the section.
+  final bool? debugSimulationEnabled;
+  final ValueChanged<bool>? onDebugSimulationChanged;
 
   static const Key backButtonKey = Key('settings.back');
   static const Key menuButtonKey = Key('settings.menu');
@@ -179,6 +185,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _permissionsCard(),
                   const _SectionHeading(AppStrings.settingsAboutSection),
                   _AboutCard(version: widget.appVersion),
+                  if (widget.onDebugSimulationChanged != null) ...[
+                    const _SectionHeading('Demo & Testing (Debug)'),
+                    Card(
+                      margin: EdgeInsets.zero,
+                      clipBehavior: Clip.antiAlias,
+                      child: SwitchListTile(
+                        key: const Key('settings.debugSimulation'),
+                        title: const Text('Simulate runner route'),
+                        subtitle: const Text(
+                          'Replays a repeatable ~1.2 km park loop through the native GPS filter.',
+                        ),
+                        value: widget.debugSimulationEnabled ?? false,
+                        onChanged: widget.onDebugSimulationChanged,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
