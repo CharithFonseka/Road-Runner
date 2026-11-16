@@ -1,0 +1,9 @@
+# Copy this file to `android/key.properties` (which is gitignored) and fill in
+# your release keystore values, or set the corresponding ROAD_RUNNER_* environment
+# variables before running `flutter build apk --release` or `flutter build appbundle`.
+# Never commit `key.properties` or any `.jks`/`.keystore` file to Git.
+
+storePassword=REPLACE_WITH_KEYSTORE_PASSWORD
+keyPassword=REPLACE_WITH_KEY_PASSWORD
+keyAlias=roadrunner
+storeFile=/absolute/path/to/roadrunner-release.jks
