@@ -638,6 +638,7 @@ class FakeDatabase extends Fake implements Database {
     AppDatabase.tableRunPoints: [],
     AppDatabase.tableRunPauses: [],
     AppDatabase.tablePlaceCache: [],
+    AppDatabase.tableRunBadges: [],
   };
 
   @override
@@ -725,6 +726,12 @@ class FakeDatabase extends Fake implements Database {
           (item) =>
               item['lat_bucket'] == values['lat_bucket'] &&
               item['lon_bucket'] == values['lon_bucket'],
+        );
+      } else if (table == AppDatabase.tableRunBadges) {
+        list.removeWhere(
+          (item) =>
+              item['run_id'] == values['run_id'] &&
+              item['badge_type'] == values['badge_type'],
         );
       } else {
         list.removeWhere((item) => item['id'] == values['id']);

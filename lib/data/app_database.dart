@@ -7,13 +7,14 @@ import 'package:sqflite/sqflite.dart';
 /// Manages the SQLite database lifecycle, schema initialization, and connections.
 class AppDatabase {
   static const String databaseName = 'road_runner.db';
-  static const int databaseVersion = 4;
+  static const int databaseVersion = 5;
 
   // Table names
   static const String tableRuns = 'runs';
   static const String tableRunPoints = 'run_points';
   static const String tableRunPauses = 'run_pauses';
   static const String tablePlaceCache = 'place_cache';
+  static const String tableRunBadges = 'run_badges';
 
   // Runs table columns
   static const String colRunId = 'id';
@@ -153,6 +154,16 @@ class AppDatabase {
         PRIMARY KEY (lat_bucket, lon_bucket)
       );
     ''');
+
+    await db.execute('''
+      CREATE TABLE $tableRunBadges (
+        run_id TEXT NOT NULL,
+        badge_type TEXT NOT NULL,
+        awarded_at_utc_ms INTEGER NOT NULL,
+        PRIMARY KEY (run_id, badge_type),
+        FOREIGN KEY (run_id) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
+      );
+    ''');
   }
 
   /// Handles schema migrations for future database versions.
@@ -192,6 +203,18 @@ class AppDatabase {
           lon_bucket INTEGER NOT NULL,
           place_name TEXT NOT NULL,
           PRIMARY KEY (lat_bucket, lon_bucket)
+        );
+      ''');
+    }
+
+    if (oldVersion < 5) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableRunBadges (
+          run_id TEXT NOT NULL,
+          badge_type TEXT NOT NULL,
+          awarded_at_utc_ms INTEGER NOT NULL,
+          PRIMARY KEY (run_id, badge_type),
+          FOREIGN KEY (run_id) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
         );
       ''');
     }

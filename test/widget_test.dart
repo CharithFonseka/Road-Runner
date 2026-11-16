@@ -188,6 +188,15 @@ class _StubRunRepository implements RunRepository {
       );
     }
   }
+
+  @override
+  Future<List<BadgeAward>> getBadgesForRun(String runId) async => [];
+
+  @override
+  Future<int> getCurrentStreak() async => 0;
+
+  @override
+  Future<void> recalculateBadges() async {}
 }
 
 class _StubPermissionGateway implements PermissionGateway {

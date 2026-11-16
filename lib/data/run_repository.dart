@@ -8,10 +8,12 @@ import 'dart:io';
 import 'package:road_runner/core/contract/contract.dart';
 import 'package:road_runner/data/app_database.dart';
 import 'package:road_runner/data/run.dart';
+import 'package:road_runner/domain/achievements/achievements.dart';
 import 'package:road_runner/domain/run_name.dart';
 import 'package:road_runner/domain/stats/stats.dart';
 import 'package:sqflite/sqflite.dart';
 
+export 'package:road_runner/domain/achievements/achievements.dart';
 export 'package:road_runner/domain/run_name.dart';
 
 /// Repository interface for saving, loading, and managing runs and GPS points.
@@ -38,6 +40,9 @@ abstract class RunRepository {
     int? weatherCode,
     String? localStartDay,
   });
+  Future<List<BadgeAward>> getBadgesForRun(String runId);
+  Future<int> getCurrentStreak();
+  Future<void> recalculateBadges();
 }
 
 /// SQLite-backed implementation of [RunRepository] using [AppDatabase].
@@ -270,6 +275,8 @@ class SqliteRunRepository implements RunRepository {
       }
       await batch.commit(noResult: true);
     });
+
+    await recalculateBadges();
   }
 
   @override
@@ -344,6 +351,8 @@ class SqliteRunRepository implements RunRepository {
         whereArgs: [runId],
       );
     });
+
+    await recalculateBadges();
   }
 
   @override
@@ -393,6 +402,54 @@ class SqliteRunRepository implements RunRepository {
       where: '${AppDatabase.colRunId} = ?',
       whereArgs: [runId],
     );
+  }
+
+  @override
+  Future<List<BadgeAward>> getBadgesForRun(String runId) async {
+    final db = await _database.database;
+    final rows = await db.query(
+      AppDatabase.tableRunBadges,
+      where: 'run_id = ?',
+      whereArgs: [runId],
+    );
+    return rows.map((r) {
+      return BadgeAward(
+        r['run_id'] as String,
+        BadgeTypeExtension.fromKey(r['badge_type'] as String),
+      );
+    }).toList();
+  }
+
+  @override
+  Future<int> getCurrentStreak() async {
+    final allRuns = await list();
+    return currentDailyStreak(allRuns);
+  }
+
+  @override
+  Future<void> recalculateBadges() async {
+    final allRuns = await list();
+    final bestKmMap = <String, int?>{};
+    for (final run in allRuns) {
+      final points = await getPoints(run.id);
+      final pauses = await getPauses(run.id);
+      bestKmMap[run.id] = bestFullKmMs(points, pauses);
+    }
+
+    final awards = calculateAwards(allRuns, bestKmMap);
+
+    final db = await _database.database;
+    await db.transaction((txn) async {
+      await txn.delete(AppDatabase.tableRunBadges);
+      final nowUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+      for (final award in awards) {
+        await txn.insert(AppDatabase.tableRunBadges, {
+          'run_id': award.runId,
+          'badge_type': award.type.key,
+          'awarded_at_utc_ms': nowUtc,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
   }
 
   @override
