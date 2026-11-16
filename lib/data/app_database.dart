@@ -7,7 +7,7 @@ import 'package:sqflite/sqflite.dart';
 /// Manages the SQLite database lifecycle, schema initialization, and connections.
 class AppDatabase {
   static const String databaseName = 'road_runner.db';
-  static const int databaseVersion = 5;
+  static const int databaseVersion = 6;
 
   // Table names
   static const String tableRuns = 'runs';
@@ -15,6 +15,8 @@ class AppDatabase {
   static const String tableRunPauses = 'run_pauses';
   static const String tablePlaceCache = 'place_cache';
   static const String tableRunBadges = 'run_badges';
+  static const String tablePlannedRoutes = 'planned_routes';
+  static const String tablePlannedRoutePoints = 'planned_route_points';
 
   // Runs table columns
   static const String colRunId = 'id';
@@ -164,6 +166,27 @@ class AppDatabase {
         FOREIGN KEY (run_id) REFERENCES $tableRuns ($colRunId) ON DELETE CASCADE
       );
     ''');
+    await _createPlannedRouteTables(db);
+  }
+
+  static Future<void> _createPlannedRouteTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tablePlannedRoutes (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at_utc_ms INTEGER NOT NULL
+      );
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tablePlannedRoutePoints (
+        route_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        lat REAL NOT NULL,
+        lon REAL NOT NULL,
+        PRIMARY KEY (route_id, seq),
+        FOREIGN KEY (route_id) REFERENCES $tablePlannedRoutes (id) ON DELETE CASCADE
+      );
+    ''');
   }
 
   /// Handles schema migrations for future database versions.
@@ -218,6 +241,58 @@ class AppDatabase {
         );
       ''');
     }
+    if (oldVersion < 6) {
+      // Early route-planner builds used v4 with different run and place-cache
+      // columns. Keep their saved runs and cached places when moving to the
+      // combined schema from main.
+      await _migrateEarlyRoutePreview(db);
+      await _createPlannedRouteTables(db);
+    }
+  }
+
+  static Future<void> _migrateEarlyRoutePreview(Database db) async {
+    final runColumns = (await db.rawQuery('PRAGMA table_info($tableRuns)'))
+        .map((row) => row['name'] as String)
+        .toSet();
+    if (runColumns.contains('name') && !runColumns.contains(colRunName)) {
+      await db.execute('ALTER TABLE $tableRuns ADD COLUMN $colRunName TEXT');
+      await db.execute('UPDATE $tableRuns SET $colRunName = name');
+    }
+    if (!runColumns.contains(colLocalStartDay)) {
+      await db.execute(
+        'ALTER TABLE $tableRuns ADD COLUMN $colLocalStartDay TEXT',
+      );
+    }
+
+    final cacheColumns = (await db.rawQuery(
+      'PRAGMA table_info($tablePlaceCache)',
+    )).map((row) => row['name'] as String).toSet();
+    if (!cacheColumns.contains('coordinate_key')) return;
+    final legacyPlaces = await db.query(tablePlaceCache);
+    await db.execute(
+      'ALTER TABLE $tablePlaceCache RENAME TO place_cache_legacy',
+    );
+    await db.execute('''
+      CREATE TABLE $tablePlaceCache (
+        lat_bucket INTEGER NOT NULL,
+        lon_bucket INTEGER NOT NULL,
+        place_name TEXT NOT NULL,
+        PRIMARY KEY (lat_bucket, lon_bucket)
+      );
+    ''');
+    for (final row in legacyPlaces) {
+      final coordinates = (row['coordinate_key'] as String).split(',');
+      if (coordinates.length != 2) continue;
+      final lat = double.tryParse(coordinates[0]);
+      final lon = double.tryParse(coordinates[1]);
+      if (lat == null || lon == null) continue;
+      await db.insert(tablePlaceCache, {
+        'lat_bucket': placeBucket(lat),
+        'lon_bucket': placeBucket(lon),
+        'place_name': row['place_name'],
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+    await db.execute('DROP TABLE place_cache_legacy');
   }
 
   /// Closes the underlying database connection.

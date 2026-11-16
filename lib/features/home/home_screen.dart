@@ -44,6 +44,7 @@ class HomeScreen extends StatelessWidget {
     this.onRetry,
     this.onRunSelected,
     this.onOpenSettings,
+    this.onPlanRoute,
     this.isStartingRun = false,
     this.startRunEnabled = true,
     this.formatter = const LiveRunFormatter(),
@@ -87,6 +88,9 @@ class HomeScreen extends StatelessWidget {
   /// Settings shortcut and drawer entry. Falls back to [onOpenPermissions].
   final VoidCallback? onOpenSettings;
 
+  /// Opens the walking route planner when available.
+  final VoidCallback? onPlanRoute;
+
   /// The parent's "starting a run" flag (for example while it checks
   /// permissions). True shows "Starting run"; turning it back to false
   /// re-arms the slider.
@@ -103,6 +107,7 @@ class HomeScreen extends StatelessWidget {
   static const Key menuButtonKey = Key('home.menu');
   static const Key settingsButtonKey = Key('home.settings');
   static const Key recentRunsKey = Key('home.recentRuns');
+  static const Key planRouteButtonKey = Key('home.planRoute');
 
   /// Below this height (phone in landscape) the desert strip is left out
   /// so the Recent runs card keeps usable space.
@@ -135,6 +140,7 @@ class HomeScreen extends StatelessWidget {
           RecentRunRow(
             runId: run.runId,
             dateLabel: AppStrings.runDate(run.startedAt.toLocal()),
+            runName: run.runName,
             distance:
                 '${formatter.distanceKm(run.distanceM)} ${AppStrings.unitKm}',
             duration: formatter.elapsed(run.movingMs),
@@ -242,6 +248,16 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ),
+        if (onPlanRoute != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.medium),
+            child: OutlinedButton.icon(
+              key: planRouteButtonKey,
+              onPressed: onPlanRoute,
+              icon: const Icon(Icons.route_outlined),
+              label: const Text('Plan a route'),
+            ),
+          ),
         Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.medium,
@@ -315,6 +331,28 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
+                if (onPlanRoute != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.medium,
+                    ),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: maxLandscapeSliderWidth,
+                        ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            key: planRouteButtonKey,
+                            onPressed: onPlanRoute,
+                            icon: const Icon(Icons.route_outlined),
+                            label: const Text('Plan a route'),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 Padding(
                   padding: EdgeInsets.fromLTRB(
                     AppSpacing.medium,

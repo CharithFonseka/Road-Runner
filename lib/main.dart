@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Split;
 import 'package:flutter/services.dart';
+import 'package:latlong2/latlong.dart';
 
 import 'bridge/native_tracking_bridge.dart';
 import 'bridge/tracking_bridge.dart';
@@ -13,6 +14,7 @@ import 'core/theme/app_spacing.dart';
 import 'core/theme/app_theme.dart';
 import 'data/run.dart';
 import 'data/run_repository.dart';
+import 'data/planned_route_repository.dart';
 import 'data/run_enrichment_service.dart';
 import 'domain/stats/stats.dart';
 import 'features/account/account_gateway.dart';
@@ -25,6 +27,8 @@ import 'features/home/home_screen.dart';
 import 'features/home/widgets/sky_header.dart' show HeaderIconButton;
 import 'features/permissions/permission_gateway.dart';
 import 'features/permissions/permissions_screen.dart';
+import 'features/route_planning/ors_directions_client.dart';
+import 'features/route_planning/route_planning_screen.dart';
 import 'features/run/active_run_screen.dart';
 import 'features/run/live_run_formatter.dart';
 import 'features/settings/settings_screen.dart';
@@ -90,6 +94,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   late final bool _ownsBridge;
   late final RunRepository _repository;
   late final RunEnrichmentService _enrichment;
+  final Map<String, Future<void>> _pendingEnrichments = {};
   late final PermissionGateway _permissionGateway;
   late final AccountGateway? _accountGateway;
   StreamSubscription<AccountUser?>? _authSub;
@@ -156,6 +161,16 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
   void _notifyShell() {
     if (!mounted) return;
     _shellRevision.value++;
+  }
+
+  Future<void> _enrichRun(String runId) {
+    if (_repository is! SqliteRunRepository) return Future<void>.value();
+    final pending = _pendingEnrichments[runId];
+    if (pending != null) return pending;
+    final operation = _enrichment.enrichRun(runId);
+    _pendingEnrichments[runId] = operation;
+    operation.whenComplete(() => _pendingEnrichments.remove(runId)).ignore();
+    return operation;
   }
 
   Future<void> _initializeAppFlow() async {
@@ -242,6 +257,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
             distanceM: r.distanceM,
             movingMs: r.movingMs,
             averagePaceSecPerKm: r.avgPaceSecPerKm,
+            runName: r.displayName,
           ),
         )
         .toList();
@@ -539,7 +555,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     while (mounted) {
       try {
         await _repository.saveFromFile(result.runId, result.filePath);
-        unawaited(_enrichment.enrichRun(result.runId));
+        unawaited(_enrichRun(result.runId));
         try {
           await _bridge.discardRun(result.runId);
         } catch (_) {
@@ -603,6 +619,38 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     } else {
       _navigatorKey.currentState?.push(route);
     }
+  }
+
+  Future<void> _openRoutePlanner() async {
+    // A previous run gives the map a useful starting area without requiring
+    // another location permission request before planning.
+    var center = const LatLng(0, 0);
+    var zoom = 2.0;
+    if (_recentRuns.isNotEmpty) {
+      try {
+        final points = await _repository.getPoints(_recentRuns.first.runId);
+        final first = points.where((point) => point.accepted).firstOrNull;
+        if (first != null) {
+          center = LatLng(first.lat, first.lon);
+          zoom = 13;
+        }
+      } on Exception {
+        // The world map remains available if a previous run cannot be read.
+      }
+    }
+    if (!mounted) return;
+    _navigatorKey.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (_) => RoutePlanningScreen(
+          repository: PlannedRouteRepository(),
+          directions: OrsDirectionsClient(
+            apiKey: const String.fromEnvironment('ORS_API_KEY'),
+          ),
+          initialCenter: center,
+          initialZoom: zoom,
+        ),
+      ),
+    );
   }
 
   Future<void> _openSummaryForRunId(
@@ -676,6 +724,11 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
 
     return RunSummary(
       runId: run.id,
+      runName: run.displayName,
+      placeName: run.placeName,
+      weatherTempC: run.weatherTempC,
+      weatherWindKmh: run.weatherWindKmh,
+      weatherCode: run.weatherCode,
       startedAt: DateTime.fromMillisecondsSinceEpoch(
         run.startedAtUtcMs,
         isUtc: true,
@@ -693,6 +746,17 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
               durationMs: partial.durationMs,
             ),
     );
+  }
+
+  Future<RunSummary?> _enrichAndReloadSummary(String runId) async {
+    if (_repository is! SqliteRunRepository) return null;
+    try {
+      await _enrichRun(runId);
+      await _refreshRecentRuns();
+      return await _loadRunSummary(runId);
+    } on Exception {
+      return null;
+    }
   }
 
   Future<void> _confirmAndDeleteRun(
@@ -759,43 +823,51 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
     required bool fromHistory,
   }) {
     final double topInset = MediaQuery.paddingOf(context).top;
-    return Stack(
-      children: [
-        SummaryScreen(
-          summary: summary,
-          formatter: _formatter,
-          onBack: fromHistory
-              ? () => _navigatorKey.currentState?.maybePop()
-              : _popToHome,
-          onBackToHome: () {
-            _popToHome();
-            unawaited(_refreshRecentRuns());
-          },
-          onOpenHistory: () {
-            if (fromHistory) {
-              _navigatorKey.currentState?.pop();
-            } else {
+    return _SummaryDetailsLoader(
+      initialSummary: summary,
+      loadDetails: () => _enrichAndReloadSummary(summary.runId),
+      builder: (shownSummary) => Stack(
+        children: [
+          SummaryScreen(
+            summary: shownSummary,
+            enableStreetMap: true,
+            formatter: _formatter,
+            onBack: fromHistory
+                ? () => _navigatorKey.currentState?.maybePop()
+                : _popToHome,
+            onBackToHome: () {
               _popToHome();
-              unawaited(_openHistory());
-            }
-          },
-        ),
-        PositionedDirectional(
-          top: topInset + AppSpacing.small,
-          end: AppSpacing.medium,
-          child: Material(
-            type: MaterialType.transparency,
-            child: HeaderIconButton(
-              key: const Key('summary.delete'),
-              icon: Icons.delete_outline_rounded,
-              tooltip: 'Delete run',
-              onPressed: () => unawaited(
-                _confirmAndDeleteRun(summary.runId, fromHistory: fromHistory),
+              unawaited(_refreshRecentRuns());
+            },
+            onOpenHistory: () {
+              if (fromHistory) {
+                _navigatorKey.currentState?.pop();
+              } else {
+                _popToHome();
+                unawaited(_openHistory());
+              }
+            },
+          ),
+          PositionedDirectional(
+            top: topInset + AppSpacing.small,
+            end: AppSpacing.medium,
+            child: Material(
+              type: MaterialType.transparency,
+              child: HeaderIconButton(
+                key: const Key('summary.delete'),
+                icon: Icons.delete_outline_rounded,
+                tooltip: 'Delete run',
+                onPressed: () => unawaited(
+                  _confirmAndDeleteRun(
+                    summary.runId,
+                    fromHistory: fromHistory,
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -844,6 +916,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
             isStartingRun: _isStartingRun,
             formatter: _formatter,
             onStartRun: () => unawaited(_handleStartRun()),
+            onPlanRoute: () => unawaited(_openRoutePlanner()),
             onOpenHistory: () => unawaited(_openHistory()),
             onOpenPermissions: _openPermissions,
             onOpenSettings: _openSettings,
@@ -855,6 +928,39 @@ class _RoadRunnerAppState extends State<RoadRunnerApp> {
       ),
     );
   }
+}
+
+class _SummaryDetailsLoader extends StatefulWidget {
+  const _SummaryDetailsLoader({
+    required this.initialSummary,
+    required this.loadDetails,
+    required this.builder,
+  });
+
+  final RunSummary initialSummary;
+  final Future<RunSummary?> Function() loadDetails;
+  final Widget Function(RunSummary) builder;
+
+  @override
+  State<_SummaryDetailsLoader> createState() => _SummaryDetailsLoaderState();
+}
+
+class _SummaryDetailsLoaderState extends State<_SummaryDetailsLoader> {
+  late RunSummary _summary = widget.initialSummary;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final updated = await widget.loadDetails();
+    if (mounted && updated != null) setState(() => _summary = updated);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_summary);
 }
 
 class _HistoryRouteScreen extends StatefulWidget {
@@ -929,6 +1035,7 @@ class _HistoryRouteScreenState extends State<_HistoryRouteScreen> {
               distanceM: r.distanceM,
               movingMs: r.movingMs,
               averagePaceSecPerKm: r.avgPaceSecPerKm,
+              runName: r.displayName,
             ),
           )
           .toList();

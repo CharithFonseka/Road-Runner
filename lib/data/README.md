@@ -1,9 +1,9 @@
 # Data Layer (SQLite Storage & Enrichment)
 
-**Owner:** Nadeesha  
-**SRS Reference:** Section 8.5  
-**Database Name:** `road_runner.db`  
-**Current Database Version:** `5`
+**Owner:** Nadeesha
+**SRS Reference:** Section 8.5
+**Database Name:** `road_runner.db`
+**Current Database Version:** `6`
 
 SQLite storage layer implemented via `sqflite`. Persists completed runs, GPS track points, pause intervals, cached geocoded places, and awarded badges/streaks.
 
@@ -18,6 +18,10 @@ SQLite storage layer implemented via `sqflite`. Persists completed runs, GPS tra
 | **v3** | Added 6 nullable metadata columns to `runs`: `run_name`, `place_name`, `weather_temp_c`, `weather_wind_kmh`, `weather_code`, `local_start_day`. |
 | **v4** | Added `place_cache` table with composite primary key `(lat_bucket, lon_bucket)` for offline/cached reverse geocoding. |
 | **v5** | Added `run_badges` table with composite primary key `(run_id, badge_type)` and cascade delete on `runs(id)`. |
+| **v6** | Added `planned_routes` and ordered `planned_route_points` tables. |
+
+The v6 migration also preserves run names, cached places, and saved routes
+from early route-planner builds that used a different v4 schema.
 
 ---
 
@@ -91,6 +95,14 @@ Persists badges awarded to runs.
 
 *Primary Key:* `(run_id, badge_type)`.
 
+### 6. Planned routes
+
+`planned_routes(id, name, created_at_utc_ms)` stores route metadata.
+`planned_route_points(route_id, seq, lat, lon)` stores ordered geometry with a
+foreign key to the route. `PlannedRouteRepository` saves each route and its
+points in one transaction and supports loading, listing, replacing, and
+deleting routes. Planned routes are separate from recorded runs.
+
 ---
 
 ## `RunRepository` Interface
@@ -106,7 +118,7 @@ abstract class RunRepository {
   Future<List<PauseInterval>> getPauses(String runId);
   Future<void> delete(String runId);
   Future<String?> getUnfinishedRunPath();
-  
+
   // Metadata & enrichment updates
   Future<void> updateWeather(
     String runId, {

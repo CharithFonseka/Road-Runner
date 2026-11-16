@@ -19,6 +19,10 @@ flutter run          # requires a connected Android device or emulator
 > A real phone with GPS is required for all tracking features.
 > Emulators can be used for UI-only work with the mock bridge.
 
+The optional walking route planner needs an OpenRouteService key. See
+[`lib/features/route_planning/README.md`](lib/features/route_planning/README.md)
+for setup.
+
 ---
 
 ## Team

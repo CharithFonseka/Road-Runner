@@ -17,10 +17,12 @@ class HistoryRun {
     this.distanceM,
     this.movingMs,
     this.averagePaceSecPerKm,
+    this.runName,
   });
 
   /// Repository run ID, passed back on tap so the parent can open Summary.
   final String runId;
+  final String? runName;
 
   /// Start of the run (from runs.started_at_utc_ms). Used for newest-first
   /// order and shown in the phone's local time.

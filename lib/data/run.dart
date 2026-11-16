@@ -3,6 +3,7 @@
 // SRS reference: Section 8.5
 
 import 'package:road_runner/core/contract/contract.dart';
+import 'package:road_runner/domain/run_name.dart';
 
 /// Represents a single completed workout summary stored in the SQLite `runs` table.
 class Run {
@@ -20,6 +21,16 @@ class Run {
   final double? weatherWindKmh;
   final int? weatherCode;
   final String? localStartDay;
+
+  String get displayName =>
+      runName ??
+      makeRunName(
+        DateTime.fromMillisecondsSinceEpoch(
+          startedAtUtcMs,
+          isUtc: true,
+        ).toLocal(),
+        placeName,
+      );
 
   const Run({
     required this.id,
