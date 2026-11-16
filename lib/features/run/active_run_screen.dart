@@ -24,6 +24,7 @@ import 'package:flutter/material.dart';
 
 import '../../bridge/tracking_bridge.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
@@ -157,6 +158,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen> {
         if (!didPop) _onBack();
       },
       child: Scaffold(
+        backgroundColor: context.palette.background,
         body: SafeArea(
           child: Padding(
             padding: AppSpacing.screenPadding,
@@ -345,7 +347,10 @@ class _Header extends StatelessWidget {
       children: [
         Semantics(
           header: true,
-          child: const Text(AppStrings.runTitle, style: AppTextStyles.heading),
+          child: Text(
+            AppStrings.runTitle,
+            style: AppTextStyles.of(context).heading,
+          ),
         ),
         Wrap(
           spacing: AppSpacing.small,
@@ -376,6 +381,8 @@ class _StatsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TrackingSnapshot? s = snapshot;
+    final AppPalette palette = context.palette;
+    final AppThemedTextStyles textStyles = AppTextStyles.of(context);
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -388,8 +395,8 @@ class _StatsCard extends StatelessWidget {
               value: formatter.elapsed(s?.movingMs),
               template: '0:00:00',
               valueKey: ActiveRunScreen.movingTimeValueKey,
-              style: AppTextStyles.liveTimer.copyWith(
-                color: paused ? AppColors.canyonBrownMuted : null,
+              style: textStyles.liveTimer.copyWith(
+                color: paused ? palette.textSecondary : null,
               ),
               labelTrailing: paused ? const _PausedBadge() : null,
             ),
@@ -400,7 +407,7 @@ class _StatsCard extends StatelessWidget {
               unit: AppStrings.unitPerKm,
               template: '00:00',
               valueKey: ActiveRunScreen.paceValueKey,
-              style: AppTextStyles.livePace,
+              style: textStyles.livePace,
             ),
             const Divider(height: AppSpacing.large),
             _DistanceSpeedRow(
@@ -428,20 +435,24 @@ class _DistanceSpeedRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextScaler scaler = MediaQuery.textScalerOf(context);
+    final AppPalette palette = context.palette;
+    final TextStyle liveStatStyle = palette.isDark
+        ? AppTextStyles.statMedium.copyWith(color: palette.statLive)
+        : AppTextStyles.statMedium;
     return LayoutBuilder(
       builder: (context, constraints) {
         final double column = (constraints.maxWidth - AppSpacing.medium) / 2;
         final bool fitsSideBySide =
             measureStatWidth(
                   value: _distanceTemplate,
-                  style: AppTextStyles.statMedium,
+                  style: liveStatStyle,
                   unit: AppStrings.unitKm,
                   textScaler: scaler,
                 ) <=
                 column &&
             measureStatWidth(
                   value: _speedTemplate,
-                  style: AppTextStyles.statMedium,
+                  style: liveStatStyle,
                   unit: AppStrings.unitKmPerHour,
                   textScaler: scaler,
                 ) <=
@@ -452,14 +463,14 @@ class _DistanceSpeedRow extends StatelessWidget {
           value: distance,
           unit: AppStrings.unitKm,
           valueKey: ActiveRunScreen.distanceValueKey,
-          style: AppTextStyles.statMedium,
+          style: liveStatStyle,
         );
         final Widget speedStat = LiveStat(
           label: AppStrings.statSpeed,
           value: speed,
           unit: AppStrings.unitKmPerHour,
           valueKey: ActiveRunScreen.speedValueKey,
-          style: AppTextStyles.statMedium,
+          style: liveStatStyle,
         );
 
         if (fitsSideBySide) {
@@ -492,19 +503,20 @@ class _PausedBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Color accent = context.palette.accent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         borderRadius: const BorderRadius.all(Radius.circular(6)),
-        border: Border.all(color: AppColors.burntOrangeDeep, width: 1.5),
+        border: Border.all(color: accent, width: 1.5),
       ),
-      child: const Text(
+      child: Text(
         AppStrings.pausedBadge,
         style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w800,
           letterSpacing: 1,
-          color: AppColors.burntOrangeDeep,
+          color: accent,
         ),
       ),
     );
@@ -572,17 +584,18 @@ class _IssueBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = context.palette;
     return Semantics(
       liveRegion: true,
       container: true,
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
         decoration: BoxDecoration(
-          color: AppColors.sandLight,
+          color: palette.surface,
           borderRadius: const BorderRadius.all(
             Radius.circular(AppSpacing.radiusTile),
           ),
-          border: Border.all(color: AppColors.error, width: 1.5),
+          border: Border.all(color: palette.error, width: 1.5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -590,15 +603,17 @@ class _IssueBanner extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const ExcludeSemantics(
-                  child: Icon(Icons.error_outline, color: AppColors.error),
+                ExcludeSemantics(
+                  child: Icon(Icons.error_outline, color: palette.error),
                 ),
                 const SizedBox(width: AppSpacing.small),
                 Expanded(
                   child: Text(
                     message,
-                    style: AppTextStyles.body.copyWith(
-                      color: AppColors.canyonBrownDeep,
+                    style: AppTextStyles.of(context).body.copyWith(
+                      color: palette.isDark
+                          ? palette.textPrimary
+                          : AppColors.canyonBrownDeep,
                     ),
                   ),
                 ),
@@ -652,6 +667,8 @@ class _MessagePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String? secondary = secondaryLabel;
+    final AppPalette palette = context.palette;
+    final AppThemedTextStyles textStyles = AppTextStyles.of(context);
     return Center(
       child: SingleChildScrollView(
         child: Column(
@@ -659,7 +676,7 @@ class _MessagePanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             ExcludeSemantics(
-              child: Icon(icon, size: 56, color: AppColors.burntOrangeDeep),
+              child: Icon(icon, size: 56, color: palette.accent),
             ),
             const SizedBox(height: AppSpacing.medium),
             Semantics(
@@ -667,7 +684,7 @@ class _MessagePanel extends StatelessWidget {
               child: Text(
                 title,
                 textAlign: TextAlign.center,
-                style: AppTextStyles.heading,
+                style: textStyles.heading,
               ),
             ),
             const SizedBox(height: AppSpacing.small),
@@ -676,7 +693,7 @@ class _MessagePanel extends StatelessWidget {
               child: Text(
                 message,
                 textAlign: TextAlign.center,
-                style: AppTextStyles.body,
+                style: textStyles.body,
               ),
             ),
             const SizedBox(height: AppSpacing.large),

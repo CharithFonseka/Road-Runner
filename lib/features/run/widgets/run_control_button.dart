@@ -7,7 +7,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 
@@ -43,14 +43,18 @@ class RunControlButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final AppPalette palette = context.palette;
         final bool stacked = constraints.maxHeight >= _stackedLayoutMinHeight;
-        final Widget content = _content(stacked);
+        final Widget content = _content(
+          stacked,
+          AppTextStyles.of(context).button,
+        );
         final Widget button = filled
             ? FilledButton(
                 onPressed: onPressed,
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.burntOrangeDeep,
-                  foregroundColor: AppColors.white,
+                  backgroundColor: palette.primaryFill,
+                  foregroundColor: palette.onPrimaryFill,
                   minimumSize: _minSize,
                   shape: _shape,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -63,10 +67,11 @@ class RunControlButton extends StatelessWidget {
                   minimumSize: _minSize,
                   shape: _shape,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
+                  foregroundColor: palette.accent,
                   side: BorderSide(
                     color: onPressed == null
-                        ? AppColors.canyonBrown.withValues(alpha: 0.24)
-                        : AppColors.burntOrangeDeep,
+                        ? palette.textPrimary.withValues(alpha: 0.24)
+                        : palette.accent,
                     width: 2,
                   ),
                 ),
@@ -77,11 +82,11 @@ class RunControlButton extends StatelessWidget {
     );
   }
 
-  Widget _content(bool stacked) {
+  Widget _content(bool stacked, TextStyle textStyle) {
     final Text text = Text(
       label,
       textAlign: TextAlign.center,
-      style: AppTextStyles.button.copyWith(fontSize: 20),
+      style: textStyle.copyWith(fontSize: 20),
     );
     if (stacked) {
       return Column(

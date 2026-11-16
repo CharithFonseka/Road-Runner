@@ -8,7 +8,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../app_strings.dart';
@@ -76,6 +76,7 @@ class RecentRunsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -97,7 +98,7 @@ class RecentRunsCard extends StatelessWidget {
                         AppStrings.recentRunsTitle,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.sectionHeading,
+                        style: AppTextStyles.of(context).sectionHeading,
                       ),
                     ),
                   ),
@@ -109,7 +110,7 @@ class RecentRunsCard extends StatelessWidget {
                       icon: const Icon(Icons.chevron_right_rounded, size: 20),
                       label: const Text(AppStrings.viewAll),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.burntOrangeDeep,
+                        foregroundColor: palette.accent,
                         padding: const EdgeInsetsDirectional.only(
                           start: 12,
                           end: 4,
@@ -124,13 +125,14 @@ class RecentRunsCard extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(child: _body()),
+          Expanded(child: _body(context)),
         ],
       ),
     );
   }
 
-  Widget _body() {
+  Widget _body(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     switch (status) {
       case RecentRunsStatus.loading:
         return const _Loading(key: loadingKey);
@@ -151,10 +153,7 @@ class RecentRunsCard extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size.square(AppSpacing.minTouchTarget),
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    side: const BorderSide(
-                      color: AppColors.burntOrangeDeep,
-                      width: 1.5,
-                    ),
+                    side: BorderSide(color: palette.buttonOutline, width: 1.5),
                   ),
                 ),
         );
@@ -192,6 +191,7 @@ class _RunRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return Semantics(
       container: true,
       button: true,
@@ -219,19 +219,18 @@ class _RunRow extends StatelessWidget {
                     Expanded(
                       child: Text(
                         row.dateLabel,
-                        style: const TextStyle(
+                        style: AppTextStyles.of(context).body.copyWith(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           height: 1.3,
-                          color: AppColors.canyonBrown,
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
-                    const Icon(
+                    Icon(
                       Icons.chevron_right_rounded,
                       size: 20,
-                      color: AppColors.canyonBrownMuted,
+                      color: palette.textSecondary,
                     ),
                   ],
                 ),
@@ -252,14 +251,6 @@ class _RunRow extends StatelessWidget {
   }
 }
 
-/// Saved-run value style for the compact Home rows (UI kit: 18 bold teal).
-final TextStyle _valueStyle = AppTextStyles.statValue.copyWith(fontSize: 18);
-const TextStyle _labelStyle = TextStyle(
-  fontSize: 12,
-  height: 1.4,
-  color: AppColors.canyonBrownMuted,
-);
-
 /// Three left-aligned value/label pairs; stacked as "label  value" lines
 /// when a value would not fit (narrow phones, large text).
 class _Trio extends StatelessWidget {
@@ -270,6 +261,12 @@ class _Trio extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextScaler scaler = MediaQuery.textScalerOf(context);
+    final TextStyle valueStyle = AppTextStyles.of(
+      context,
+    ).statValue.copyWith(fontSize: 18);
+    final TextStyle labelStyle = AppTextStyles.of(
+      context,
+    ).caption.copyWith(fontSize: 12, fontWeight: FontWeight.normal);
     return LayoutBuilder(
       builder: (context, constraints) {
         const double gap = 8;
@@ -279,13 +276,13 @@ class _Trio extends StatelessWidget {
           (s) =>
               measureStatWidth(
                     value: s.$1,
-                    style: _valueStyle,
+                    style: valueStyle,
                     textScaler: scaler,
                   ) <=
                   column &&
               measureStatWidth(
                     value: s.$2,
-                    style: _labelStyle,
+                    style: labelStyle,
                     textScaler: scaler,
                   ) <=
                   column,
@@ -299,14 +296,14 @@ class _Trio extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Expanded(child: Text(label, style: _labelStyle)),
+                    Expanded(child: Text(label, style: labelStyle)),
                     const SizedBox(width: AppSpacing.small),
                     Flexible(
                       flex: 2,
                       child: Text(
                         value,
                         textAlign: TextAlign.end,
-                        style: _valueStyle,
+                        style: valueStyle,
                       ),
                     ),
                   ],
@@ -324,9 +321,9 @@ class _Trio extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(stats[i].$1, maxLines: 1, style: _valueStyle),
+                    Text(stats[i].$1, maxLines: 1, style: valueStyle),
                     const SizedBox(height: 3),
-                    Text(stats[i].$2, maxLines: 1, style: _labelStyle),
+                    Text(stats[i].$2, maxLines: 1, style: labelStyle),
                   ],
                 ),
               ),
@@ -367,19 +364,20 @@ class _Loading extends StatelessWidget {
 class _SkeletonRow extends StatelessWidget {
   const _SkeletonRow();
 
-  static Widget _block(double width, double height) => SkeletonShimmerBlock(
-    child: Align(
-      alignment: AlignmentDirectional.centerStart,
-      child: Container(
-        width: width,
-        height: height,
-        decoration: const BoxDecoration(
-          color: Color(0x1A5B3A29), // canyonBrown 10%
-          borderRadius: BorderRadius.all(Radius.circular(8)),
+  static Widget _block(BuildContext context, double width, double height) =>
+      SkeletonShimmerBlock(
+        child: Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              color: AppPalette.of(context).skeleton,
+              borderRadius: const BorderRadius.all(Radius.circular(8)),
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -389,7 +387,7 @@ class _SkeletonRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: _block(110, 16)),
+              Expanded(child: _block(context, 110, 16)),
               const SizedBox(width: 16, height: 16),
             ],
           ),
@@ -401,9 +399,9 @@ class _SkeletonRow extends StatelessWidget {
                 Expanded(
                   child: Column(
                     children: [
-                      _block(70, 18),
+                      _block(context, 70, 18),
                       const SizedBox(height: 6),
-                      _block(48, 10),
+                      _block(context, 48, 10),
                     ],
                   ),
                 ),
@@ -438,6 +436,7 @@ class _Message extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         child: ConstrainedBox(
@@ -452,14 +451,18 @@ class _Message extends StatelessWidget {
                     child: Container(
                       width: 64,
                       height: 64,
-                      decoration: const BoxDecoration(
-                        color: AppColors.iconTile,
+                      decoration: BoxDecoration(
+                        color: palette.isDark && alert
+                            ? palette.errorTint
+                            : palette.iconTile,
                         borderRadius: BorderRadius.all(Radius.circular(20)),
                       ),
                       child: Icon(
                         icon,
                         size: 34,
-                        color: AppColors.burntOrangeDeep,
+                        color: palette.isDark && alert
+                            ? palette.error
+                            : palette.accent,
                       ),
                     ),
                   ),
@@ -472,16 +475,16 @@ class _Message extends StatelessWidget {
                         Text(
                           title,
                           textAlign: TextAlign.center,
-                          style: AppTextStyles.sectionHeading,
+                          style: AppTextStyles.of(context).sectionHeading,
                         ),
                         const SizedBox(height: AppSpacing.small),
                         Text(
                           message,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: AppTextStyles.of(context).body.copyWith(
                             fontSize: 15,
                             height: 22 / 15,
-                            color: AppColors.canyonBrownMuted,
+                            color: palette.textSecondary,
                           ),
                         ),
                       ],

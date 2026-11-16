@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_spacing.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/features/app_strings.dart';
@@ -11,6 +12,7 @@ import 'package:road_runner/features/history/history_run.dart';
 import 'package:road_runner/features/home/home_screen.dart';
 import 'package:road_runner/features/home/last_run_summary.dart';
 import 'package:road_runner/features/home/widgets/recent_runs_card.dart';
+import 'package:road_runner/features/home/widgets/sky_header.dart';
 import 'package:road_runner/features/home/widgets/slide_to_start.dart';
 import 'package:road_runner/features/shared/app_navigation_drawer.dart';
 
@@ -70,6 +72,7 @@ Future<_Calls> _pumpHome(
   bool isStartingRun = false,
   bool startRunEnabled = true,
   bool reduceMotion = false,
+  ThemeData? theme,
   Size size = const Size(360, 800),
   double textScale = 1.0,
 }) async {
@@ -83,7 +86,7 @@ Future<_Calls> _pumpHome(
   final _Calls c = _Calls();
   await tester.pumpWidget(
     MaterialApp(
-      theme: AppTheme.light(),
+      theme: theme ?? AppTheme.light(),
       home: MediaQuery.withClampedTextScaling(
         minScaleFactor: textScale,
         maxScaleFactor: textScale,
@@ -117,6 +120,82 @@ Finder _inRow(int i, String text) => find.descendant(
 );
 
 void main() {
+  group('Theme', () {
+    testWidgets('dark Home uses the palette for sky, runs and Slide to Start', (
+      tester,
+    ) async {
+      await _pumpHome(tester, theme: AppTheme.dark(), runs: _runs);
+      final AppPalette palette = AppPalette.dark;
+
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
+        palette.background,
+      );
+      final DecoratedBox header = tester.widget<DecoratedBox>(
+        find
+            .descendant(
+              of: find.byType(CompactSkyHeader),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      expect(
+        (header.decoration as BoxDecoration).gradient,
+        palette.skyGradient,
+      );
+      final CustomPaint landscape = tester.widget<CustomPaint>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is CustomPaint &&
+              widget.painter is CompactLandscapePainter,
+        ),
+      );
+      expect(
+        (landscape.painter as CompactLandscapePainter).palette,
+        same(palette),
+      );
+      expect(
+        tester.widget<Text>(find.text(AppStrings.appName)).style!.color,
+        palette.textPrimary,
+      );
+      expect(
+        tester.widget<Text>(find.text('5.02 km')).style!.color,
+        palette.stat,
+      );
+
+      final Material cardMaterial = tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byKey(HomeScreen.recentRunsKey),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      expect(cardMaterial.color, palette.surface);
+
+      final DecoratedBox track = tester.widget<DecoratedBox>(
+        find.descendant(of: _slider, matching: find.byType(DecoratedBox)).first,
+      );
+      expect((track.decoration as BoxDecoration).color, palette.primaryFill);
+    });
+
+    for (final RecentRunsStatus status in RecentRunsStatus.values) {
+      testWidgets('dark ${status.name} state fits compact large text', (
+        tester,
+      ) async {
+        await _pumpHome(
+          tester,
+          theme: AppTheme.dark(),
+          runs: status == RecentRunsStatus.ready ? _runs : const [],
+          status: status,
+          size: const Size(320, 568),
+          textScale: 1.3,
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+  });
+
   group('Header', () {
     testWidgets('shows the name, tagline, menu and Settings buttons', (
       tester,

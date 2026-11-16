@@ -11,6 +11,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_palette.dart';
 import '../../app_strings.dart';
 import '../run_summary.dart';
 
@@ -267,6 +268,25 @@ class RouteGeometry {
     RouteBand.faster => fastColor,
   };
 
+  /// [bandColor] for the active theme. With [AppPalette.light] this returns
+  /// exactly the light constants below.
+  static Color bandColorFor(RouteBand band, AppPalette palette) =>
+      switch (band) {
+        RouteBand.slower => palette.routeSlow,
+        RouteBand.steady => palette.routeSteady,
+        RouteBand.faster => palette.routeFast,
+      };
+
+  /// [segmentColors] for the active theme. Banding is identical; only the
+  /// colour of each band changes.
+  static List<Color?> segmentColorsFor(
+    List<RoutePoint> points,
+    AppPalette palette,
+  ) => [
+    for (final RouteBand? b in segmentBands(points))
+      b == null ? null : bandColorFor(b, palette),
+  ];
+
   /// Position 0 (slower) … 1 (faster) mapped to its band colour.
   static Color speedColor(double t) => bandColor(
     t < 1 / 3
@@ -274,7 +294,8 @@ class RouteGeometry {
         : (t > 2 / 3 ? RouteBand.faster : RouteBand.steady),
   );
 
-  // UI kit Revision 5 route colours (light mode). Each is ≥ 3:1 against the
+  // UI kit Revision 5 route colours (light mode). Night colours come from
+  // AppPalette.dark (see [bandColorFor] and [RoutePainter.palette]). Each is ≥ 3:1 against the
   // map background ([mapColor]) as required for graphics. The kit's steady
   // orange (#EB6621) is 2.7:1 there, so a slightly deeper orange is used.
   static const Color slowColor = Color(0xFF5182D5);
@@ -297,13 +318,22 @@ class RouteGeometry {
   static const Color finishColor = AppColors.burntOrangeDeep;
 }
 
-/// Paints the scale grid, the route on a white underlay, and the start
-/// (blue circle) and finish (orange square) markers.
+/// Paints the scale grid, the route on a casing underlay, and the start
+/// (circle) and finish (rounded square) markers.
+///
+/// Colours come from [palette] (the day palette when null, which matches the
+/// original light drawing exactly). Night: navy map, light grid, navy casing,
+/// blue / yellow / orange bands, blue start and accent finish.
 class RoutePainter extends CustomPainter {
-  RoutePainter({required this.points, this.padding = 24});
+  RoutePainter({required this.points, this.padding = 24, this.palette});
 
   final List<RoutePoint> points;
   final double padding;
+
+  /// Colours for the active theme; null means [AppPalette.light].
+  final AppPalette? palette;
+
+  AppPalette get _p => palette ?? AppPalette.light;
 
   static const double strokeWidth = 5.5;
   static const double underlayWidth = 10;
@@ -335,7 +365,7 @@ class RoutePainter extends CustomPainter {
     if (spacing >= 12) {
       lastGridSpacing = spacing;
       final Paint grid = Paint()
-        ..color = RouteGeometry.gridColor
+        ..color = _p.mapGrid
         ..strokeWidth = 1;
       final Offset o = pos.first;
       for (double x = o.dx % spacing; x <= size.width; x += spacing) {
@@ -349,12 +379,13 @@ class RoutePainter extends CustomPainter {
     final List<bool> gaps = RouteGeometry.gapSegments(points);
     final bool coloured = RouteGeometry.hasSpeed(points);
     final List<Color?> colors = coloured
-        ? RouteGeometry.segmentColors(points)
+        ? RouteGeometry.segmentColorsFor(points, _p)
         : const [];
 
-    // White underlay keeps the line readable over the grid.
+    // Casing underlay (white by day, background navy at night) keeps the
+    // line readable over the grid.
     final Paint underlay = Paint()
-      ..color = AppColors.white
+      ..color = _p.routeCasing
       ..style = PaintingStyle.stroke
       ..strokeWidth = underlayWidth
       ..strokeCap = StrokeCap.round
@@ -379,8 +410,8 @@ class RoutePainter extends CustomPainter {
         continue;
       }
       line.color = coloured
-          ? (colors[i - 1] ?? RouteGeometry.noSpeedColor)
-          : RouteGeometry.plainColor;
+          ? (colors[i - 1] ?? _p.routeNoSpeed)
+          : _p.routePlain;
       canvas.drawLine(pos[i - 1], pos[i], line);
     }
 
@@ -391,7 +422,7 @@ class RoutePainter extends CustomPainter {
   /// GPS gap: thin dashed line, no pace colour.
   void _dashed(Canvas canvas, Offset a, Offset b) {
     final Paint p = Paint()
-      ..color = RouteGeometry.noSpeedColor
+      ..color = _p.routeNoSpeed
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round;
     final double length = (b - a).distance;
@@ -403,12 +434,9 @@ class RoutePainter extends CustomPainter {
   }
 
   void _drawStart(Canvas canvas, Offset c) {
-    canvas.drawCircle(c, markerRadius + 3, Paint()..color = AppColors.white);
-    canvas.drawCircle(
-      c,
-      markerRadius,
-      Paint()..color = RouteGeometry.startColor,
-    );
+    canvas.drawCircle(c, markerRadius + 3, Paint()..color = _p.routeCasing);
+    canvas.drawCircle(c, markerRadius, Paint()..color = _p.routeStart);
+    // White centre in both modes (kit), so the start reads as a ring.
     canvas.drawCircle(c, 2.6, Paint()..color = AppColors.white);
   }
 
@@ -419,18 +447,20 @@ class RoutePainter extends CustomPainter {
         Rect.fromCenter(center: c, width: 2 * r + 5, height: 2 * r + 5),
         const Radius.circular(4),
       ),
-      Paint()..color = AppColors.white,
+      Paint()..color = _p.routeCasing,
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromCenter(center: c, width: 2 * r, height: 2 * r),
         const Radius.circular(2),
       ),
-      Paint()..color = RouteGeometry.finishColor,
+      Paint()..color = _p.routeFinish,
     );
   }
 
   @override
   bool shouldRepaint(RoutePainter oldDelegate) =>
-      !identical(oldDelegate.points, points) || oldDelegate.padding != padding;
+      !identical(oldDelegate.points, points) ||
+      oldDelegate.padding != padding ||
+      oldDelegate.palette != palette;
 }

@@ -4,13 +4,15 @@
 
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
 
-/// 40dp rounded square in [AppColors.iconTile] holding a decorative icon.
+/// 40dp rounded square in the palette's `iconTile` holding a decorative
+/// `accent` icon.
 ///
-/// Icons in [AppColors.burntOrangeDeep] on the tile are 4.19:1 (icons need
-/// 3:1). The icon is decorative and hidden from screen readers.
+/// Icons need 3:1: day burnt orange on the tile is 4.19:1; night accent on
+/// the tile over a card is 4.16:1. The icon is decorative and hidden from
+/// screen readers.
 class IconTile extends StatelessWidget {
   const IconTile({super.key, required this.icon});
 
@@ -20,17 +22,18 @@ class IconTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return ExcludeSemantics(
       child: Container(
         width: size,
         height: size,
-        decoration: const BoxDecoration(
-          color: AppColors.iconTile,
-          borderRadius: BorderRadius.all(
+        decoration: BoxDecoration(
+          color: palette.iconTile,
+          borderRadius: const BorderRadius.all(
             Radius.circular(AppSpacing.radiusTile),
           ),
         ),
-        child: Icon(icon, size: 22, color: AppColors.burntOrangeDeep),
+        child: Icon(icon, size: 22, color: palette.accent),
       ),
     );
   }

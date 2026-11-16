@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:road_runner/bridge/mock_tracking_bridge.dart';
 import 'package:road_runner/bridge/tracking_bridge.dart';
 import 'package:road_runner/core/contract/contract.dart';
+import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_spacing.dart';
 import 'package:road_runner/core/theme/app_text_styles.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
@@ -27,6 +28,7 @@ Future<_Calls> _pump(
   TrackingBridge bridge, {
   Size size = const Size(360, 800),
   double textScale = 1.0,
+  bool dark = false,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
@@ -35,7 +37,7 @@ Future<_Calls> _pump(
   final _Calls calls = _Calls();
   await tester.pumpWidget(
     MaterialApp(
-      theme: AppTheme.light(),
+      theme: dark ? AppTheme.dark() : AppTheme.light(),
       home: MediaQuery.withClampedTextScaling(
         minScaleFactor: textScale,
         maxScaleFactor: textScale,
@@ -72,6 +74,21 @@ double _valueFontSize(WidgetTester tester, Key key) {
     return true;
   });
   return size!;
+}
+
+Color? _valueColor(WidgetTester tester, Key key) {
+  final RichText rich = tester.widget<RichText>(
+    find.descendant(of: find.byKey(key), matching: find.byType(RichText)),
+  );
+  Color? color;
+  rich.text.visitChildren((span) {
+    if (span is TextSpan && span.text != null) {
+      color = span.style?.color;
+      return false;
+    }
+    return true;
+  });
+  return color;
 }
 
 const List<Key> _statKeys = [
@@ -149,6 +166,133 @@ void main() {
         expect(find.byIcon(c.value.$2), findsOneWidget);
       }
     });
+  });
+
+  group('Dark theme', () {
+    testWidgets('live data, GPS states and controls use night palette roles', (
+      tester,
+    ) async {
+      await _pump(tester, bridge, dark: true);
+      final AppPalette palette = AppPalette.dark;
+
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+        palette.background,
+      );
+      expect(
+        Theme.of(tester.element(find.byType(ActiveRunScreen))).cardTheme.color,
+        palette.surface,
+      );
+
+      bridge.emitGps(kGpsSearching);
+      bridge.emitSnapshot(movingMs: 180000, distanceM: 1250, speedMps: 3);
+      await tester.pump();
+      expect(
+        _valueColor(tester, ActiveRunScreen.movingTimeValueKey),
+        palette.statLive,
+      );
+      expect(
+        _valueColor(tester, ActiveRunScreen.distanceValueKey),
+        palette.statLive,
+      );
+      expect(
+        tester
+            .widget<Text>(find.text(AppStrings.runStatusRecording))
+            .style!
+            .color,
+        palette.statLive,
+      );
+      expect(
+        tester.widget<Text>(find.text(AppStrings.gpsSearching)).style!.color,
+        palette.textSecondary,
+      );
+
+      bridge.emitGps(kGpsWeak);
+      await tester.pump();
+      expect(
+        tester.widget<Text>(find.text(AppStrings.gpsWeak)).style!.color,
+        palette.gpsWeak,
+      );
+      bridge.emitGps(kGpsGood);
+      await tester.pump();
+      expect(
+        tester.widget<Text>(find.text(AppStrings.gpsGood)).style!.color,
+        palette.statLive,
+      );
+
+      final OutlinedButton pause = tester.widget<OutlinedButton>(
+        find.descendant(
+          of: find.byKey(ActiveRunScreen.pauseResumeButtonKey),
+          matching: find.byType(OutlinedButton),
+        ),
+      );
+      expect(pause.style!.foregroundColor!.resolve({}), palette.accent);
+      final FilledButton stop = tester.widget<FilledButton>(
+        find.descendant(
+          of: find.byKey(ActiveRunScreen.stopButtonKey),
+          matching: find.byType(FilledButton),
+        ),
+      );
+      expect(stop.style!.backgroundColor!.resolve({}), palette.primaryFill);
+
+      await tester.tap(find.byKey(ActiveRunScreen.pauseResumeButtonKey));
+      await tester.pump();
+      expect(
+        _valueColor(tester, ActiveRunScreen.movingTimeValueKey),
+        palette.textSecondary,
+      );
+      expect(
+        tester.widget<Text>(find.text(AppStrings.pausedBadge)).style!.color,
+        palette.accent,
+      );
+      expect(
+        tester.widget<Text>(find.text(AppStrings.runStatusPaused)).style!.color,
+        palette.accent,
+      );
+
+      await tester.tap(find.byKey(ActiveRunScreen.stopButtonKey));
+      await tester.pumpAndSettle();
+      expect(find.byType(StopRunDialog), findsOneWidget);
+      expect(
+        Theme.of(tester.element(find.byType(StopRunDialog)))
+            .dialogTheme
+            .backgroundColor,
+        palette.surface,
+      );
+    });
+
+    for (final MapEntry<String, (Size, double)> c in {
+      '320x568': (const Size(320, 568), 1.0),
+      '360x800 at 1.3x': (const Size(360, 800), 1.3),
+    }.entries) {
+      testWidgets('dark layout fits ${c.key}', (tester) async {
+        await _pump(
+          tester,
+          bridge,
+          size: c.value.$1,
+          textScale: c.value.$2,
+          dark: true,
+        );
+        bridge.emitGps(kGpsWeak);
+        bridge.emitSnapshot(
+          movingMs: 599000,
+          distanceM: 42195,
+          speedMps: 5.5,
+          paceSecPerKm: 599,
+        );
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        for (final Key key in [
+          ActiveRunScreen.pauseResumeButtonKey,
+          ActiveRunScreen.stopButtonKey,
+        ]) {
+          expect(
+            tester.getRect(find.byKey(key)).height,
+            greaterThanOrEqualTo(72),
+          );
+        }
+      });
+    }
   });
 
   group('Tracking semantics (moving time, current pace)', () {

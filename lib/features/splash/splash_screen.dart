@@ -12,10 +12,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_palette.dart';
+import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
 
-/// Sunrise desert splash: runner tile, "Road Runner" and a loading spinner.
+/// Sunrise or moonlit desert splash: runner tile, "Road Runner" and a spinner.
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
@@ -29,32 +30,18 @@ class SplashScreen extends StatelessWidget {
     milliseconds: 2400,
   );
 
-  // Sky gradient from the UI kit splash. Artwork colours, not theme tokens.
-  static const List<Color> _sky = [
-    Color(0xFF8FB1F9),
-    Color(0xFFBFC9EE),
-    Color(0xFFFFCF91),
-    AppColors.sand,
-  ];
-  static const List<double> _skyStops = [0.0, 0.38, 0.66, 1.0];
-
   /// Largest share of the screen height the landscape may take, so the
   /// brand always has room on short phones.
   static const double _maxLandscapeShare = 0.45;
+  static const Key skyKey = Key('splash.sky');
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: palette.background,
       body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: _sky,
-            stops: _skyStops,
-          ),
-        ),
+        decoration: BoxDecoration(gradient: palette.splashGradient),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final double landscapeHeight = math.min(
@@ -66,16 +53,24 @@ class SplashScreen extends StatelessWidget {
             return Stack(
               fit: StackFit.expand,
               children: [
+                Positioned.fill(
+                  child: ExcludeSemantics(
+                    child: CustomPaint(
+                      key: skyKey,
+                      painter: SplashSkyPainter(palette: palette),
+                    ),
+                  ),
+                ),
                 // Decorative; drawn first so it stays behind the brand.
                 Positioned(
                   left: 0,
                   right: 0,
                   bottom: 0,
                   height: landscapeHeight,
-                  child: const ExcludeSemantics(
+                  child: ExcludeSemantics(
                     child: CustomPaint(
                       key: landscapeKey,
-                      painter: SplashLandscapePainter(),
+                      painter: SplashLandscapePainter(palette: palette),
                     ),
                   ),
                 ),
@@ -126,6 +121,7 @@ class _Brand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return Column(
       key: SplashScreen.brandKey,
       mainAxisSize: MainAxisSize.min,
@@ -134,10 +130,10 @@ class _Brand extends StatelessWidget {
           child: Container(
             width: _tileSize,
             height: _tileSize,
-            decoration: const BoxDecoration(
-              color: AppColors.sandLight,
+            decoration: BoxDecoration(
+              color: palette.surface,
               borderRadius: BorderRadius.all(Radius.circular(34)),
-              boxShadow: [
+              boxShadow: const [
                 BoxShadow(
                   color: Color(0x2E000000),
                   blurRadius: 34,
@@ -145,25 +141,23 @@ class _Brand extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(
+            child: Icon(
               Icons.directions_run_rounded,
               size: _iconSize,
-              color: AppColors.burntOrangeDeep,
+              color: palette.accent,
             ),
           ),
         ),
         const SizedBox(height: 20),
         Semantics(
           header: true,
-          child: const Text(
+          child: Text(
             AppStrings.appName,
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: AppTextStyles.of(context).heading.copyWith(
               fontSize: _nameSize,
-              fontWeight: FontWeight.w700,
               letterSpacing: -0.5,
               height: 1.2,
-              color: AppColors.canyonBrown,
             ),
           ),
         ),
@@ -216,45 +210,82 @@ class _SplashSpinnerState extends State<_SplashSpinner>
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return RotationTransition(
       key: SplashScreen.spinnerKey,
       turns: _rotation,
-      child: const SizedBox.square(
+      child: SizedBox.square(
         dimension: _Brand._progressSize,
         child: CircularProgressIndicator(
           value: 0.25,
           strokeWidth: 4,
           strokeCap: StrokeCap.round,
-          color: AppColors.burntOrangeDeep,
-          backgroundColor: Color(0x295B3A29),
+          color: palette.accent,
+          backgroundColor: palette.isDark
+              ? palette.hairline
+              : const Color(0x295B3A29),
         ),
       ),
     );
   }
 }
 
+/// Stars across the full dark splash sky.
+class SplashSkyPainter extends CustomPainter {
+  const SplashSkyPainter({required this.palette});
+
+  final AppPalette palette;
+
+  static const List<(Offset, double, double)> _stars = [
+    (Offset(40, 80), 1.4, 0.8),
+    (Offset(120, 140), 1, 0.6),
+    (Offset(300, 96), 1.5, 0.8),
+    (Offset(250, 190), 1, 0.5),
+    (Offset(70, 240), 1.2, 0.6),
+    (Offset(330, 300), 1, 0.5),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!palette.isDark) return;
+    canvas.save();
+    canvas.scale(size.width / 360, size.height / 800);
+    for (final (Offset centre, double radius, double opacity) in _stars) {
+      canvas.drawCircle(
+        centre,
+        radius,
+        Paint()
+          ..color = palette.skyDecoration.withValues(alpha: opacity)
+          ..isAntiAlias = true,
+      );
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant SplashSkyPainter oldDelegate) =>
+      palette != oldDelegate.palette;
+}
+
 /// Sunrise desert from the UI kit splash: a low sun behind mesas, hills and
-/// dunes.
+/// dunes, or the matching moonlit landscape.
 ///
 /// Drawn on the kit's 360 × 800 grid, using only its lower part (from
 /// [designTop] down), scaled uniformly by width and anchored to the bottom
 /// edge so it never stretches.
 class SplashLandscapePainter extends CustomPainter {
-  const SplashLandscapePainter();
+  const SplashLandscapePainter({this.palette});
+
+  final AppPalette? palette;
 
   static const double designWidth = 360;
   static const double designTop = 424; // top of the sun's glow
   static const double designBottom = 800;
   static const double designHeight = designBottom - designTop;
 
-  static const Color _sun = Color(0xFFFFD762);
-  static const Color _mesa = Color(0xFFC07358);
-  static const Color _hills = Color(0xFFDF8583);
-  static const Color _dunes = Color(0xFFFFCF91);
-  static const Color _sandDune = Color(0xFFF2D6A6);
-
   @override
   void paint(Canvas canvas, Size size) {
+    final AppPalette p = palette ?? AppPalette.light;
     final double scale = size.width / designWidth;
     canvas.save();
     canvas.translate(0, size.height);
@@ -262,8 +293,15 @@ class SplashLandscapePainter extends CustomPainter {
     canvas.translate(0, -designBottom);
 
     const Offset sunCentre = Offset(180, 520);
-    canvas.drawCircle(sunCentre, 96, _fill(_sun.withValues(alpha: 0.35)));
-    canvas.drawCircle(sunCentre, 64, _fill(_sun));
+    if (p.isDark) {
+      canvas.drawCircle(sunCentre, 80, _fill(p.celestialGlow));
+      canvas.drawCircle(sunCentre, 46, _fill(p.celestial));
+      canvas.drawCircle(const Offset(168, 510), 7, _fill(p.celestialDetail));
+      canvas.drawCircle(const Offset(194, 534), 5, _fill(p.celestialDetail));
+    } else {
+      canvas.drawCircle(sunCentre, 96, _fill(p.celestialGlow));
+      canvas.drawCircle(sunCentre, 64, _fill(p.celestial));
+    }
 
     const List<Offset> mesa = [
       Offset(0, 560),
@@ -280,7 +318,7 @@ class SplashLandscapePainter extends CustomPainter {
     ];
     canvas.drawPath(
       _closedToBottom(Path()..addPolygon(mesa, false)),
-      _fill(_mesa),
+      _fill(p.mesa),
     );
     canvas.drawPath(
       _smoothCurve(const Offset(0, 628), const Offset(60, 604), const [
@@ -288,21 +326,21 @@ class SplashLandscapePainter extends CustomPainter {
         Offset(260, 626),
         Offset(360, 612),
       ]),
-      _fill(_hills),
+      _fill(p.hills),
     );
     canvas.drawPath(
       _smoothCurve(const Offset(0, 672), const Offset(90, 650), const [
         Offset(180, 668),
         Offset(360, 662),
       ]),
-      _fill(_dunes),
+      _fill(p.dunes),
     );
     canvas.drawPath(
       _smoothCurve(const Offset(0, 716), const Offset(120, 700), const [
         Offset(240, 716),
         Offset(360, 712),
       ]),
-      _fill(_sandDune),
+      _fill(p.sandDune),
     );
     canvas.restore();
   }
@@ -332,5 +370,6 @@ class SplashLandscapePainter extends CustomPainter {
     ..isAntiAlias = true;
 
   @override
-  bool shouldRepaint(covariant SplashLandscapePainter oldDelegate) => false;
+  bool shouldRepaint(covariant SplashLandscapePainter oldDelegate) =>
+      palette != oldDelegate.palette;
 }

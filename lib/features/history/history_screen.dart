@@ -8,7 +8,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
@@ -172,7 +172,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           if (summary == null) ...[
             Text(
               AppStrings.historyRunCount(visibleRuns.length),
-              style: AppTextStyles.caption,
+              style: AppTextStyles.of(context).caption,
             ),
             const SizedBox(height: AppSpacing.small),
           ],
@@ -251,6 +251,7 @@ class _HistoryFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return Semantics(
       container: true,
       label: AppStrings.historyFilterLabel,
@@ -283,17 +284,24 @@ class _HistoryFilterBar extends StatelessWidget {
                   visualDensity: VisualDensity.standard,
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   labelPadding: EdgeInsets.zero,
-                  backgroundColor: AppColors.sandLight,
-                  selectedColor: AppColors.burntOrangeDeep,
-                  side: const BorderSide(
-                    color: AppColors.burntOrangeDeep,
+                  // Kit: day chips sit on the card colour with a burnt-orange
+                  // border; night chips are transparent with a taupe
+                  // border. The selected chip is the primary fill in both.
+                  backgroundColor: palette.isDark
+                      ? Colors.transparent
+                      : palette.surface,
+                  selectedColor: palette.primaryFill,
+                  side: BorderSide(
+                    color: selected == filter
+                        ? palette.primaryFill
+                        : palette.buttonOutline,
                     width: 1.5,
                   ),
                   shape: const StadiumBorder(),
                   labelStyle: TextStyle(
                     color: selected == filter
-                        ? AppColors.white
-                        : AppColors.canyonBrown,
+                        ? palette.onPrimaryFill
+                        : palette.textPrimary,
                   ),
                   onSelected: (_) => onSelected(filter),
                 ),
@@ -321,6 +329,7 @@ class _MonthlySummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String distance = formatter.distanceKm(summary.totalDistanceM);
+    final AppThemedTextStyles text = AppTextStyles.of(context);
     return Card(
       key: HistoryScreen.summaryCardKey,
       child: Padding(
@@ -345,16 +354,13 @@ class _MonthlySummaryCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        summary.monthLabel,
-                        style: AppTextStyles.sectionHeading,
-                      ),
+                      Text(summary.monthLabel, style: text.sectionHeading),
                       Text(
                         AppStrings.historySummaryRunsDistance(
                           summary.totalRuns,
                           distance,
                         ),
-                        style: AppTextStyles.caption,
+                        style: text.caption,
                       ),
                     ],
                   ),
@@ -364,12 +370,9 @@ class _MonthlySummaryCard extends StatelessWidget {
                     children: [
                       Text(
                         formatter.elapsed(summary.totalMovingMs),
-                        style: AppTextStyles.statValue,
+                        style: text.statValue,
                       ),
-                      Text(
-                        AppStrings.historyTotalTime,
-                        style: AppTextStyles.caption,
-                      ),
+                      Text(AppStrings.historyTotalTime, style: text.caption),
                     ],
                   ),
                 ],
@@ -501,12 +504,15 @@ class _SkeletonBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return SkeletonShimmerBlock(
       child: Container(
         width: width,
         height: height,
         decoration: BoxDecoration(
-          color: AppColors.iconTile,
+          // Day keeps its existing tile-coloured blocks; night uses the
+          // kit skeleton fill (textPrimary 9%), as on Home and Summary.
+          color: palette.isDark ? palette.skeleton : palette.iconTile,
           borderRadius: BorderRadius.circular(radius),
         ),
       ),
@@ -521,6 +527,7 @@ class _HistoryErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppThemedTextStyles text = AppTextStyles.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.small,
@@ -528,22 +535,22 @@ class _HistoryErrorState extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(
+          Icon(
             Icons.error_outline_rounded,
             size: 44,
-            color: AppColors.error,
+            color: text.palette.error,
           ),
           const SizedBox(height: AppSpacing.small),
           Text(
             AppStrings.historyErrorTitle,
             textAlign: TextAlign.center,
-            style: AppTextStyles.sectionHeading,
+            style: text.sectionHeading,
           ),
           const SizedBox(height: AppSpacing.small),
-          const Text(
+          Text(
             AppStrings.historyErrorMessage,
             textAlign: TextAlign.center,
-            style: AppTextStyles.body,
+            style: text.body,
           ),
           if (onRetry != null) ...[
             const SizedBox(height: AppSpacing.medium),
@@ -587,6 +594,7 @@ class _RunCard extends StatelessWidget {
     final String duration = formatter.elapsed(run.movingMs);
     final String pace =
         '${formatter.pace(run.averagePaceSecPerKm)}${AppStrings.unitPerKm}';
+    final AppThemedTextStyles text = AppTextStyles.of(context);
 
     return Semantics(
       container: true,
@@ -623,16 +631,14 @@ class _RunCard extends StatelessWidget {
                           children: [
                             Text(
                               date,
-                              style: AppTextStyles.sectionHeading.copyWith(
-                                fontSize: 19,
-                              ),
+                              style: text.sectionHeading.copyWith(fontSize: 19),
                             ),
                           ],
                         ),
                       ),
-                      const Icon(
+                      Icon(
                         Icons.chevron_right,
-                        color: AppColors.canyonBrownMuted,
+                        color: text.palette.textSecondary,
                       ),
                     ],
                   ),
@@ -682,6 +688,7 @@ class _StatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextScaler scaler = MediaQuery.textScalerOf(context);
+    final AppThemedTextStyles text = AppTextStyles.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         const double divider = 17;
@@ -708,16 +715,14 @@ class _StatRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Expanded(
-                        child: Text(label, style: AppTextStyles.caption),
-                      ),
+                      Expanded(child: Text(label, style: text.caption)),
                       const SizedBox(width: AppSpacing.small),
                       Flexible(
                         flex: 2,
                         child: Text(
                           value,
                           textAlign: TextAlign.end,
-                          style: AppTextStyles.statValue,
+                          style: text.statValue,
                         ),
                       ),
                     ],
@@ -733,10 +738,10 @@ class _StatRow extends StatelessWidget {
             children: [
               for (int i = 0; i < stats.length; i++) ...[
                 if (i > 0)
-                  const VerticalDivider(
+                  VerticalDivider(
                     width: divider,
                     thickness: 1,
-                    color: AppColors.divider,
+                    color: text.palette.hairline,
                   ),
                 Expanded(
                   child: Column(
@@ -744,12 +749,12 @@ class _StatRow extends StatelessWidget {
                       Text(
                         stats[i].$1,
                         textAlign: TextAlign.center,
-                        style: AppTextStyles.statValue,
+                        style: text.statValue,
                       ),
                       Text(
                         stats[i].$2,
                         textAlign: TextAlign.center,
-                        style: AppTextStyles.caption,
+                        style: text.caption,
                       ),
                     ],
                   ),
@@ -773,17 +778,18 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppThemedTextStyles text = AppTextStyles.of(context);
     return Semantics(
       container: true,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.large),
         child: Column(
           children: [
-            const ExcludeSemantics(
+            ExcludeSemantics(
               child: Icon(
                 Icons.directions_run_rounded,
                 size: 48,
-                color: AppColors.burntOrangeDeep,
+                color: text.palette.accent,
               ),
             ),
             const SizedBox(height: AppSpacing.small),
@@ -796,7 +802,7 @@ class _EmptyState extends StatelessWidget {
                   AppStrings.historyEmptyLastMonthTitle,
               },
               textAlign: TextAlign.center,
-              style: AppTextStyles.sectionHeading,
+              style: text.sectionHeading,
             ),
             const SizedBox(height: AppSpacing.small),
             Text(
@@ -804,7 +810,7 @@ class _EmptyState extends StatelessWidget {
                   ? AppStrings.historyEmptyMessage
                   : AppStrings.historyEmptyPeriodMessage,
               textAlign: TextAlign.center,
-              style: AppTextStyles.body,
+              style: text.body,
             ),
             if (onStartRun != null) ...[
               const SizedBox(height: AppSpacing.large),

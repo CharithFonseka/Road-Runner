@@ -3,16 +3,12 @@
 // SRS reference: Section 4.2, 8.4, NFR-09
 //
 // Status is always shown with an icon AND words, never colour alone.
-// Contrast (measured over the sand background):
-//   liveBlue on 10% liveBlue tint ............ 4.58:1
-//   burntOrangeDeep text + border on sand .... 4.72:1 (no tinted fill: a tint
-//                                              would drop it below 4.5:1)
-//   canyonBrownMuted on 8% brown tint ........ 5.28:1
+// Foregrounds and fills come from the active semantic palette.
 
 import 'package:flutter/material.dart';
 
 import '../../../core/contract/contract.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_palette.dart';
 import '../active_run_controller.dart';
 import '../../app_strings.dart';
 
@@ -79,20 +75,21 @@ class GpsStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = context.palette;
     switch (quality) {
       case kGpsGood:
         return _StatusChip(
           icon: Icons.gps_fixed,
           texts: const [AppStrings.gpsLabel, AppStrings.gpsGood],
-          foreground: AppColors.liveBlue,
-          background: AppColors.liveBlue.withValues(alpha: 0.10),
+          foreground: palette.statLive,
+          background: palette.statLiveTint,
           semanticsLabel: AppStrings.gpsSemantics(AppStrings.gpsGood),
         );
       case kGpsWeak:
         return _StatusChip(
           icon: Icons.warning_amber_rounded,
           texts: const [AppStrings.gpsLabel, AppStrings.gpsWeak],
-          foreground: AppColors.burntOrangeDeep,
+          foreground: palette.isDark ? palette.gpsWeak : palette.accent,
           outlined: true,
           semanticsLabel: AppStrings.gpsSemantics(AppStrings.gpsWeak),
         );
@@ -100,8 +97,8 @@ class GpsStatusBadge extends StatelessWidget {
         return _StatusChip(
           icon: Icons.gps_not_fixed,
           texts: const [AppStrings.gpsLabel, AppStrings.gpsSearching],
-          foreground: AppColors.canyonBrownMuted,
-          background: AppColors.canyonBrown.withValues(alpha: 0.08),
+          foreground: palette.textSecondary,
+          background: palette.textPrimary.withValues(alpha: 0.08),
           semanticsLabel: AppStrings.gpsSemantics(AppStrings.gpsSearching),
         );
     }
@@ -116,13 +113,14 @@ class RunStatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = context.palette;
     switch (phase) {
       case RunPhase.running:
         return _StatusChip(
           icon: Icons.fiber_manual_record,
           texts: const [AppStrings.runStatusRecording],
-          foreground: AppColors.liveBlue,
-          background: AppColors.liveBlue.withValues(alpha: 0.10),
+          foreground: palette.statLive,
+          background: palette.statLiveTint,
           semanticsLabel: AppStrings.runStatusSemantics(
             AppStrings.runStatusRecording,
           ),
@@ -131,7 +129,7 @@ class RunStatusPill extends StatelessWidget {
         return _StatusChip(
           icon: Icons.pause,
           texts: const [AppStrings.runStatusPaused],
-          foreground: AppColors.burntOrangeDeep,
+          foreground: palette.accent,
           outlined: true,
           semanticsLabel: AppStrings.runStatusSemantics(
             AppStrings.runStatusPaused,
@@ -140,18 +138,29 @@ class RunStatusPill extends StatelessWidget {
       case RunPhase.stopping:
       case RunPhase.finished:
       case RunPhase.stoppedUnresolved:
-        return _muted(Icons.flag_outlined, AppStrings.runStatusFinishing);
+        return _muted(
+          context,
+          Icons.flag_outlined,
+          AppStrings.runStatusFinishing,
+        );
       case RunPhase.starting:
       case RunPhase.startFailed:
-        return _muted(Icons.hourglass_empty, AppStrings.runStatusStarting);
+        return _muted(
+          context,
+          Icons.hourglass_empty,
+          AppStrings.runStatusStarting,
+        );
     }
   }
 
-  Widget _muted(IconData icon, String text) => _StatusChip(
-    icon: icon,
-    texts: [text],
-    foreground: AppColors.canyonBrownMuted,
-    background: AppColors.canyonBrown.withValues(alpha: 0.08),
-    semanticsLabel: AppStrings.runStatusSemantics(text),
-  );
+  Widget _muted(BuildContext context, IconData icon, String text) {
+    final AppPalette palette = context.palette;
+    return _StatusChip(
+      icon: icon,
+      texts: [text],
+      foreground: palette.textSecondary,
+      background: palette.textPrimary.withValues(alpha: 0.08),
+      semanticsLabel: AppStrings.runStatusSemantics(text),
+    );
+  }
 }

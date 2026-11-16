@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_spacing.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
 import 'package:road_runner/features/app_strings.dart';
@@ -29,6 +30,7 @@ Future<_Calls> _pump(
   FakePermissionGateway gateway, {
   bool withBack = true,
   Size size = const Size(360, 800),
+  bool dark = false,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
@@ -36,7 +38,7 @@ Future<_Calls> _pump(
   final _Calls c = _Calls();
   await tester.pumpWidget(
     MaterialApp(
-      theme: AppTheme.light(),
+      theme: dark ? AppTheme.dark() : AppTheme.light(),
       home: PermissionsScreen(
         gateway: gateway,
         onContinue: () => c.continued++,
@@ -210,6 +212,48 @@ void main() {
       }
       expect(find.bySemanticsLabel(RegExp('runner')), findsNothing);
       handle.dispose();
+    });
+
+    testWidgets(
+      'night runners use the palette brightness and saturation filter',
+      (tester) async {
+        await _pump(tester, FakePermissionGateway(), dark: true);
+
+        expect(AppPalette.dark.illustrationBrightness, 0.9);
+        expect(AppPalette.dark.illustrationSaturation, 0.92);
+        for (final Key key in [
+          PermissionIllustration.femaleKey,
+          PermissionIllustration.maleKey,
+        ]) {
+          expect(
+            find.descendant(
+              of: find.byKey(key),
+              matching: find.byType(ColorFiltered),
+            ),
+            findsOneWidget,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('day runners keep the original unfiltered artwork', (
+      tester,
+    ) async {
+      await _pump(tester, FakePermissionGateway());
+
+      for (final Key key in [
+        PermissionIllustration.femaleKey,
+        PermissionIllustration.maleKey,
+      ]) {
+        expect(
+          find.ancestor(
+            of: find.byKey(key),
+            matching: find.byType(ColorFiltered),
+          ),
+          findsNothing,
+        );
+      }
     });
 
     test('scene mapping follows the controller state', () {

@@ -15,7 +15,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../app_strings.dart';
 import '../history/history_run.dart';
@@ -151,11 +151,12 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     final double bottomInset = MediaQuery.paddingOf(context).bottom;
     final bool tall =
         MediaQuery.sizeOf(context).height >= compactHeightBreakpoint;
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: palette.background,
       drawer: AppNavigationDrawer(
         selected: AppDestination.home,
         onOpenHome: () {}, // Home is the current page: the drawer only closes.

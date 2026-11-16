@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
@@ -121,8 +122,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
   @override
   Widget build(BuildContext context) {
     final double bottomInset = MediaQuery.paddingOf(context).bottom;
+    final AppPalette palette = AppPalette.of(context);
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: palette.background,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -187,8 +189,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
                             : AppStrings.summaryDeleteRun,
                       ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.error,
-                        side: const BorderSide(color: AppColors.error),
+                        // Day #B3261E; night #FFB4AB (readable on navy).
+                        foregroundColor: palette.error,
+                        side: BorderSide(color: palette.error),
                         minimumSize: const Size.fromHeight(
                           AppSpacing.minTouchTarget,
                         ),
@@ -211,8 +214,8 @@ enum SummaryStat { distance, movingTime, averagePace, averageSpeed }
 // ─── Header ─────────────────────────────────────────────────────────────────
 
 /// Sky header from the kit: 48dp Back, "Run summary" and the run's date
-/// and start time, over the slim (40dp) desert strip. Text on the sky uses
-/// [AppColors.canyonBrown] (5.56:1 or better).
+/// and start time, over the slim (40dp) desert strip. Sky, strip and text
+/// follow the active [AppPalette] (sunrise by day, moonlit at night).
 class _SummaryHeader extends StatelessWidget {
   const _SummaryHeader({required this.startedAt, required this.onBack});
 
@@ -235,15 +238,9 @@ class _SummaryHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double topInset = MediaQuery.paddingOf(context).top;
+    final AppPalette palette = AppPalette.of(context);
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppColors.skyTop, AppColors.skyMid, AppColors.sand],
-          stops: [0.0, 0.52, 1.0],
-        ),
-      ),
+      decoration: BoxDecoration(gradient: palette.skyGradient),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -269,7 +266,7 @@ class _SummaryHeader extends StatelessWidget {
                     children: [
                       Semantics(
                         header: true,
-                        child: const Text(
+                        child: Text(
                           AppStrings.summaryTitle,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -277,7 +274,7 @@ class _SummaryHeader extends StatelessWidget {
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
                             height: 1.15,
-                            color: AppColors.canyonBrown,
+                            color: palette.textPrimary,
                           ),
                         ),
                       ),
@@ -285,11 +282,11 @@ class _SummaryHeader extends StatelessWidget {
                       Text(
                         _dateLine(context),
                         key: SummaryScreen.dateKey,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                           height: 1.3,
-                          color: AppColors.canyonBrown,
+                          color: palette.textPrimary,
                         ),
                       ),
                     ],
@@ -299,11 +296,13 @@ class _SummaryHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const ExcludeSemantics(
+          ExcludeSemantics(
             child: SizedBox(
               height: 40,
               width: double.infinity,
-              child: CustomPaint(painter: DrawerLandscapePainter()),
+              child: CustomPaint(
+                painter: DrawerLandscapePainter(palette: palette),
+              ),
             ),
           ),
         ],
@@ -345,6 +344,14 @@ const TextStyle _statLabelStyle = TextStyle(
   height: 1.3,
   color: AppColors.canyonBrownMuted,
 );
+
+// The const styles above are the day colours and are also used to measure
+// widths (colour does not affect layout). Visible text is recoloured here.
+TextStyle _statNumber(AppPalette p) => _statNumberStyle.copyWith(color: p.stat);
+TextStyle _statUnit(AppPalette p) =>
+    _statUnitStyle.copyWith(color: p.textSecondary);
+TextStyle _statLabel(AppPalette p) =>
+    _statLabelStyle.copyWith(color: p.textSecondary);
 
 /// UI kit stat strip: four value/label pairs separated by hairlines. Falls
 /// back to a 2 × 2 grid, then to one stat per line, when values would not
@@ -424,13 +431,13 @@ class _StatsCard extends StatelessWidget {
               return stats.every((s) => _valueWidth(s, scaler) <= column);
             }
 
-            if (fits(4)) return _row(stats);
+            if (fits(4)) return _row(context, stats);
             if (fits(2)) {
               return Column(
                 children: [
-                  _row(stats.sublist(0, 2)),
+                  _row(context, stats.sublist(0, 2)),
                   const Divider(height: 17, indent: 12, endIndent: 12),
-                  _row(stats.sublist(2)),
+                  _row(context, stats.sublist(2)),
                 ],
               );
             }
@@ -449,18 +456,14 @@ class _StatsCard extends StatelessWidget {
     );
   }
 
-  Widget _row(List<_Stat> stats) {
+  Widget _row(BuildContext context, List<_Stat> stats) {
+    final Color hairline = AppPalette.of(context).hairline;
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (int i = 0; i < stats.length; i++) ...[
-            if (i > 0)
-              const VerticalDivider(
-                width: 1,
-                thickness: 1,
-                color: AppColors.divider,
-              ),
+            if (i > 0) VerticalDivider(width: 1, thickness: 1, color: hairline),
             Expanded(child: _StatTile(stat: stats[i])),
           ],
         ],
@@ -474,12 +477,16 @@ String _statSpeech(_Stat s) => AppStrings.statSemantics(
   s.available ? s.text : AppStrings.statUnavailable,
 );
 
-Widget _statValue(_Stat s, {TextAlign align = TextAlign.center}) => Text.rich(
+Widget _statValue(
+  _Stat s,
+  AppPalette p, {
+  TextAlign align = TextAlign.center,
+}) => Text.rich(
   TextSpan(
     text: s.number,
-    style: _statNumberStyle,
+    style: _statNumber(p),
     children: [
-      if (s.unit.isNotEmpty) TextSpan(text: s.unit, style: _statUnitStyle),
+      if (s.unit.isNotEmpty) TextSpan(text: s.unit, style: _statUnit(p)),
     ],
   ),
   textAlign: align,
@@ -504,12 +511,12 @@ class _StatTile extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _statValue(stat),
+            _statValue(stat, AppPalette.of(context)),
             const SizedBox(height: 3),
             Text(
               stat.label,
               textAlign: TextAlign.center,
-              style: _statLabelStyle,
+              style: _statLabel(AppPalette.of(context)),
             ),
           ],
         ),
@@ -536,14 +543,23 @@ class _StatLine extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(child: Text(stat.label, style: _statLabelStyle)),
+            Expanded(
+              child: Text(
+                stat.label,
+                style: _statLabel(AppPalette.of(context)),
+              ),
+            ),
             const SizedBox(width: AppSpacing.small),
             Flexible(
               flex: 2,
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: AlignmentDirectional.centerEnd,
-                child: _statValue(stat, align: TextAlign.end),
+                child: _statValue(
+                  stat,
+                  AppPalette.of(context),
+                  align: TextAlign.end,
+                ),
               ),
             ),
           ],
@@ -556,7 +572,8 @@ class _StatLine extends StatelessWidget {
 // ─── Route ──────────────────────────────────────────────────────────────────
 
 /// UI kit "Your route" card: header, parchment map with scale grid, the
-/// route on a white underlay, a scale pill, then the legend.
+/// route on a casing underlay, a scale pill, then the legend. All map
+/// colours come from the active [AppPalette] (navy map at night).
 class _RouteCard extends StatelessWidget {
   const _RouteCard({required this.route});
 
@@ -571,6 +588,8 @@ class _RouteCard extends StatelessWidget {
     final bool speed = drawable && RouteGeometry.hasSpeed(route);
     final bool gaps =
         drawable && RouteGeometry.gapSegments(route).contains(true);
+    final AppPalette palette = AppPalette.of(context);
+    final AppThemedTextStyles text = AppTextStyles.of(context);
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -587,13 +606,10 @@ class _RouteCard extends StatelessWidget {
                   header: true,
                   child: Text(
                     AppStrings.routeTitle,
-                    style: AppTextStyles.sectionHeading,
+                    style: text.sectionHeading,
                   ),
                 ),
-                const Text(
-                  AppStrings.routeSubtitle,
-                  style: AppTextStyles.caption,
-                ),
+                Text(AppStrings.routeSubtitle, style: text.caption),
               ],
             ),
             const SizedBox(height: AppSpacing.itemGap),
@@ -608,7 +624,7 @@ class _RouteCard extends StatelessWidget {
                   child: Container(
                     key: SummaryScreen.routeAreaKey,
                     height: height,
-                    color: RouteGeometry.mapColor,
+                    color: palette.mapBackground,
                     child: drawable
                         ? _RouteMap(
                             route: route,
@@ -659,7 +675,10 @@ class _RouteMap extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           CustomPaint(
-            painter: RoutePainter(points: route),
+            painter: RoutePainter(
+              points: route,
+              palette: AppPalette.of(context),
+            ),
             size: Size.infinite,
           ),
           if (scale != null)
@@ -683,11 +702,14 @@ class _ScalePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
+    final BorderSide tick = BorderSide(color: palette.textPrimary, width: 2);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: const BoxDecoration(
-        color: Color(0xF0FBF3E6),
-        borderRadius: BorderRadius.all(Radius.circular(999)),
+      decoration: BoxDecoration(
+        // Card surface at 94% (day #F0FBF3E6, night #F0293247).
+        color: palette.surface.withAlpha(0xF0),
+        borderRadius: const BorderRadius.all(Radius.circular(999)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -697,13 +719,9 @@ class _ScalePill extends StatelessWidget {
             key: barKey,
             width: scale.pixels,
             height: 8,
-            child: const DecoratedBox(
+            child: DecoratedBox(
               decoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(color: AppColors.canyonBrown, width: 2),
-                  right: BorderSide(color: AppColors.canyonBrown, width: 2),
-                  bottom: BorderSide(color: AppColors.canyonBrown, width: 2),
-                ),
+                border: Border(left: tick, right: tick, bottom: tick),
               ),
             ),
           ),
@@ -711,7 +729,7 @@ class _ScalePill extends StatelessWidget {
           Text(
             scale.label,
             style: AppTextStyles.caption.copyWith(
-              color: AppColors.canyonBrown,
+              color: palette.textPrimary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -727,6 +745,7 @@ class _RouteTooShort extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppThemedTextStyles text = AppTextStyles.of(context);
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.medium),
@@ -735,24 +754,24 @@ class _RouteTooShort extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const ExcludeSemantics(
+              ExcludeSemantics(
                 child: Icon(
                   Icons.wrong_location_outlined,
                   size: 40,
-                  color: AppColors.canyonBrownMuted,
+                  color: text.palette.textSecondary,
                 ),
               ),
               const SizedBox(height: AppSpacing.small),
               Text(
                 AppStrings.routeTooShort,
                 textAlign: TextAlign.center,
-                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
+                style: text.body.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 AppStrings.routeTooShortDetail,
                 textAlign: TextAlign.center,
-                style: AppTextStyles.caption,
+                style: text.caption,
               ),
             ],
           ),
@@ -763,7 +782,8 @@ class _RouteTooShort extends StatelessWidget {
 }
 
 /// Kit legend: Start / Finish / grid note, then the three pace bands. The
-/// swatch colours are the exact [RouteGeometry] band colours.
+/// swatch colours are exactly what [RoutePainter] draws for the active
+/// [AppPalette].
 class _RouteLegend extends StatelessWidget {
   const _RouteLegend({required this.speed, required this.gaps});
 
@@ -772,9 +792,9 @@ class _RouteLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TextStyle style = AppTextStyles.caption.copyWith(
-      color: AppColors.canyonBrown,
-    );
+    final AppPalette palette = AppPalette.of(context);
+    final TextStyle caption = AppTextStyles.of(context).caption;
+    final TextStyle style = caption.copyWith(color: palette.textPrimary);
     return ExcludeSemantics(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -785,25 +805,16 @@ class _RouteLegend extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _LegendItem(
-                marker: const _Marker(
-                  color: RouteGeometry.startColor,
-                  circle: true,
-                ),
+                marker: _Marker(color: palette.routeStart, circle: true),
                 label: AppStrings.routeStart,
                 style: style,
               ),
               _LegendItem(
-                marker: const _Marker(
-                  color: RouteGeometry.finishColor,
-                  circle: false,
-                ),
+                marker: _Marker(color: palette.routeFinish, circle: false),
                 label: AppStrings.routeFinish,
                 style: style,
               ),
-              const Text(
-                AppStrings.routeGridNote,
-                style: AppTextStyles.caption,
-              ),
+              Text(AppStrings.routeGridNote, style: caption),
             ],
           ),
           const SizedBox(height: AppSpacing.small),
@@ -815,7 +826,9 @@ class _RouteLegend extends StatelessWidget {
               if (speed)
                 for (final RouteBand band in RouteBand.values)
                   _LegendItem(
-                    marker: _Swatch(color: RouteGeometry.bandColor(band)),
+                    marker: _Swatch(
+                      color: RouteGeometry.bandColorFor(band, palette),
+                    ),
                     label: switch (band) {
                       RouteBand.slower => AppStrings.routeSlower,
                       RouteBand.steady => AppStrings.routeSteady,
@@ -824,16 +837,10 @@ class _RouteLegend extends StatelessWidget {
                     style: style,
                   )
               else
-                const Text(
-                  AppStrings.routeNoSpeed,
-                  style: AppTextStyles.caption,
-                ),
+                Text(AppStrings.routeNoSpeed, style: caption),
               if (gaps)
                 _LegendItem(
-                  marker: const _Swatch(
-                    color: RouteGeometry.noSpeedColor,
-                    dashed: true,
-                  ),
+                  marker: _Swatch(color: palette.routeNoSpeed, dashed: true),
                   label: AppStrings.routeGap,
                   style: style,
                 ),
@@ -953,6 +960,7 @@ class _SplitsCard extends StatelessWidget {
     final PartialSplitSummary? partial = summary.partialSplit;
     final double? distance = summary.distanceM;
     final bool underOneKm = distance != null && distance < 1000;
+    final AppPalette palette = AppPalette.of(context);
     return Card(
       key: SummaryScreen.splitsCardKey,
       margin: EdgeInsets.zero,
@@ -970,13 +978,13 @@ class _SplitsCard extends StatelessWidget {
                   Expanded(
                     child: Semantics(
                       header: true,
-                      child: const Text(
+                      child: Text(
                         AppStrings.splitsTitle,
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
                           height: 1.3,
-                          color: AppColors.canyonBrown,
+                          color: palette.textPrimary,
                         ),
                       ),
                     ),
@@ -1019,15 +1027,16 @@ class _SmallTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return ExcludeSemantics(
       child: Container(
         width: 36,
         height: 36,
-        decoration: const BoxDecoration(
-          color: AppColors.iconTile,
-          borderRadius: BorderRadius.all(Radius.circular(10)),
+        decoration: BoxDecoration(
+          color: palette.iconTile,
+          borderRadius: const BorderRadius.all(Radius.circular(10)),
         ),
-        child: Icon(icon, size: 20, color: AppColors.burntOrangeDeep),
+        child: Icon(icon, size: 20, color: palette.accent),
       ),
     );
   }
@@ -1041,6 +1050,7 @@ class _SplitsMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
     return Semantics(
       container: true,
       child: Padding(
@@ -1050,20 +1060,20 @@ class _SplitsMessage extends StatelessWidget {
           children: [
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
                 height: 1.3,
-                color: AppColors.canyonBrown,
+                color: palette.textPrimary,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               detail,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 height: 18 / 13,
-                color: AppColors.canyonBrownMuted,
+                color: palette.textSecondary,
               ),
             ),
           ],
@@ -1087,6 +1097,10 @@ const TextStyle _splitTimeStyle = TextStyle(
   fontFeatures: [FontFeature.tabularFigures()],
 );
 
+TextStyle _splitLabel(AppPalette p) =>
+    _splitLabelStyle.copyWith(color: p.textPrimary);
+TextStyle _splitTime(AppPalette p) => _splitTimeStyle.copyWith(color: p.stat);
+
 class _SplitRow extends StatelessWidget {
   const _SplitRow({required this.split, required this.formatter});
 
@@ -1099,6 +1113,7 @@ class _SplitRow extends StatelessWidget {
     // very slow kilometre still reads as a real time, never a placeholder.
     final String time = formatter.elapsed(split.durationMs);
     final bool fastest = split.isFastest;
+    final AppPalette palette = AppPalette.of(context);
     return Semantics(
       key: SummaryScreen.splitRowKey(split.km),
       container: true,
@@ -1112,8 +1127,11 @@ class _SplitRow extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: fastest ? 8 : 16),
         decoration: fastest
             ? BoxDecoration(
-                // tealDeep text on this tint over the card: 4.8:1.
-                color: AppColors.tealDeep.withValues(alpha: 0.10),
+                // Day keeps its 10% teal tint (tealDeep text 4.8:1); night
+                // uses the kit's mint 12% highlight (mint text 6.27:1).
+                color: palette.isDark
+                    ? palette.highlight
+                    : AppColors.tealDeep.withValues(alpha: 0.10),
                 borderRadius: const BorderRadius.all(Radius.circular(10)),
               )
             : null,
@@ -1128,15 +1146,18 @@ class _SplitRow extends StatelessWidget {
                   runSpacing: 2,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Text(AppStrings.splitKm(split.km), style: _splitLabelStyle),
+                    Text(
+                      AppStrings.splitKm(split.km),
+                      style: _splitLabel(palette),
+                    ),
                     if (fastest)
-                      const Text(
+                      Text(
                         AppStrings.splitFastest,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1,
-                          color: AppColors.tealDeep,
+                          color: palette.stat,
                         ),
                       ),
                   ],
@@ -1144,7 +1165,7 @@ class _SplitRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.small),
-            Text(time, style: _splitTimeStyle),
+            Text(time, style: _splitTime(palette)),
           ],
         ),
       ),
@@ -1162,6 +1183,7 @@ class _PartialSplitRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final String km = formatter.distanceKm(split.distanceM);
     final String time = formatter.elapsed(split.durationMs);
+    final AppPalette palette = AppPalette.of(context);
     return Semantics(
       key: SummaryScreen.partialSplitKey,
       container: true,
@@ -1180,20 +1202,20 @@ class _PartialSplitRow extends StatelessWidget {
                   children: [
                     Text(
                       AppStrings.splitPartialKm(km),
-                      style: _splitLabelStyle,
+                      style: _splitLabel(palette),
                     ),
-                    const Text(
+                    Text(
                       AppStrings.splitPartial,
                       style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.canyonBrownMuted,
+                        color: palette.textSecondary,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: AppSpacing.small),
-              Text(time, style: _splitTimeStyle),
+              Text(time, style: _splitTime(palette)),
             ],
           ),
         ),
@@ -1208,14 +1230,18 @@ class _PartialSplitRow extends StatelessWidget {
 class _LoadingBody extends StatelessWidget {
   const _LoadingBody({super.key});
 
+  /// Skeleton block in the palette's skeleton fill (day canyonBrown 10%,
+  /// night textPrimary 9%).
   static Widget _block(double width, double height, {double radius = 8}) =>
       SkeletonShimmerBlock(
-        child: Container(
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            color: const Color(0x1A5B3A29), // canyonBrown 10%
-            borderRadius: BorderRadius.all(Radius.circular(radius)),
+        child: Builder(
+          builder: (context) => Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              color: AppPalette.of(context).skeleton,
+              borderRadius: BorderRadius.all(Radius.circular(radius)),
+            ),
           ),
         ),
       );

@@ -22,6 +22,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
@@ -110,7 +111,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: context.palette.background,
       body: ListenableBuilder(
         listenable: _controller,
         builder: (context, _) => _buildContent(context),
@@ -119,6 +120,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
   }
 
   Widget _buildContent(BuildContext context) {
+    final AppPalette palette = context.palette;
     final PermissionStep step = _controller.step;
     final PermissionIssue? issue = _controller.issue;
     final PermissionScene scene = PermissionsScreen.sceneFor(step, issue);
@@ -190,12 +192,8 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                     heading,
                     key: PermissionsScreen.headingKey,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      height: 28 / 22,
-                      color: AppColors.canyonBrown,
-                    ),
+                    style: AppTextStyles.of(context).heading
+                        .copyWith(fontSize: 22, height: 28 / 22),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -204,10 +202,10 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                   child: Text(
                     body,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: AppTextStyles.of(context).body.copyWith(
                       fontSize: 14,
                       height: 20 / 14,
-                      color: AppColors.canyonBrownMuted,
+                      color: palette.textSecondary,
                     ),
                   ),
                 ),
@@ -252,11 +250,11 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                   key: PermissionsScreen.continueWithoutNotificationsButtonKey,
                   onPressed: widget.onContinue,
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(
-                      color: AppColors.burntOrangeDeep,
-                      width: 1.5,
-                    ),
-                    backgroundColor: AppColors.sandLight,
+                    side: BorderSide(color: palette.buttonOutline, width: 1.5),
+                    foregroundColor: palette.textPrimary,
+                    backgroundColor: palette.isDark
+                        ? Colors.transparent
+                        : palette.surface,
                   ),
                   child: const Text(AppStrings.continueWithoutNotifications),
                 ),
@@ -267,11 +265,11 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                   key: PermissionsScreen.notNowButtonKey,
                   onPressed: widget.onNotNow,
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(
-                      color: AppColors.burntOrangeDeep,
-                      width: 1.5,
-                    ),
-                    backgroundColor: AppColors.sandLight,
+                    side: BorderSide(color: palette.buttonOutline, width: 1.5),
+                    foregroundColor: palette.textPrimary,
+                    backgroundColor: palette.isDark
+                        ? Colors.transparent
+                        : palette.surface,
                   ),
                   child: const Text(AppStrings.notNow),
                 ),
@@ -460,26 +458,26 @@ class _Tile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = context.palette;
     return ExcludeSemantics(
       child: Container(
         width: 36,
         height: 36,
         alignment: Alignment.center,
-        decoration: const BoxDecoration(
-          color: AppColors.iconTile,
+        decoration: BoxDecoration(
+          color: palette.iconTile,
           borderRadius: BorderRadius.all(Radius.circular(10)),
         ),
         child: number != null
             ? Text(
                 '$number',
-                // Text on the tile must be canyonBrownDeep (9.88:1).
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.canyonBrownDeep,
+                  color: palette.onIconTile,
                 ),
               )
-            : Icon(icon, size: 20, color: AppColors.burntOrangeDeep),
+            : Icon(icon, size: 20, color: palette.accent),
       ),
     );
   }
@@ -526,11 +524,10 @@ class _ReasonRow extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: AppTextStyles.of(context).body.copyWith(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                           height: 1.3,
-                          color: AppColors.canyonBrown,
                         ),
                       ),
                       if (st != null) PermissionStatusChip(status: st),
@@ -539,11 +536,8 @@ class _ReasonRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     reason,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      height: 18 / 13,
-                      color: AppColors.canyonBrownMuted,
-                    ),
+                    style: AppTextStyles.of(context).caption
+                        .copyWith(fontSize: 13, height: 18 / 13),
                   ),
                 ],
               ),
@@ -578,11 +572,10 @@ class _StepRow extends StatelessWidget {
             Expanded(
               child: Text(
                 text,
-                style: const TextStyle(
+                style: AppTextStyles.of(context).body.copyWith(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
                   height: 20 / 15,
-                  color: AppColors.canyonBrown,
                 ),
               ),
             ),
@@ -603,11 +596,12 @@ class _StatusMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = context.palette;
     final (String text, _Tone tone) = _message();
     final Color accent = switch (tone) {
-      _Tone.info => AppColors.canyonBrownMuted,
-      _Tone.success => AppColors.tealDeep,
-      _Tone.problem => AppColors.error,
+      _Tone.info => palette.textSecondary,
+      _Tone.success => palette.stat,
+      _Tone.problem => palette.error,
     };
     final IconData icon = switch (tone) {
       _Tone.info => Icons.info_outline,
@@ -620,7 +614,7 @@ class _StatusMessage extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.itemGap),
         decoration: BoxDecoration(
-          color: AppColors.sandLight,
+          color: palette.surface,
           borderRadius: const BorderRadius.all(
             Radius.circular(AppSpacing.radiusTile),
           ),
@@ -643,9 +637,11 @@ class _StatusMessage extends StatelessWidget {
             Expanded(
               child: Text(
                 text,
-                style: AppTextStyles.body.copyWith(
+                style: AppTextStyles.of(context).body.copyWith(
                   fontSize: 15,
-                  color: AppColors.canyonBrownDeep,
+                  color: palette.isDark
+                      ? palette.textPrimary
+                      : AppColors.canyonBrownDeep,
                 ),
               ),
             ),
@@ -701,21 +697,23 @@ class _Footer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette palette = context.palette;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const ExcludeSemantics(
+        ExcludeSemantics(
           child: Icon(
             Icons.lock_outline,
             size: 16,
-            color: AppColors.canyonBrownMuted,
+            color: palette.textSecondary,
           ),
         ),
         const SizedBox(width: AppSpacing.small),
         Flexible(
           child: Text(
             AppStrings.permissionsFooter,
-            style: AppTextStyles.caption.copyWith(fontStyle: FontStyle.italic),
+            style: AppTextStyles.of(context).caption
+                .copyWith(fontStyle: FontStyle.italic),
           ),
         ),
       ],
