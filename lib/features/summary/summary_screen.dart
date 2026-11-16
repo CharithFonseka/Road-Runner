@@ -1,10 +1,14 @@
-// Road Runner — Run Summary screen.
+// Road Runner — Run Summary screen (UI kit Revision 5, Phase 2B.1).
 // Owner: Tharushi
 // SRS reference: Section 8.4, FR-50, FR-51, FR-52, NFR-09, NFR-14
 //
 // Shows one completed run from an injected [RunSummary]. Values are only
-// formatted for display; distance, pace, speed, splits and the fastest
-// split come from the data/stats layer. Navigation is the parent's job.
+// formatted for display; distance, pace, average speed, splits and the
+// fastest split come from the data/stats layer via the integrator. The
+// screen never calculates them. Navigation is the parent's job; there is
+// no navigation drawer here (Summary is reached from a run or History).
+//
+// The route card is unchanged in this phase (its redesign is Phase 2B.2).
 
 import 'package:flutter/material.dart';
 
@@ -13,9 +17,9 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
 import '../home/widgets/icon_tile.dart';
-import '../home/widgets/sky_header.dart';
+import '../home/widgets/sky_header.dart' show HeaderIconButton;
 import '../run/live_run_formatter.dart';
-import '../run/widgets/live_stat.dart' show measureStatWidth;
+import '../shared/app_navigation_drawer.dart' show DrawerLandscapePainter;
 import 'run_summary.dart';
 import 'widgets/route_painter.dart';
 
@@ -26,6 +30,8 @@ class SummaryScreen extends StatelessWidget {
     required this.onBackToHome,
     required this.onOpenHistory,
     this.formatter = const LiveRunFormatter(),
+    this.onBack,
+    this.isLoading = false,
   });
 
   final RunSummary summary;
@@ -35,58 +41,422 @@ class SummaryScreen extends StatelessWidget {
   /// Display-only conversions. Swap for the stats formatters when merged.
   final LiveRunFormatter formatter;
 
+  /// Header Back button. Null uses [onBackToHome], the existing contextual
+  /// exit (after a run the integrator pops to Home).
+  final VoidCallback? onBack;
+
+  /// True while the parent is still loading the run. Shows static
+  /// skeletons instead of the stats, route and splits. Only set this while
+  /// a load is really in progress.
+  final bool isLoading;
+
   static const Key homeButtonKey = Key('summary.home');
   static const Key historyButtonKey = Key('summary.history');
   static const Key routeAreaKey = Key('summary.route');
   static const Key dateKey = Key('summary.date');
+  static const Key backButtonKey = Key('summary.back');
+  static const Key statsCardKey = Key('summary.stats');
+  static const Key splitsCardKey = Key('summary.splits');
+  static const Key loadingKey = Key('summary.loading');
+  static const Key partialSplitKey = Key('summary.split.partial');
   static Key splitRowKey(int km) => Key('summary.split.$km');
+  static Key statKey(SummaryStat stat) => Key('summary.stat.${stat.name}');
 
   @override
   Widget build(BuildContext context) {
+    final double bottomInset = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SkyHeader(
-              title: AppStrings.appName,
-              subtitle: AppStrings.summaryTitle,
-            ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.medium,
-                  0,
-                  AppSpacing.medium,
-                  AppSpacing.medium,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _DateLine(startedAt: summary.startedAt),
-                    const SizedBox(height: AppSpacing.itemGap),
+      backgroundColor: AppColors.sand,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SummaryHeader(
+            startedAt: summary.startedAt,
+            onBack: onBack ?? onBackToHome,
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.medium,
+                4,
+                AppSpacing.medium,
+                AppSpacing.medium + bottomInset,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (isLoading)
+                    const _LoadingBody(key: loadingKey)
+                  else ...[
                     _StatsCard(summary: summary, formatter: formatter),
-                    const SizedBox(height: AppSpacing.medium),
+                    const SizedBox(height: 10),
                     _RouteCard(route: summary.route),
-                    const SizedBox(height: AppSpacing.medium),
-                    _SplitsCard(splits: summary.splits, formatter: formatter),
-                    const SizedBox(height: AppSpacing.large),
-                    FilledButton.icon(
-                      key: homeButtonKey,
-                      onPressed: onBackToHome,
-                      icon: const Icon(Icons.home_outlined),
-                      label: const Text(AppStrings.backToHome),
-                    ),
-                    const SizedBox(height: AppSpacing.itemGap),
-                    OutlinedButton.icon(
-                      key: historyButtonKey,
-                      onPressed: onOpenHistory,
-                      icon: const Icon(Icons.bar_chart),
-                      label: const Text(AppStrings.viewHistory),
-                    ),
+                    const SizedBox(height: 10),
+                    _SplitsCard(summary: summary, formatter: formatter),
                   ],
+                  const SizedBox(height: AppSpacing.large),
+                  FilledButton.icon(
+                    key: homeButtonKey,
+                    onPressed: onBackToHome,
+                    icon: const Icon(Icons.home_outlined),
+                    label: const Text(AppStrings.backToHome),
+                  ),
+                  const SizedBox(height: AppSpacing.itemGap),
+                  OutlinedButton.icon(
+                    key: historyButtonKey,
+                    onPressed: onOpenHistory,
+                    icon: const Icon(Icons.bar_chart),
+                    label: const Text(AppStrings.viewHistory),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The four statistics, in display order.
+enum SummaryStat { distance, movingTime, averagePace, averageSpeed }
+
+// ─── Header ─────────────────────────────────────────────────────────────────
+
+/// Sky header from the kit: 48dp Back, "Run summary" and the run's date
+/// and start time, over the slim (40dp) desert strip. Text on the sky uses
+/// [AppColors.canyonBrown] (5.56:1 or better).
+class _SummaryHeader extends StatelessWidget {
+  const _SummaryHeader({required this.startedAt, required this.onBack});
+
+  final DateTime? startedAt;
+  final VoidCallback onBack;
+
+  String _dateLine(BuildContext context) {
+    final DateTime? at = startedAt?.toLocal();
+    if (at == null) return AppStrings.summaryDateUnavailable;
+    final MaterialLocalizations l10n = MaterialLocalizations.of(context);
+    return AppStrings.summaryDateTime(
+      AppStrings.runDate(at),
+      l10n.formatTimeOfDay(
+        TimeOfDay.fromDateTime(at),
+        alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double topInset = MediaQuery.paddingOf(context).top;
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [AppColors.skyTop, AppColors.skyMid, AppColors.sand],
+          stops: [0.0, 0.52, 1.0],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.medium,
+              topInset + AppSpacing.small,
+              AppSpacing.medium,
+              0,
+            ),
+            child: Row(
+              children: [
+                HeaderIconButton(
+                  key: SummaryScreen.backButtonKey,
+                  icon: Icons.arrow_back_rounded,
+                  tooltip: AppStrings.summaryBack,
+                  onPressed: onBack,
                 ),
+                const SizedBox(width: AppSpacing.itemGap),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Semantics(
+                        header: true,
+                        child: const Text(
+                          AppStrings.summaryTitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            height: 1.15,
+                            color: AppColors.canyonBrown,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _dateLine(context),
+                        key: SummaryScreen.dateKey,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          height: 1.3,
+                          color: AppColors.canyonBrown,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          const ExcludeSemantics(
+            child: SizedBox(
+              height: 40,
+              width: double.infinity,
+              child: CustomPaint(painter: DrawerLandscapePainter()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Stats ──────────────────────────────────────────────────────────────────
+
+/// One formatted statistic: number, unit and whether it is a placeholder.
+class _Stat {
+  const _Stat(this.stat, this.number, this.unit, this.label, this.available);
+
+  final SummaryStat stat;
+  final String number;
+  final String unit;
+  final String label;
+  final bool available;
+
+  /// The full visible text, e.g. "4.21 km" or "6:12/km".
+  String get text => '$number$unit';
+}
+
+const TextStyle _statNumberStyle = TextStyle(
+  fontSize: 19,
+  fontWeight: FontWeight.w700,
+  height: 1.2,
+  color: AppColors.tealDeep,
+  fontFeatures: [FontFeature.tabularFigures()],
+);
+const TextStyle _statUnitStyle = TextStyle(
+  fontSize: 12,
+  fontWeight: FontWeight.w500,
+  color: AppColors.canyonBrownMuted,
+);
+const TextStyle _statLabelStyle = TextStyle(
+  fontSize: 12,
+  height: 1.3,
+  color: AppColors.canyonBrownMuted,
+);
+
+/// UI kit stat strip: four value/label pairs separated by hairlines. Falls
+/// back to a 2 × 2 grid, then to one stat per line, when values would not
+/// fit (narrow phones, large text). Never truncates a value.
+class _StatsCard extends StatelessWidget {
+  const _StatsCard({required this.summary, required this.formatter});
+
+  final RunSummary summary;
+  final LiveRunFormatter formatter;
+
+  List<_Stat> _stats() {
+    final String distance = formatter.distanceKm(summary.distanceM);
+    final String moving = formatter.elapsed(summary.movingMs);
+    final String pace = formatter.pace(summary.averagePaceSecPerKm);
+    final String speed = formatter.speedKmh(summary.averageSpeedMps);
+    return [
+      _Stat(
+        SummaryStat.distance,
+        distance,
+        ' ${AppStrings.unitKm}',
+        AppStrings.statDistance,
+        distance != LiveRunFormatter.distancePlaceholder,
+      ),
+      _Stat(
+        SummaryStat.movingTime,
+        moving,
+        '',
+        AppStrings.statMovingTime,
+        moving != LiveRunFormatter.elapsedPlaceholder,
+      ),
+      _Stat(
+        SummaryStat.averagePace,
+        pace,
+        AppStrings.unitPerKm,
+        AppStrings.statAveragePaceLong,
+        pace != LiveRunFormatter.pacePlaceholder,
+      ),
+      _Stat(
+        SummaryStat.averageSpeed,
+        speed,
+        ' ${AppStrings.unitKmPerHour}',
+        AppStrings.statAverageSpeed,
+        speed != LiveRunFormatter.speedPlaceholder,
+      ),
+    ];
+  }
+
+  static double _width(String text, TextStyle style, TextScaler scaler) {
+    final TextPainter p = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final double w = p.width;
+    p.dispose();
+    return w;
+  }
+
+  static double _valueWidth(_Stat s, TextScaler scaler) =>
+      _width(s.number, _statNumberStyle, scaler) +
+      _width(s.unit, _statUnitStyle, scaler);
+
+  @override
+  Widget build(BuildContext context) {
+    final List<_Stat> stats = _stats();
+    final TextScaler scaler = MediaQuery.textScalerOf(context);
+    return Card(
+      key: SummaryScreen.statsCardKey,
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+        child: LayoutBuilder(
+          builder: (context, c) {
+            bool fits(int perRow) {
+              final double column = (c.maxWidth - (perRow - 1)) / perRow - 8;
+              return stats.every((s) => _valueWidth(s, scaler) <= column);
+            }
+
+            if (fits(4)) return _row(stats);
+            if (fits(2)) {
+              return Column(
+                children: [
+                  _row(stats.sublist(0, 2)),
+                  const Divider(height: 17, indent: 12, endIndent: 12),
+                  _row(stats.sublist(2)),
+                ],
+              );
+            }
+            return Column(
+              children: [
+                for (int i = 0; i < stats.length; i++) ...[
+                  if (i > 0)
+                    const Divider(height: 13, indent: 12, endIndent: 12),
+                  _StatLine(stat: stats[i]),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _row(List<_Stat> stats) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (int i = 0; i < stats.length; i++) ...[
+            if (i > 0)
+              const VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: AppColors.divider,
+              ),
+            Expanded(child: _StatTile(stat: stats[i])),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String _statSpeech(_Stat s) => AppStrings.statSemantics(
+  s.label,
+  s.available ? s.text : AppStrings.statUnavailable,
+);
+
+Widget _statValue(_Stat s, {TextAlign align = TextAlign.center}) => Text.rich(
+  TextSpan(
+    text: s.number,
+    style: _statNumberStyle,
+    children: [
+      if (s.unit.isNotEmpty) TextSpan(text: s.unit, style: _statUnitStyle),
+    ],
+  ),
+  textAlign: align,
+  maxLines: 1,
+  softWrap: false,
+);
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({required this.stat});
+
+  final _Stat stat;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      key: SummaryScreen.statKey(stat.stat),
+      container: true,
+      label: _statSpeech(stat),
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _statValue(stat),
+            const SizedBox(height: 3),
+            Text(
+              stat.label,
+              textAlign: TextAlign.center,
+              style: _statLabelStyle,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Narrowest layout: "Label ........ value".
+class _StatLine extends StatelessWidget {
+  const _StatLine({required this.stat});
+
+  final _Stat stat;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      key: SummaryScreen.statKey(stat.stat),
+      container: true,
+      label: _statSpeech(stat),
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: Text(stat.label, style: _statLabelStyle)),
+            const SizedBox(width: AppSpacing.small),
+            Flexible(
+              flex: 2,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerEnd,
+                child: _statValue(stat, align: TextAlign.end),
               ),
             ),
           ],
@@ -96,171 +466,7 @@ class SummaryScreen extends StatelessWidget {
   }
 }
 
-// ─── Date ───────────────────────────────────────────────────────────────────
-
-class _DateLine extends StatelessWidget {
-  const _DateLine({required this.startedAt});
-
-  final DateTime? startedAt;
-
-  @override
-  Widget build(BuildContext context) {
-    final DateTime? at = startedAt?.toLocal();
-    String text = AppStrings.summaryDateUnavailable;
-    if (at != null) {
-      final MaterialLocalizations l10n = MaterialLocalizations.of(context);
-      text = AppStrings.summaryDateTime(
-        l10n.formatFullDate(at),
-        l10n.formatTimeOfDay(
-          TimeOfDay.fromDateTime(at),
-          alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
-        ),
-      );
-    }
-    return Row(
-      children: [
-        const ExcludeSemantics(
-          child: Icon(
-            Icons.calendar_today_outlined,
-            size: 18,
-            color: AppColors.canyonBrownMuted,
-          ),
-        ),
-        const SizedBox(width: AppSpacing.small),
-        Expanded(
-          child: Text(
-            text,
-            key: SummaryScreen.dateKey,
-            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Stats ──────────────────────────────────────────────────────────────────
-
-class _StatsCard extends StatelessWidget {
-  const _StatsCard({required this.summary, required this.formatter});
-
-  final RunSummary summary;
-  final LiveRunFormatter formatter;
-
-  @override
-  Widget build(BuildContext context) {
-    final List<(IconData, String, String)> stats = [
-      (
-        Icons.place_outlined,
-        '${formatter.distanceKm(summary.distanceM)} ${AppStrings.unitKm}',
-        AppStrings.statDistance,
-      ),
-      (
-        Icons.timer_outlined,
-        formatter.elapsed(summary.movingMs),
-        AppStrings.statMovingTime,
-      ),
-      (
-        Icons.speed,
-        '${formatter.pace(summary.averagePaceSecPerKm)}${AppStrings.unitPerKm}',
-        AppStrings.statAveragePaceLong,
-      ),
-      (
-        Icons.directions_run,
-        '${formatter.speedKmh(summary.averageSpeedMps)} '
-            '${AppStrings.unitKmPerHour}',
-        AppStrings.statAverageSpeed,
-      ),
-    ];
-    final TextScaler scaler = MediaQuery.textScalerOf(context);
-
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // Two columns when every value fits on one line; else one.
-            final double column =
-                (constraints.maxWidth - AppSpacing.medium) / 2;
-            final bool twoColumns = stats.every(
-              (s) =>
-                  measureStatWidth(
-                    value: s.$2,
-                    style: AppTextStyles.statValue,
-                    textScaler: scaler,
-                  ) <=
-                  column,
-            );
-            final List<Widget> tiles = [
-              for (final s in stats)
-                _StatTile(icon: s.$1, value: s.$2, label: s.$3),
-            ];
-            if (!twoColumns) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int i = 0; i < tiles.length; i++) ...[
-                    if (i > 0) const Divider(height: AppSpacing.large),
-                    tiles[i],
-                  ],
-                ],
-              );
-            }
-            return Column(
-              children: [
-                for (int row = 0; row < 2; row++) ...[
-                  if (row > 0) const Divider(height: AppSpacing.large),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: tiles[row * 2]),
-                      const SizedBox(width: AppSpacing.medium),
-                      Expanded(child: tiles[row * 2 + 1]),
-                    ],
-                  ),
-                ],
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
-  const _StatTile({
-    required this.icon,
-    required this.value,
-    required this.label,
-  });
-
-  final IconData icon;
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      container: true,
-      label: AppStrings.statSemantics(label, value),
-      child: ExcludeSemantics(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 22, color: AppColors.burntOrangeDeep),
-            const SizedBox(height: 4),
-            Text(value, style: AppTextStyles.statValue),
-            Text(label, style: AppTextStyles.caption),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Route ──────────────────────────────────────────────────────────────────
+// ─── Route (unchanged until Phase 2B.2) ─────────────────────────────────────
 
 class _CardHeader extends StatelessWidget {
   const _CardHeader({required this.icon, required this.title, this.subtitle});
@@ -355,31 +561,41 @@ class _RouteCard extends StatelessWidget {
   }
 }
 
+/// No route, or fewer than two distinct points. Nothing is simulated.
 class _RouteTooShort extends StatelessWidget {
   const _RouteTooShort();
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.medium),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const ExcludeSemantics(
-              child: Icon(
-                Icons.wrong_location_outlined,
-                size: 40,
-                color: AppColors.canyonBrownMuted,
+        child: Semantics(
+          container: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ExcludeSemantics(
+                child: Icon(
+                  Icons.wrong_location_outlined,
+                  size: 40,
+                  color: AppColors.canyonBrownMuted,
+                ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.small),
-            Text(
-              AppStrings.routeTooShort,
-              textAlign: TextAlign.center,
-              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
-            ),
-          ],
+              const SizedBox(height: AppSpacing.small),
+              Text(
+                AppStrings.routeTooShort,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                AppStrings.routeTooShortDetail,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.caption,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -494,62 +710,154 @@ class _Marker extends StatelessWidget {
 
 // ─── Splits ─────────────────────────────────────────────────────────────────
 
+/// UI kit splits card: tile + "Splits" header, then one row per full
+/// kilometre (the flagged fastest one highlighted), then the optional
+/// partial split.
 class _SplitsCard extends StatelessWidget {
-  const _SplitsCard({required this.splits, required this.formatter});
+  const _SplitsCard({required this.summary, required this.formatter});
 
-  final List<SplitSummary> splits;
+  final RunSummary summary;
   final LiveRunFormatter formatter;
 
   @override
   Widget build(BuildContext context) {
+    final List<SplitSummary> splits = summary.splits;
+    final PartialSplitSummary? partial = summary.partialSplit;
+    final double? distance = summary.distanceM;
+    final bool underOneKm = distance != null && distance < 1000;
     return Card(
+      key: SummaryScreen.splitsCardKey,
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _CardHeader(
-              icon: Icons.bar_chart,
-              title: AppStrings.splitsTitle,
-            ),
-            const SizedBox(height: AppSpacing.small),
-            if (splits.isEmpty)
-              Semantics(
-                container: true,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: AppSpacing.small,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        AppStrings.splitsUnderOneKm,
-                        style: AppTextStyles.body.copyWith(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: Row(
+                children: [
+                  const _SmallTile(icon: Icons.bar_chart_rounded),
+                  const SizedBox(width: AppSpacing.itemGap),
+                  Expanded(
+                    child: Semantics(
+                      header: true,
+                      child: const Text(
+                        AppStrings.splitsTitle,
+                        style: TextStyle(
+                          fontSize: 18,
                           fontWeight: FontWeight.w700,
+                          height: 1.3,
+                          color: AppColors.canyonBrown,
                         ),
                       ),
-                      const Text(
-                        AppStrings.splitsUnderOneKmDetail,
-                        style: AppTextStyles.caption,
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
+              ),
+            ),
+            if (splits.isEmpty && partial == null)
+              _SplitsMessage(
+                title: underOneKm
+                    ? AppStrings.splitsUnderOneKm
+                    : AppStrings.splitsUnavailable,
+                detail: underOneKm
+                    ? AppStrings.splitsUnderOneKmDetail
+                    : AppStrings.splitsUnavailableDetail,
               )
-            else
+            else ...[
               for (int i = 0; i < splits.length; i++) ...[
                 if (i > 0 && !splits[i].isFastest && !splits[i - 1].isFastest)
                   const Divider(height: 1),
                 _SplitRow(split: splits[i], formatter: formatter),
               ],
+              if (partial != null) ...[
+                if (splits.isNotEmpty && !splits.last.isFastest)
+                  const Divider(height: 1),
+                _PartialSplitRow(split: partial, formatter: formatter),
+              ],
+            ],
           ],
         ),
       ),
     );
   }
 }
+
+class _SmallTile extends StatelessWidget {
+  const _SmallTile({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: const BoxDecoration(
+          color: AppColors.iconTile,
+          borderRadius: BorderRadius.all(Radius.circular(10)),
+        ),
+        child: Icon(icon, size: 20, color: AppColors.burntOrangeDeep),
+      ),
+    );
+  }
+}
+
+class _SplitsMessage extends StatelessWidget {
+  const _SplitsMessage({required this.title, required this.detail});
+
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                height: 1.3,
+                color: AppColors.canyonBrown,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              detail,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 18 / 13,
+                color: AppColors.canyonBrownMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+const TextStyle _splitLabelStyle = TextStyle(
+  fontSize: 15,
+  fontWeight: FontWeight.w500,
+  height: 1.3,
+  color: AppColors.canyonBrown,
+);
+const TextStyle _splitTimeStyle = TextStyle(
+  fontSize: 15,
+  fontWeight: FontWeight.w700,
+  height: 1.3,
+  color: AppColors.tealDeep,
+  fontFeatures: [FontFeature.tabularFigures()],
+);
 
 class _SplitRow extends StatelessWidget {
   const _SplitRow({required this.split, required this.formatter});
@@ -559,75 +867,205 @@ class _SplitRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ms → s is a unit conversion: one full km's duration is its pace.
-    final String pace = formatter.pace(split.durationMs / 1000);
+    // A full kilometre's time is its pace per km. Shown as a duration so a
+    // very slow kilometre still reads as a real time, never a placeholder.
+    final String time = formatter.elapsed(split.durationMs);
     final bool fastest = split.isFastest;
     return Semantics(
       key: SummaryScreen.splitRowKey(split.km),
       container: true,
-      label: AppStrings.splitSemantics(split.km, pace, fastest),
-      child: ExcludeSemantics(
-        child: Container(
-          constraints: const BoxConstraints(
-            minHeight: AppSpacing.minTouchTarget,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.small),
-          decoration: fastest
-              ? BoxDecoration(
-                  // tealDeep text on this tint: 4.8:1.
-                  color: AppColors.tealDeep.withValues(alpha: 0.10),
-                  borderRadius: const BorderRadius.all(Radius.circular(8)),
-                  border: Border.all(color: AppColors.tealDeep, width: 1.5),
-                )
-              : null,
+      label: AppStrings.splitSemantics(split.km, time, fastest),
+      excludeSemantics: true,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 40),
+        margin: fastest
+            ? const EdgeInsets.symmetric(horizontal: 8)
+            : EdgeInsets.zero,
+        padding: EdgeInsets.symmetric(horizontal: fastest ? 8 : 16),
+        decoration: fastest
+            ? BoxDecoration(
+                // tealDeep text on this tint over the card: 4.8:1.
+                color: AppColors.tealDeep.withValues(alpha: 0.10),
+                borderRadius: const BorderRadius.all(Radius.circular(10)),
+              )
+            : null,
+        child: Row(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                // Label and FASTEST badge wrap, so the time never overflows.
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(AppStrings.splitKm(split.km), style: _splitLabelStyle),
+                    if (fastest)
+                      const Text(
+                        AppStrings.splitFastest,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1,
+                          color: AppColors.tealDeep,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.small),
+            Text(time, style: _splitTimeStyle),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PartialSplitRow extends StatelessWidget {
+  const _PartialSplitRow({required this.split, required this.formatter});
+
+  final PartialSplitSummary split;
+  final LiveRunFormatter formatter;
+
+  @override
+  Widget build(BuildContext context) {
+    final String km = formatter.distanceKm(split.distanceM);
+    final String time = formatter.elapsed(split.durationMs);
+    return Semantics(
+      key: SummaryScreen.partialSplitKey,
+      container: true,
+      label: AppStrings.splitPartialSemantics(km, time),
+      excludeSemantics: true,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 40),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
               Expanded(
-                // Label and FASTEST badge wrap, so the pace never overflows.
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Wrap(
-                    spacing: AppSpacing.small,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        AppStrings.splitKm(split.km),
-                        style: AppTextStyles.body.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                child: Wrap(
+                  spacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      AppStrings.splitPartialKm(km),
+                      style: _splitLabelStyle,
+                    ),
+                    const Text(
+                      AppStrings.splitPartial,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.canyonBrownMuted,
                       ),
-                      if (fastest)
-                        const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.bolt,
-                              size: 18,
-                              color: AppColors.tealDeep,
-                            ),
-                            SizedBox(width: 2),
-                            Flexible(
-                              child: Text(
-                                AppStrings.splitFastest,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.8,
-                                  color: AppColors.tealDeep,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: AppSpacing.small),
-              Text(pace, style: AppTextStyles.statValue.copyWith(fontSize: 18)),
+              Text(time, style: _splitTimeStyle),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─── Loading ────────────────────────────────────────────────────────────────
+
+/// Static skeletons the size of the real cards. No shimmer, so nothing
+/// moves for users who asked for reduced motion. Read as "Loading run
+/// summary".
+class _LoadingBody extends StatelessWidget {
+  const _LoadingBody({super.key});
+
+  static Widget _block(double width, double height, {double radius = 8}) =>
+      Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: const Color(0x1A5B3A29), // canyonBrown 10%
+          borderRadius: BorderRadius.all(Radius.circular(radius)),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: AppStrings.summaryLoading,
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+              child: Row(
+                children: [
+                  for (int i = 0; i < 4; i++)
+                    Expanded(
+                      child: Column(
+                        children: [
+                          _block(48, 18),
+                          const SizedBox(height: 7),
+                          _block(36, 10),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.medium),
+              child: LayoutBuilder(
+                builder: (context, c) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _block(110, 18),
+                    const SizedBox(height: AppSpacing.itemGap),
+                    _block(
+                      c.maxWidth,
+                      (c.maxWidth * 0.85).clamp(220.0, 360.0),
+                      radius: AppSpacing.radiusTile,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.medium),
+              child: Column(
+                children: [
+                  for (int i = 0; i < 3; i++)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      child: Row(
+                        children: [
+                          _block(46, 14),
+                          const Spacer(),
+                          _block(40, 14),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

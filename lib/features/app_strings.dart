@@ -281,7 +281,9 @@ class AppStrings {
 
   // ─── Run Summary ────────────────────────────────────────────────────────────
 
-  static const String summaryTitle = 'Run Summary';
+  static const String summaryTitle = 'Run summary';
+  static const String summaryBack = 'Back';
+  static const String summaryLoading = 'Loading run summary';
   static const String summaryDateUnavailable = 'Date unavailable';
   static String summaryDateTime(String date, String time) => '$date · $time';
 
@@ -289,9 +291,14 @@ class AppStrings {
   static const String statAverageSpeed = 'Average speed';
   static String statSemantics(String label, String value) => '$label: $value';
 
+  /// Spoken instead of a placeholder such as "--.- km/h".
+  static const String statUnavailable = 'not available';
+
   static const String routeTitle = 'Route';
   static const String routeSubtitle = 'Your run path, north up';
   static const String routeTooShort = 'Route too short to map';
+  static const String routeTooShortDetail =
+      'Fewer than two distinct GPS points were recorded.';
   static const String routeStart = 'Start';
   static const String routeFinish = 'Finish';
   static const String routeSlower = 'Slower';
@@ -310,6 +317,13 @@ class AppStrings {
   static const String splitsUnderOneKm = 'Run under 1 km';
   static const String splitsUnderOneKmDetail =
       'Splits appear once you run a full kilometre.';
+  static const String splitsUnavailable = 'No splits to show';
+  static const String splitsUnavailableDetail =
+      'Kilometre splits are not available for this run.';
+  static const String splitPartial = 'partial';
+  static String splitPartialKm(String km) => '$km km';
+  static String splitPartialSemantics(String km, String time) =>
+      'Final partial split: $km kilometres in $time';
 
   static const String backToHome = 'Back to Home';
   static const String viewHistory = 'View History';
