@@ -90,7 +90,7 @@ SRS reference: Section 7, Section 8.1, Section 9.1 – 9.2
 - [ ] Device matrix completed (`≥ 3` real phones, `≥ 2` brands, Android 13+, Android 14+, aggressive battery brand)
 - [ ] Field test log completed (`< 3%` open-sky error) in `docs/test-logs/field-test-log.md`
 - [ ] Battery test log completed in `docs/test-logs/battery-test-log.md`
-- [ ] Release manifest audited (`TC-13`): no `INTERNET`, `allowBackup="false"`, service `exported="false"`
+- [ ] Release manifest audited (`TC-13` / `NFR-07`): `INTERNET` used only for approved free-tier services (maps, weather, places, routing, Firebase Auth/Firestore; no analytics/ad/paid SDKs), `allowBackup="false"`, service `exported="false"`
 - [ ] Release APK ≤ 40 MB (`NFR-13`)
 - [x] Signing keystore kept **outside** the repository (verified via `git status` & `.gitignore`)
 - [ ] Demo script rehearsed on the demo phone (`docs/demo-script.md`)
