@@ -3,6 +3,7 @@ package com.roadrunner.app.tracking
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.location.Location
+import android.util.Log
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -12,7 +13,6 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
-import kotlin.random.Random
 
 /**
  * Debug-only GPS route simulator for repeatable indoor testing and live demos.
@@ -25,7 +25,9 @@ import kotlin.random.Random
  *
  * Strictly disabled in non-debuggable (release) builds.
  */
-class DebugRouteSimulator {
+class DebugRouteSimulator(
+    private val onRouteChanged: (() -> Unit)? = null,
+) {
     @Volatile
     private var targetSpeedMps: Double = DEFAULT_SPEED_MPS
 
@@ -33,26 +35,38 @@ class DebugRouteSimulator {
     private var activeBaseUrl: String? = null
 
     @Volatile
-    private var activePath: StreetPath = buildFallbackStreetWalk()
+    private var activeRouteId: Long? = null
 
+    @Volatile
+    private var activePath: StreetPath? = null
+
+    @Volatile
     private var distanceAlongPathM: Double = 0.0
-    private var prepared = false
+
     private val syncInFlight = AtomicBoolean(false)
     private val syncExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "RoadRunnerSimSync").apply { isDaemon = true }
     }
 
-    /**
-     * Loads the active street route and initial target speed from the demo
-     * server before the first fix is generated, preventing any mid-run jump.
-     * Safe to call on the recorder's background worker thread.
-     */
-    fun prepare() {
-        if (prepared) return
-        prepared = true
+    fun isReady(): Boolean = activePath != null
 
-        val baseUrl = resolveServerUrl() ?: return
-        activeBaseUrl = baseUrl
+    /**
+     * Connects to the demo server and loads the active street route and target
+     * speed before emitting the first fix. Returns true once connected and a
+     * route is loaded; returns false if the server is not reachable yet so the
+     * recorder can keep waiting instead of running a mismatched fallback route.
+     */
+    fun prepare(): Boolean {
+        if (activePath != null) return true
+
+        val baseUrl = activeBaseUrl ?: resolveServerUrl()?.also {
+            activeBaseUrl = it
+            Log.i(TAG, "Connected to demo simulator server at $it")
+        }
+        if (baseUrl == null) {
+            Log.w(TAG, "Demo simulator server unreachable; waiting for connection")
+            return false
+        }
 
         runCatching {
             val ctrlConn = openGet("$baseUrl/control", INITIAL_TIMEOUT_MS)
@@ -68,37 +82,54 @@ class DebugRouteSimulator {
             ctrlConn.disconnect()
         }
 
-        runCatching {
-            val routeConn = openGet("$baseUrl/route", INITIAL_TIMEOUT_MS)
-            if (routeConn.responseCode == 200) {
-                val body = routeConn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val json = JSONObject(body)
-                val pointsArray = json.optJSONArray("points")
-                if (pointsArray != null && pointsArray.length() >= 2) {
-                    val coords = ArrayList<Pair<Double, Double>>(pointsArray.length())
-                    for (i in 0 until pointsArray.length()) {
-                        val pt = pointsArray.optJSONArray(i) ?: continue
-                        if (pt.length() >= 2) {
-                            coords.add(pt.getDouble(0) to pt.getDouble(1))
-                        }
-                    }
-                    if (coords.size >= 2) {
-                        activePath = buildStreetPath(coords)
-                        distanceAlongPathM = 0.0
-                    }
-                }
-            }
-            routeConn.disconnect()
+        val loaded = fetchRouteFromServer(baseUrl, resetDistance = true)
+        if (!loaded) {
+            activeBaseUrl = null
         }
+        return loaded
     }
 
-    fun nextLocation(timestampUtcMs: Long): Location {
-        if (!prepared) prepare()
+    private fun fetchRouteFromServer(baseUrl: String, resetDistance: Boolean): Boolean {
+        return runCatching {
+            val routeConn = openGet("$baseUrl/route", INITIAL_TIMEOUT_MS)
+            try {
+                if (routeConn.responseCode != 200) return@runCatching false
+                val body = routeConn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val json = JSONObject(body)
+                val pointsArray = json.optJSONArray("points") ?: return@runCatching false
+                if (pointsArray.length() < 2) return@runCatching false
+
+                val coords = ArrayList<Pair<Double, Double>>(pointsArray.length())
+                for (i in 0 until pointsArray.length()) {
+                    val pt = pointsArray.optJSONArray(i) ?: continue
+                    if (pt.length() >= 2) {
+                        coords.add(pt.getDouble(0) to pt.getDouble(1))
+                    }
+                }
+                if (coords.size < 2) return@runCatching false
+
+                activePath = buildStreetPath(coords)
+                if (json.has("routeId")) {
+                    activeRouteId = json.optLong("routeId")
+                }
+                if (resetDistance) {
+                    distanceAlongPathM = 0.0
+                }
+                true
+            } finally {
+                routeConn.disconnect()
+            }
+        }.getOrDefault(false)
+    }
+
+    fun nextLocation(timestampUtcMs: Long): Location? {
+        val path = activePath ?: if (prepare()) activePath else null
+        if (path == null) return null
 
         val speedMps = targetSpeedMps.coerceAtLeast(0.0)
         distanceAlongPathM += speedMps
 
-        val (lat, lon) = activePath.positionAt(distanceAlongPathM)
+        val (lat, lon) = path.positionAt(distanceAlongPathM)
         return Location("gps").apply {
             latitude = lat
             longitude = lon
@@ -157,6 +188,14 @@ class DebugRouteSimulator {
                         val next = json.optDouble("targetSpeedMps", targetSpeedMps)
                         if (next.isFinite() && next >= 0.0) {
                             targetSpeedMps = next
+                        }
+                    }
+                    if (json.has("routeId")) {
+                        val serverRouteId = json.optLong("routeId")
+                        if (activeRouteId != serverRouteId) {
+                            if (fetchRouteFromServer(baseUrl, resetDistance = true)) {
+                                onRouteChanged?.invoke()
+                            }
                         }
                     }
                 } else {
@@ -241,6 +280,7 @@ class DebugRouteSimulator {
     }
 
     companion object {
+        private const val TAG = "DebugRouteSimulator"
         private const val PREFS_NAME = "roadrunner_debug_prefs"
         private const val KEY_SIM_ENABLED = "simulate_route"
         private const val DEFAULT_SPEED_MPS = 3.0 // ~10.8 km/h default jog
@@ -248,9 +288,9 @@ class DebugRouteSimulator {
             "http://127.0.0.1:8765", // USB adb reverse (physical phone or emulator)
             "http://10.0.2.2:8765",  // Android Emulator direct host bridge
         )
-        private const val PROBE_TIMEOUT_MS = 450
-        private const val INITIAL_TIMEOUT_MS = 1_500
-        private const val SYNC_TIMEOUT_MS = 1_200
+        private const val PROBE_TIMEOUT_MS = 1_500
+        private const val INITIAL_TIMEOUT_MS = 3_000
+        private const val SYNC_TIMEOUT_MS = 1_500
 
         fun isDebuggable(context: Context): Boolean =
             (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -282,34 +322,6 @@ class DebugRouteSimulator {
                 nodes.add(PathNode(curr.first, curr.second, cumulative))
             }
             return StreetPath(nodes = nodes, totalLengthM = cumulative.coerceAtLeast(1.0))
-        }
-
-        private fun buildFallbackStreetWalk(): StreetPath {
-            val lat0 = 6.9125
-            val lon0 = 79.8585
-            val dLat = 0.0011
-            val dLon = 0.0012
-            var r = 2
-            var c = 2
-            var prevR = -1
-            var prevC = -1
-            val rng = Random.Default
-            val coords = ArrayList<Pair<Double, Double>>(24)
-            coords.add((lat0 + r * dLat) to (lon0 + c * dLon))
-
-            repeat(22) {
-                val options = listOf(1 to 0, -1 to 0, 0 to 1, 0 to -1)
-                    .map { (dr, dc) -> (r + dr) to (c + dc) }
-                    .filter { (nr, nc) -> nr in 0..4 && nc in 0..4 }
-                val nonBacktrack = options.filter { (nr, nc) -> nr != prevR || nc != prevC }
-                val (nr, nc) = (if (nonBacktrack.isNotEmpty()) nonBacktrack else options).random(rng)
-                prevR = r
-                prevC = c
-                r = nr
-                c = nc
-                coords.add((lat0 + r * dLat) to (lon0 + c * dLon))
-            }
-            return buildStreetPath(coords)
         }
 
         private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

@@ -41,7 +41,7 @@ def fetch_osrm_random_route() -> list[list[float]] | None:
     waypoints.append(waypoints[0])  # close the loop
 
     url = (
-        "https://router.project-osrm.org/route/v1/foot/"
+        "https://routing.openstreetmap.de/routed-foot/route/v1/driving/"
         + ";".join(waypoints)
         + "?overview=full&geometries=geojson"
     )
@@ -276,7 +276,7 @@ def main() -> None:
     global STATE
     STATE = SimState()
     print(f"Generated random street route with {len(STATE.route_points)} points.")
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), DemoSimHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), DemoSimHandler)
     print(f"Road Runner Demo Simulator running at http://localhost:{PORT}")
     print("Run `adb reverse tcp:8765 tcp:8765` to connect your Android device/emulator.")
     try:

@@ -309,7 +309,7 @@ void main() {
             initialCenter: const LatLng(6.9271, 79.8612),
             styleFuture: style.future,
             weatherFetcher: (_) async => const RunWeather(28, 8, 2),
-            onStartRun: () {},
+            onStartRun: (_) {},
           ),
         ),
       ),
@@ -320,8 +320,10 @@ void main() {
     await tester.pump();
     await tester.tapAt(topLeft + const Offset(240, 260));
     await tester.pump();
-    await tester.tap(find.byKey(RoutePlanningScreen.findKey));
-    await tester.pump();
+    if (find.byKey(RoutePlanningScreen.findKey).evaluate().isNotEmpty) {
+      await tester.tap(find.byKey(RoutePlanningScreen.findKey));
+      await tester.pump();
+    }
     await savePreview(tester, 'route-planner');
   });
 }
