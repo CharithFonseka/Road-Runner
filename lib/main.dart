@@ -33,14 +33,15 @@ import 'features/history/history_screen.dart';
 import 'features/history/history_summary.dart';
 import 'features/home/home_screen.dart';
 import 'features/home/widgets/sky_header.dart' show HeaderIconButton;
-import 'features/home/widgets/slide_to_start.dart';
 import 'features/permissions/permission_gateway.dart';
 import 'features/permissions/permissions_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/route_planning/ors_directions_client.dart';
 import 'features/route_planning/route_planning_screen.dart';
+import 'features/route_planning/saved_routes_screen.dart';
 import 'features/run/active_run_screen.dart';
 import 'features/run/live_run_formatter.dart';
+import 'features/run/run_start_sheet.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/splash/splash_screen.dart';
 import 'features/summary/run_summary.dart';
@@ -477,6 +478,8 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
   Future<void> _handleStartRun({
     PlannedRoute? plannedRoute,
     bool replaceTop = false,
+    String? runName,
+    String? displayName,
   }) async {
     if (_isStartingRun) return;
     _isStartingRun = true;
@@ -498,7 +501,12 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
 
     if (!mounted) return;
     if (canStartImmediately) {
-      _openActiveRun(plannedRoute: plannedRoute, replaceTop: replaceTop);
+      _openActiveRun(
+        plannedRoute: plannedRoute,
+        replaceTop: replaceTop,
+        runName: runName,
+        displayName: displayName,
+      );
       return;
     }
 
@@ -508,7 +516,12 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
           gateway: _permissionGateway,
           onContinue: () {
             _navigatorKey.currentState?.pop();
-            _openActiveRun(plannedRoute: plannedRoute, replaceTop: replaceTop);
+            _openActiveRun(
+              plannedRoute: plannedRoute,
+              replaceTop: replaceTop,
+              runName: runName,
+              displayName: displayName,
+            );
           },
           onNotNow: () {
             _navigatorKey.currentState?.pop();
@@ -518,37 +531,24 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
     );
   }
 
-  void _showStartRunSheet() {
+  Future<void> _showStartRunSheet({
+    PlannedRoute? plannedRoute,
+    bool replaceTop = false,
+  }) async {
     final context = _navigatorKey.currentContext;
     if (context == null || _isStartingRun) return;
-    showModalBottomSheet<void>(
+    final choice = await showModalBottomSheet<RunStartChoice>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Ready to run?',
-                style: Theme.of(sheetContext).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 6),
-              const Text('Slide to start GPS tracking when you are ready.'),
-              const SizedBox(height: 20),
-              SlideToStart(
-                onStart: () {
-                  Navigator.of(sheetContext).pop();
-                  unawaited(_handleStartRun());
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
+      isScrollControlled: true,
+      builder: (_) => RunStartSheet(routeName: plannedRoute?.name),
+    );
+    if (!mounted || choice == null) return;
+    await _handleStartRun(
+      plannedRoute: plannedRoute,
+      replaceTop: replaceTop,
+      runName: choice.customName,
+      displayName: choice.displayName,
     );
   }
 
@@ -713,8 +713,8 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
               ? null
               : () => unawaited(_signInWithGoogle()),
           onHome: _popToHome,
-          onRoutes: () => unawaited(_openRoutePlanner()),
-          onRun: () => unawaited(_handleStartRun()),
+          onRoutes: () => unawaited(_openRoutesHome()),
+          onRun: () => unawaited(_showStartRunSheet()),
           onHistory: () => unawaited(_openHistory(replaceCurrent: true)),
           onGoals: () => unawaited(_openGoals()),
           onSettings: _openSettings,
@@ -822,14 +822,30 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
     }
   }
 
-  void _openActiveRun({PlannedRoute? plannedRoute, bool replaceTop = false}) {
+  void _openActiveRun({
+    PlannedRoute? plannedRoute,
+    bool replaceTop = false,
+    String? runName,
+    String? displayName,
+  }) {
     final route = MaterialPageRoute<void>(
       builder: (context) => ActiveRunScreen(
         bridge: _bridge,
         formatter: _formatter,
         plannedRoute: plannedRoute,
+        runName:
+            displayName ??
+            runName ??
+            plannedRoute?.name ??
+            makeRunName(DateTime.now(), null),
         onRunFinished: (result) {
-          unawaited(_saveAndOpenSummary(result, replaceTop: true));
+          unawaited(
+            _saveAndOpenSummary(
+              result,
+              replaceTop: true,
+              customRunName: runName,
+            ),
+          );
         },
         onExit: () {
           _popToHome();
@@ -876,6 +892,7 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
   Future<void> _saveAndOpenSummary(
     RunResult result, {
     required bool replaceTop,
+    String? customRunName,
   }) async {
     AchievementsSnapshot? beforeRun;
     try {
@@ -886,6 +903,9 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
     while (mounted) {
       try {
         await _repository.saveFromFile(result.runId, result.filePath);
+        if (customRunName != null) {
+          await _repository.updateDetails(result.runId, runName: customRunName);
+        }
         try {
           await _repository.recalculateBadges();
         } catch (_) {
@@ -1008,12 +1028,12 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
         onOpenHome: _popToHome,
         onOpenSettings: () => _openSettings(replaceCurrent: true),
         onOpenGoals: () => unawaited(_openGoals()),
-        onPlanRoute: () => unawaited(_openRoutePlanner()),
+        onPlanRoute: () => unawaited(_openRoutesHome()),
         onOpenProfile: () => unawaited(_openProfile(replaceCurrent: true)),
-        onOpenRun: _showStartRunSheet,
+        onOpenRun: () => unawaited(_showStartRunSheet()),
         onStartRun: () {
           _popToHome();
-          unawaited(_handleStartRun());
+          unawaited(_showStartRunSheet());
         },
       ),
     );
@@ -1024,12 +1044,34 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
     }
   }
 
-  Future<void> _openRoutePlanner() async {
+  Future<void> _openRoutesHome() async {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    await navigator.push<void>(
+      MaterialPageRoute(
+        builder: (_) => SavedRoutesScreen(
+          repository: PlannedRouteRepository(),
+          onPlanRoute: () => _openRoutePlanner(),
+          onRouteSelected: (route) => _openRoutePlanner(initialRoute: route),
+          onHome: _popToHome,
+          onRun: () => unawaited(_showStartRunSheet()),
+          onHistory: () => unawaited(_openHistory(replaceCurrent: true)),
+          onProfile: () => unawaited(_openProfile(replaceCurrent: true)),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openRoutePlanner({PlannedRoute? initialRoute}) async {
     // Use a recent device fix if available; an older run is only a map-center
     // fallback, never labelled as the current position.
-    var center = _lastKnownLocation ?? const LatLng(0, 0);
-    var zoom = _lastKnownLocation == null ? 2.0 : 14.0;
-    if (_lastKnownLocation == null && _recentRuns.isNotEmpty) {
+    var center = initialRoute == null
+        ? _lastKnownLocation ?? const LatLng(0, 0)
+        : LatLng(initialRoute.points.first.lat, initialRoute.points.first.lon);
+    var zoom = initialRoute != null || _lastKnownLocation != null ? 14.0 : 2.0;
+    if (initialRoute == null &&
+        _lastKnownLocation == null &&
+        _recentRuns.isNotEmpty) {
       try {
         final points = await _repository.getPoints(_recentRuns.first.runId);
         final first = points.where((point) => point.accepted).firstOrNull;
@@ -1042,8 +1084,8 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
       }
     }
     if (!mounted) return;
-    _navigatorKey.currentState?.push(
-      MaterialPageRoute<void>(
+    await _navigatorKey.currentState?.push<PlannedRoute>(
+      MaterialPageRoute<PlannedRoute>(
         builder: (_) => RoutePlanningScreen(
           repository: PlannedRouteRepository(),
           directions: OrsDirectionsClient(
@@ -1051,9 +1093,10 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
           ),
           initialCenter: center,
           initialZoom: zoom,
+          initialRoute: initialRoute,
           onCurrentLocation: () => _currentLocation(requestPermission: true),
           onStartRun: (plannedRoute) => unawaited(
-            _handleStartRun(plannedRoute: plannedRoute, replaceTop: true),
+            _showStartRunSheet(plannedRoute: plannedRoute, replaceTop: true),
           ),
         ),
       ),
@@ -1321,9 +1364,10 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
             weeklyGoalKm: _weeklyGoalKm,
             isStartingRun: _isStartingRun,
             formatter: _formatter,
-            onStartRun: () => unawaited(_handleStartRun()),
-            onOpenRun: _showStartRunSheet,
+            onStartRun: () => unawaited(_showStartRunSheet()),
+            onOpenRun: () => unawaited(_showStartRunSheet()),
             onPlanRoute: () => unawaited(_openRoutePlanner()),
+            onOpenRoutes: () => unawaited(_openRoutesHome()),
             onOpenGoals: () => unawaited(_openGoals()),
             onOpenProfile: () => unawaited(_openProfile()),
             achievements: _homeAchievements,

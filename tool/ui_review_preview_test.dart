@@ -25,7 +25,9 @@ import 'package:road_runner/features/home/home_screen.dart';
 import 'package:road_runner/features/profile/profile_screen.dart';
 import 'package:road_runner/features/route_planning/ors_directions_client.dart';
 import 'package:road_runner/features/route_planning/route_planning_screen.dart';
+import 'package:road_runner/features/route_planning/saved_routes_screen.dart';
 import 'package:road_runner/features/run/active_run_screen.dart';
+import 'package:road_runner/features/run/run_start_sheet.dart';
 import 'package:road_runner/features/summary/run_summary.dart';
 import 'package:road_runner/features/summary/summary_screen.dart';
 
@@ -50,6 +52,29 @@ String flutterFontsPath() {
 class _PreviewRoutes extends PlannedRouteRepository {
   @override
   Future<void> save(PlannedRoute route) async {}
+
+  @override
+  Future<List<PlannedRoute>> list() async => const [
+    PlannedRoute(
+      id: 'park',
+      name: 'Park loop',
+      createdAtUtcMs: 1794873600000,
+      points: [
+        PlannedRoutePoint(lat: 6.9271, lon: 79.8612),
+        PlannedRoutePoint(lat: 6.93, lon: 79.864),
+      ],
+    ),
+    PlannedRoute(
+      id: 'coast',
+      name: 'Coast ride',
+      createdAtUtcMs: 1794787200000,
+      activity: RouteActivity.cycle,
+      points: [
+        PlannedRoutePoint(lat: 6.93, lon: 79.864),
+        PlannedRoutePoint(lat: 6.96, lon: 79.87),
+      ],
+    ),
+  ];
 }
 
 ThemeData reviewTheme({bool dark = false}) {
@@ -177,6 +202,60 @@ void main() {
         'MaterialIcons',
       )..addFont(font('$fonts/materialicons-regular.otf'))).load(),
     ]);
+  });
+
+  testWidgets('Routes home preview', (tester) async {
+    phoneSize(tester);
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: previewKey,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: reviewTheme(),
+          home: SavedRoutesScreen(
+            repository: _PreviewRoutes(),
+            onPlanRoute: () async {},
+            onRouteSelected: (_) async {},
+            onHome: () {},
+            onRun: () {},
+            onHistory: () {},
+            onProfile: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await savePreview(tester, 'routes-home');
+  });
+
+  testWidgets('Run setup preview', (tester) async {
+    phoneSize(tester);
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: previewKey,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: reviewTheme(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: FilledButton(
+                  onPressed: () => showModalBottomSheet<RunStartChoice>(
+                    context: context,
+                    showDragHandle: true,
+                    builder: (_) => const RunStartSheet(),
+                  ),
+                  child: const Text('Start run'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Start run'));
+    await tester.pumpAndSettle();
+    await savePreview(tester, 'run-setup');
   });
 
   testWidgets('Home preview', (tester) async {

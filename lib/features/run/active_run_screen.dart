@@ -45,6 +45,7 @@ class ActiveRunScreen extends StatefulWidget {
     required this.onExit,
     this.formatter = const LiveRunFormatter(),
     this.plannedRoute,
+    this.runName,
   });
 
   /// Owned by the parent. Read once in initState; this screen never
@@ -62,6 +63,7 @@ class ActiveRunScreen extends StatefulWidget {
 
   /// Optional planned route to display as a guide on the live map.
   final PlannedRoute? plannedRoute;
+  final String? runName;
 
   static const Key pauseResumeButtonKey = Key('activeRun.pauseResume');
   static const Key stopButtonKey = Key('activeRun.stop');
@@ -233,7 +235,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Header(state: state),
+        _Header(state: state, title: widget.runName),
         const SizedBox(height: AppSpacing.itemGap),
         if (issue != null) ...[
           _IssueBanner(
@@ -312,7 +314,7 @@ class _ActiveRunScreenState extends State<ActiveRunScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(state: state),
+              _Header(state: state, title: widget.runName),
               const SizedBox(height: AppSpacing.small),
               if (issue != null) ...[
                 _IssueBanner(
@@ -429,9 +431,10 @@ class _StatsAndControlsLayout extends MultiChildLayoutDelegate {
 // ─── Header ─────────────────────────────────────────────────────────────────
 
 class _Header extends StatelessWidget {
-  const _Header({required this.state});
+  const _Header({required this.state, this.title});
 
   final ActiveRunState state;
+  final String? title;
 
   @override
   Widget build(BuildContext context) {
@@ -445,7 +448,7 @@ class _Header extends StatelessWidget {
         Semantics(
           header: true,
           child: Text(
-            AppStrings.runTitle,
+            title ?? AppStrings.runTitle,
             style: AppTextStyles.of(context).heading,
           ),
         ),

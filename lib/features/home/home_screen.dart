@@ -49,6 +49,7 @@ class HomeScreen extends StatelessWidget {
     this.onRunSelected,
     this.onOpenSettings,
     this.onPlanRoute,
+    this.onOpenRoutes,
     this.onOpenGoals,
     this.onOpenProfile,
     this.onOpenRun,
@@ -105,6 +106,7 @@ class HomeScreen extends StatelessWidget {
 
   /// Opens the walking route planner when available.
   final VoidCallback? onPlanRoute;
+  final VoidCallback? onOpenRoutes;
   final VoidCallback? onOpenGoals;
   final VoidCallback? onOpenProfile;
   final VoidCallback? onOpenRun;
@@ -240,7 +242,7 @@ class HomeScreen extends StatelessWidget {
           ? AppBottomNavigation(
               selected: MainDestination.home,
               onHome: () {},
-              onRoutes: onPlanRoute!,
+              onRoutes: onOpenRoutes ?? onPlanRoute!,
               onRun: onOpenRun ?? onStartRun,
               onHistory: onOpenHistory,
               onProfile: onOpenProfile!,

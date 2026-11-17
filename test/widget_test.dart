@@ -22,6 +22,7 @@ import 'package:road_runner/features/permissions/permission_gateway.dart';
 import 'package:road_runner/features/permissions/permissions_screen.dart';
 import 'package:road_runner/features/profile/profile_screen.dart';
 import 'package:road_runner/features/run/active_run_screen.dart';
+import 'package:road_runner/features/run/run_start_sheet.dart';
 import 'package:road_runner/features/run/widgets/stop_run_dialog.dart';
 import 'package:road_runner/features/settings/settings_screen.dart';
 import 'package:road_runner/features/shared/app_bottom_navigation.dart';
@@ -246,7 +247,7 @@ void _usePhoneViewport(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
-Future<void> _slideToStart(WidgetTester tester) async {
+Future<void> _slideToStart(WidgetTester tester, {String? runName}) async {
   final double travel =
       tester.getRect(find.byKey(HomeScreen.startRunButtonKey)).width -
       SlideToStart.handleSize -
@@ -255,6 +256,12 @@ Future<void> _slideToStart(WidgetTester tester) async {
     find.byKey(SlideToStart.handleKey),
     Offset(travel * 0.8, 0),
   );
+  await tester.pumpAndSettle();
+  expect(find.byType(RunStartSheet), findsOneWidget);
+  if (runName != null) {
+    await tester.enterText(find.byKey(RunStartSheet.nameFieldKey), runName);
+  }
+  await tester.tap(find.byKey(RunStartSheet.startKey));
   await tester.pumpAndSettle();
 }
 
@@ -952,6 +959,34 @@ void main() {
     await _slideToStart(tester);
     expect(find.byType(ActiveRunScreen), findsOneWidget);
     bridge.dispose();
+  });
+
+  testWidgets('custom run name is shown live and saved with the run', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final bridge = _StubTrackingBridge();
+    addTearDown(bridge.dispose);
+    final repo = _StubRunRepository();
+    await tester.pumpWidget(
+      RoadRunnerApp(
+        bridge: bridge,
+        repository: repo,
+        permissionGateway: _StubPermissionGateway(),
+        checkStartupState: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _slideToStart(tester, runName: 'Park intervals');
+    expect(find.text('Park intervals'), findsOneWidget);
+    await tester.tap(find.byKey(ActiveRunScreen.stopButtonKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(StopRunDialog.finishButtonKey));
+    await tester.pumpAndSettle();
+
+    expect((await repo.get('run-1'))?.runName, 'Park intervals');
+    expect(find.byType(SummaryScreen), findsOneWidget);
   });
 
   testWidgets(

@@ -14,6 +14,7 @@ import '../../data/run_weather_client.dart';
 import 'ors_directions_client.dart';
 import 'place_search_client.dart';
 import 'route_point_picker_sheet.dart';
+import 'saved_routes_screen.dart';
 
 /// Pick two map points or search a destination, preview the walking route,
 /// then save or start a run.
@@ -29,6 +30,7 @@ class RoutePlanningScreen extends StatefulWidget {
     this.onStartRun,
     this.weatherFetcher,
     this.onCurrentLocation,
+    this.initialRoute,
   });
 
   final PlannedRouteRepository repository;
@@ -40,6 +42,7 @@ class RoutePlanningScreen extends StatefulWidget {
   final ValueChanged<PlannedRoute?>? onStartRun;
   final Future<RunWeather?> Function(LatLng)? weatherFetcher;
   final Future<LatLng?> Function()? onCurrentLocation;
+  final PlannedRoute? initialRoute;
 
   static const Key mapKey = Key('routePlanning.map');
   static const Key searchFieldKey = RoutePointPickerSheet.searchFieldKey;
@@ -53,6 +56,7 @@ class RoutePlanningScreen extends StatefulWidget {
       RoutePointPickerSheet.currentLocationKey;
   static const Key activitySelectorKey = Key('routePlanning.activity');
   static const Key inputPanelKey = Key('routePlanning.inputPanel');
+  static const Key savedRoutesKey = Key('routePlanning.savedRoutes');
 
   @override
   State<RoutePlanningScreen> createState() => _RoutePlanningScreenState();
@@ -83,10 +87,25 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
   RunWeather? _weather;
   String? _weatherArea;
   int _weatherRequest = 0;
+  PlannedRoute? _loadedRoute;
 
   @override
   void initState() {
     super.initState();
+    final route = widget.initialRoute;
+    if (route != null) {
+      _loadedRoute = route;
+      _activity = route.activity;
+      _start = LatLng(route.points.first.lat, route.points.first.lon);
+      _finish = LatLng(route.points.last.lat, route.points.last.lon);
+      _startLabel = 'Saved start';
+      _finishLabel = 'Saved destination';
+      _choosingStart = false;
+      _preview = route.points;
+      _name.text = route.name;
+      _loadWeather(_start!, 'Saved start');
+      return;
+    }
     if (widget.initialCenter.latitude != 0 ||
         widget.initialCenter.longitude != 0) {
       _loadWeather(widget.initialCenter, 'Map area');
@@ -188,6 +207,40 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
     }
   }
 
+  Future<void> _openSavedRoutes() async {
+    final route = await Navigator.of(context).push<PlannedRoute>(
+      MaterialPageRoute(
+        builder: (_) => SavedRoutesScreen(repository: widget.repository),
+      ),
+    );
+    if (!mounted || route == null) return;
+    setState(() {
+      _routeGeneration++;
+      _loadedRoute = route;
+      _activity = route.activity;
+      _start = LatLng(route.points.first.lat, route.points.first.lon);
+      _finish = LatLng(route.points.last.lat, route.points.last.lon);
+      _startLabel = 'Saved start';
+      _finishLabel = 'Saved destination';
+      _choosingStart = false;
+      _preview = route.points;
+      _name.text = route.name;
+    });
+    _fitRoute(route.points);
+    unawaited(_loadWeather(_start!, 'Saved start'));
+  }
+
+  void _fitRoute(List<PlannedRoutePoint> points) {
+    if (!mounted || !_mapReady) return;
+    _controller.fitCamera(
+      CameraFit.coordinates(
+        coordinates: [for (final p in points) LatLng(p.lat, p.lon)],
+        padding: const EdgeInsets.all(28),
+        maxZoom: 17,
+      ),
+    );
+  }
+
   Future<void> _findRoute() async {
     if (_start == null || _finish == null || _busy) return;
     final generation = _routeGeneration;
@@ -234,9 +287,10 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
     try {
       final now = DateTime.now().toUtc();
       final route = PlannedRoute(
-        id: 'planned-${now.microsecondsSinceEpoch}',
+        id: _loadedRoute?.id ?? 'planned-${now.microsecondsSinceEpoch}',
         name: _name.text,
-        createdAtUtcMs: now.millisecondsSinceEpoch,
+        createdAtUtcMs:
+            _loadedRoute?.createdAtUtcMs ?? now.millisecondsSinceEpoch,
         points: points,
         activity: _activity,
       );
@@ -297,7 +351,17 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
         : 'Route © Project OSRM';
     final palette = AppPalette.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Plan a route')),
+      appBar: AppBar(
+        title: const Text('Plan a route'),
+        actions: [
+          TextButton.icon(
+            key: RoutePlanningScreen.savedRoutesKey,
+            onPressed: _openSavedRoutes,
+            icon: const Icon(Icons.bookmark_outline_rounded),
+            label: const Text('Saved'),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
@@ -313,7 +377,15 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                       initialZoom: widget.initialZoom,
                       maxZoom: 20,
                       backgroundColor: palette.mapBackground,
-                      onMapReady: () => _mapReady = true,
+                      onMapReady: () {
+                        _mapReady = true;
+                        final points = _preview;
+                        if (points != null) {
+                          WidgetsBinding.instance.addPostFrameCallback(
+                            (_) => _fitRoute(points),
+                          );
+                        }
+                      },
                       onTap: (_, point) => _selectPoint(point),
                     ),
                     children: [
@@ -577,6 +649,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                                   _finishLabel = 'Choose end';
                                   _choosingStart = true;
                                   _preview = null;
+                                  _loadedRoute = null;
                                 });
                               },
                         child: const Text('Clear'),
@@ -597,7 +670,11 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                             : OutlinedButton(
                                 key: RoutePlanningScreen.saveKey,
                                 onPressed: _busy ? null : _save,
-                                child: const Text('Save route'),
+                                child: Text(
+                                  _loadedRoute == null
+                                      ? 'Save route'
+                                      : 'Update route',
+                                ),
                               ),
                       ),
                     ],

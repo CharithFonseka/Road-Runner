@@ -18,6 +18,46 @@ class _RecordingRoutes extends PlannedRouteRepository {
 }
 
 void main() {
+  testWidgets('opens a saved route and updates its existing record', (
+    tester,
+  ) async {
+    final routes = _RecordingRoutes();
+    const saved = PlannedRoute(
+      id: 'park',
+      name: 'Park loop',
+      createdAtUtcMs: 1731800000000,
+      activity: RouteActivity.run,
+      points: [
+        PlannedRoutePoint(lat: 6.9271, lon: 79.8612),
+        PlannedRoutePoint(lat: 6.93, lon: 79.864),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RoutePlanningScreen(
+          repository: routes,
+          directions: OrsDirectionsClient(apiKey: ''),
+          initialCenter: const LatLng(6.9271, 79.8612),
+          initialRoute: saved,
+          styleFuture: Completer<vt.Style>().future,
+          weatherFetcher: (_) async => null,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Run route ready'), findsOneWidget);
+    expect(find.text('Update route'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(RoutePlanningScreen.nameFieldKey),
+      'Park loop revised',
+    );
+    await tester.tap(find.byKey(RoutePlanningScreen.saveKey));
+    await tester.pumpAndSettle();
+    expect(routes.saved?.id, 'park');
+    expect(routes.saved?.name, 'Park loop revised');
+  });
+
   testWidgets('cycling mode plans with bike profile and saves that activity', (
     tester,
   ) async {

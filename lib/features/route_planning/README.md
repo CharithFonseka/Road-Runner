@@ -1,5 +1,10 @@
 # Route planning
 
+The **Routes** bottom tab opens a Routes home screen. It shows **Plan route**
+above the saved routes list. Selecting a saved route reopens it on the map;
+editing and tapping **Update route** saves changes to the same record. The
+planner also has a **Saved** shortcut in its app bar.
+
 The planner offers Walk, Run, and Cycle routes. Start and Destination each open
 a focused bottom picker with place search, **Use my location**, and **Pick on
 map**. A foreground location fix is requested only after the user taps that
