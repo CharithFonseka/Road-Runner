@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Split;
 import 'package:flutter/services.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'bridge/native_tracking_bridge.dart';
@@ -589,6 +591,19 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
     }
   }
 
+  String _formatSignInError(Object error) {
+    if (error is GoogleSignInException) {
+      final String detail = error.description?.trim() ?? '';
+      return detail.isNotEmpty
+          ? 'Google sign-in failed (${error.code.name}): $detail'
+          : 'Google sign-in failed (${error.code.name}).';
+    }
+    if (error is FirebaseAuthException) {
+      return 'Firebase sign-in failed (${error.code}).';
+    }
+    return 'Could not sign in with Google. Please try again.';
+  }
+
   Future<void> _signInWithGoogle() async {
     final AccountGateway? gateway = _accountGateway;
     if (gateway == null || _accountBusy) return;
@@ -600,11 +615,15 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
       if (!mounted) return;
       _accountUser = user;
       if (user != null) {
-        _accountProfile = await gateway.loadProfile(user.uid);
+        try {
+          _accountProfile = await gateway.loadProfile(user.uid);
+        } catch (_) {
+          // Allow sign-in to succeed even if Firestore profile read fails.
+        }
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
-      _accountError = 'Could not sign in with Google. Please try again.';
+      _accountError = _formatSignInError(error);
     } finally {
       _accountBusy = false;
       _notifyShell();
