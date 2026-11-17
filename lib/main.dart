@@ -599,7 +599,10 @@ class _RoadRunnerAppState extends State<RoadRunnerApp>
           : 'Google sign-in failed (${error.code.name}).';
     }
     if (error is FirebaseAuthException) {
-      return 'Firebase sign-in failed (${error.code}).';
+      final String detail = error.message?.trim() ?? '';
+      return detail.isNotEmpty
+          ? 'Firebase sign-in failed (${error.code}): $detail'
+          : 'Firebase sign-in failed (${error.code}).';
     }
     return 'Could not sign in with Google. Please try again.';
   }
