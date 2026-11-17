@@ -346,6 +346,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
   @override
   Widget build(BuildContext context) {
     final preview = _preview;
+    final compact = MediaQuery.sizeOf(context).width < 360;
     final routeCredit = widget.directions.usesOpenRouteService
         ? 'Route © openrouteservice.org by HeiGIT'
         : 'Route © Project OSRM';
@@ -491,32 +492,47 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                                       BorderSide(color: palette.buttonOutline),
                                     ),
                                   ),
-                                  segments: const [
-                                    ButtonSegment(
-                                      value: RouteActivity.walk,
-                                      icon: Icon(
-                                        Icons.directions_walk_rounded,
-                                        size: 18,
-                                      ),
-                                      label: Text('Walk'),
-                                    ),
-                                    ButtonSegment(
-                                      value: RouteActivity.run,
-                                      icon: Icon(
-                                        Icons.directions_run_rounded,
-                                        size: 18,
-                                      ),
-                                      label: Text('Run'),
-                                    ),
-                                    ButtonSegment(
-                                      value: RouteActivity.cycle,
-                                      icon: Icon(
-                                        Icons.directions_bike_rounded,
-                                        size: 18,
-                                      ),
-                                      label: Text('Cycle'),
-                                    ),
-                                  ],
+                                  segments: compact
+                                      ? const [
+                                          ButtonSegment(
+                                            value: RouteActivity.walk,
+                                            label: Text('Walk'),
+                                          ),
+                                          ButtonSegment(
+                                            value: RouteActivity.run,
+                                            label: Text('Run'),
+                                          ),
+                                          ButtonSegment(
+                                            value: RouteActivity.cycle,
+                                            label: Text('Cycle'),
+                                          ),
+                                        ]
+                                      : const [
+                                          ButtonSegment(
+                                            value: RouteActivity.walk,
+                                            icon: Icon(
+                                              Icons.directions_walk_rounded,
+                                              size: 18,
+                                            ),
+                                            label: Text('Walk'),
+                                          ),
+                                          ButtonSegment(
+                                            value: RouteActivity.run,
+                                            icon: Icon(
+                                              Icons.directions_run_rounded,
+                                              size: 18,
+                                            ),
+                                            label: Text('Run'),
+                                          ),
+                                          ButtonSegment(
+                                            value: RouteActivity.cycle,
+                                            icon: Icon(
+                                              Icons.directions_bike_rounded,
+                                              size: 18,
+                                            ),
+                                            label: Text('Cycle'),
+                                          ),
+                                        ],
                                   selected: {_activity},
                                   onSelectionChanged: (selection) =>
                                       _selectActivity(selection.first),
@@ -622,7 +638,11 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                   Text(
                     preview != null
                         ? '${_activity.label} route ready · ${_routeDistanceKm(preview).toStringAsFixed(2)} km'
-                        : 'Choose a start and destination above, or tap the map to set each point.',
+                        : _start == null
+                        ? 'Choose your start point.'
+                        : _finish == null
+                        ? 'Now choose your destination.'
+                        : 'Finding your ${_activity.label.toLowerCase()} route...',
                   ),
                   if (preview != null) ...[
                     const SizedBox(height: 8),
@@ -634,51 +654,55 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: _busy
-                            ? null
-                            : () {
-                                setState(() {
-                                  _routeGeneration++;
-                                  _start = null;
-                                  _finish = null;
-                                  _startLabel = 'Choose start';
-                                  _finishLabel = 'Choose end';
-                                  _choosingStart = true;
-                                  _preview = null;
-                                  _loadedRoute = null;
-                                });
-                              },
-                        child: const Text('Clear'),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: preview == null
-                            ? FilledButton(
-                                key: RoutePlanningScreen.findKey,
-                                onPressed:
-                                    _start != null && _finish != null && !_busy
-                                    ? _findRoute
-                                    : null,
-                                child: Text(
-                                  'Find ${_activity.label.toLowerCase()} route',
+                  if (_start != null || _finish != null || preview != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _routeGeneration++;
+                                    _start = null;
+                                    _finish = null;
+                                    _startLabel = 'Choose start';
+                                    _finishLabel = 'Choose end';
+                                    _choosingStart = true;
+                                    _preview = null;
+                                    _loadedRoute = null;
+                                  });
+                                },
+                          child: const Text('Clear'),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: preview == null
+                              ? FilledButton(
+                                  key: RoutePlanningScreen.findKey,
+                                  onPressed:
+                                      _start != null &&
+                                          _finish != null &&
+                                          !_busy
+                                      ? _findRoute
+                                      : null,
+                                  child: Text(
+                                    'Find ${_activity.label.toLowerCase()} route',
+                                  ),
+                                )
+                              : OutlinedButton(
+                                  key: RoutePlanningScreen.saveKey,
+                                  onPressed: _busy ? null : _save,
+                                  child: Text(
+                                    _loadedRoute == null
+                                        ? 'Save route'
+                                        : 'Update route',
+                                  ),
                                 ),
-                              )
-                            : OutlinedButton(
-                                key: RoutePlanningScreen.saveKey,
-                                onPressed: _busy ? null : _save,
-                                child: Text(
-                                  _loadedRoute == null
-                                      ? 'Save route'
-                                      : 'Update route',
-                                ),
-                              ),
-                      ),
-                    ],
-                  ),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (_activity == RouteActivity.run &&
                       widget.onStartRun != null) ...[
                     const SizedBox(height: 8),

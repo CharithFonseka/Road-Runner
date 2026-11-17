@@ -44,5 +44,23 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: Gotham
+      fonts:
+        - asset: assets/fonts/Gotham-Book.otf
+          weight: 400
+        - asset: assets/fonts/Gotham-BookItalic.otf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/Gotham-Medium.otf
+          weight: 500
+        - asset: assets/fonts/Gotham-MediumItalic.otf
+          weight: 500
+          style: italic
+        - asset: assets/fonts/Gotham-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Gotham-BoldItalic.otf
+          weight: 700
+          style: italic
   assets:
     - assets/illustrations/

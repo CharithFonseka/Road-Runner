@@ -154,26 +154,20 @@ class _SummaryScreenState extends State<SummaryScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: FilledButton(
+                  child: FilledButton.icon(
                     key: SummaryScreen.homeButtonKey,
                     onPressed: widget.onBackToHome,
-                    child: const Text(
-                      AppStrings.backToHome,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    icon: const Icon(Icons.home_rounded, size: 19),
+                    label: const Text('Home'),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.itemGap),
                 Expanded(
-                  child: OutlinedButton(
+                  child: OutlinedButton.icon(
                     key: SummaryScreen.historyButtonKey,
                     onPressed: widget.onOpenHistory,
-                    child: const Text(
-                      AppStrings.viewHistory,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    icon: const Icon(Icons.history_rounded, size: 19),
+                    label: const Text('History'),
                   ),
                 ),
               ],

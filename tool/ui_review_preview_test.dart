@@ -13,7 +13,6 @@ import 'package:flutter_map_vector_tiles/flutter_map_vector_tiles.dart' as vt;
 import 'package:latlong2/latlong.dart';
 import 'package:road_runner/bridge/mock_tracking_bridge.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
-import 'package:road_runner/core/theme/app_text_styles.dart';
 import 'package:road_runner/data/planned_route.dart';
 import 'package:road_runner/data/current_weather_client.dart';
 import 'package:road_runner/data/planned_route_repository.dart';
@@ -77,28 +76,8 @@ class _PreviewRoutes extends PlannedRouteRepository {
   ];
 }
 
-ThemeData reviewTheme({bool dark = false}) {
-  final base = dark ? AppTheme.dark() : AppTheme.light();
-  final buttonText = WidgetStatePropertyAll<TextStyle>(
-    AppTextStyles.button.copyWith(fontFamily: 'Roboto'),
-  );
-  return base.copyWith(
-    appBarTheme: base.appBarTheme.copyWith(
-      titleTextStyle: base.appBarTheme.titleTextStyle?.copyWith(
-        fontFamily: 'Roboto',
-      ),
-    ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: base.filledButtonTheme.style!.copyWith(textStyle: buttonText),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: base.outlinedButtonTheme.style!.copyWith(textStyle: buttonText),
-    ),
-    textButtonTheme: TextButtonThemeData(
-      style: base.textButtonTheme.style!.copyWith(textStyle: buttonText),
-    ),
-  );
-}
+ThemeData reviewTheme({bool dark = false}) =>
+    dark ? AppTheme.dark() : AppTheme.light();
 
 final previewAchievements = AchievementsSnapshot(
   weeklyDistanceKm: 8.5,
@@ -197,6 +176,9 @@ void main() {
             ..addFont(font('$fonts/roboto-regular.ttf'))
             ..addFont(font('$fonts/roboto-bold.ttf')))
           .load(),
+      (FontLoader(
+        'Gotham',
+      )..addFont(font('assets/fonts/Gotham-Book.otf'))).load(),
       (FontLoader('Ahem')..addFont(font('$fonts/roboto-regular.ttf'))).load(),
       (FontLoader(
         'MaterialIcons',
@@ -433,5 +415,31 @@ void main() {
     await tester.tap(find.byKey(RoutePlanningScreen.startPointKey));
     await tester.pumpAndSettle();
     await savePreview(tester, 'route-point-picker');
+  });
+
+  testWidgets('Small phone route planner preview', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 568);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: previewKey,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: reviewTheme(),
+          home: RoutePlanningScreen(
+            repository: _PreviewRoutes(),
+            directions: OrsDirectionsClient(apiKey: 'preview-key'),
+            initialCenter: const LatLng(6.9271, 79.8612),
+            styleFuture: Completer<vt.Style>().future,
+            weatherFetcher: (_) async => null,
+            onStartRun: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await savePreview(tester, 'route-planner-small');
   });
 }
