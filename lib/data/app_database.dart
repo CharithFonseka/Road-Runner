@@ -7,7 +7,7 @@ import 'package:sqflite/sqflite.dart';
 /// Manages the SQLite database lifecycle, schema initialization, and connections.
 class AppDatabase {
   static const String databaseName = 'road_runner.db';
-  static const int databaseVersion = 6;
+  static const int databaseVersion = 7;
 
   // Table names
   static const String tableRuns = 'runs';
@@ -174,7 +174,8 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS $tablePlannedRoutes (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        created_at_utc_ms INTEGER NOT NULL
+        created_at_utc_ms INTEGER NOT NULL,
+        activity TEXT NOT NULL DEFAULT 'run'
       );
     ''');
     await db.execute('''
@@ -247,6 +248,16 @@ class AppDatabase {
       // combined schema from main.
       await _migrateEarlyRoutePreview(db);
       await _createPlannedRouteTables(db);
+    }
+    if (oldVersion < 7) {
+      final columns = (await db.rawQuery(
+        'PRAGMA table_info($tablePlannedRoutes)',
+      )).map((row) => row['name'] as String).toSet();
+      if (!columns.contains('activity')) {
+        await db.execute(
+          "ALTER TABLE $tablePlannedRoutes ADD COLUMN activity TEXT NOT NULL DEFAULT 'run'",
+        );
+      }
     }
   }
 

@@ -52,8 +52,13 @@ class RunEnrichmentService {
         isUtc: true,
       ).toLocal();
       final fallbackDay = run.localStartDay ?? localDay(localStart);
-      final fallbackName =
-          run.runName ?? makeRunName(localStart, run.placeName);
+      final automaticName = makeRunName(localStart, run.placeName);
+      final genericName = makeRunName(localStart, null);
+      final hasCustomName =
+          run.runName != null &&
+          run.runName != automaticName &&
+          run.runName != genericName;
+      final fallbackName = run.runName ?? automaticName;
 
       // 1. Ensure fallback name and calendar day are saved
       if (run.runName == null || run.localStartDay == null) {
@@ -84,7 +89,9 @@ class RunEnrichmentService {
       final place = await placeFuture;
 
       final resolvedPlace = place ?? run.placeName;
-      final resolvedName = makeRunName(localStart, resolvedPlace);
+      final resolvedName = hasCustomName
+          ? run.runName!
+          : makeRunName(localStart, resolvedPlace);
 
       // 4. Update details in SQLite
       await repository.updateDetails(

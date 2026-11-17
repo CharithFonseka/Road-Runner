@@ -48,6 +48,7 @@ class RecentRunsCard extends StatelessWidget {
     required this.onViewAll,
     required this.onRowSelected,
     this.onRetry,
+    this.compact = false,
   });
 
   final RecentRunsStatus status;
@@ -60,6 +61,7 @@ class RecentRunsCard extends StatelessWidget {
 
   /// Shown as "Try again" in the error state; null hides the button.
   final VoidCallback? onRetry;
+  final bool compact;
 
   static const Key viewAllKey = Key('recentRuns.viewAll');
   static const Key listKey = Key('recentRuns.list');
@@ -86,7 +88,7 @@ class RecentRunsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(16, 6, 8, 2),
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 3, 8, 0),
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 minHeight: AppSpacing.minTouchTarget,
@@ -118,6 +120,7 @@ class RecentRunsCard extends StatelessWidget {
                           end: 4,
                         ),
                         textStyle: const TextStyle(
+                          fontFamily: 'Roboto',
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
@@ -176,6 +179,7 @@ class RecentRunsCard extends StatelessWidget {
           itemBuilder: (context, i) => _RunRow(
             key: rowKey(i),
             row: rows[i],
+            compact: compact,
             onTap: () => onRowSelected(rows[i]),
           ),
         );
@@ -186,9 +190,15 @@ class RecentRunsCard extends StatelessWidget {
 // ─── Run row ────────────────────────────────────────────────────────────────
 
 class _RunRow extends StatelessWidget {
-  const _RunRow({super.key, required this.row, required this.onTap});
+  const _RunRow({
+    super.key,
+    required this.row,
+    required this.compact,
+    required this.onTap,
+  });
 
   final RecentRunRow row;
+  final bool compact;
   final VoidCallback onTap;
 
   @override
@@ -214,7 +224,12 @@ class _RunRow extends StatelessWidget {
             minHeight: AppSpacing.minTouchTarget,
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              compact ? 6 : 10,
+              16,
+              compact ? 6 : 10,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -223,25 +238,38 @@ class _RunRow extends StatelessWidget {
                     Expanded(
                       child: Text(
                         row.runName ?? row.dateLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.of(context).body.copyWith(
-                          fontSize: 16,
+                          fontSize: compact ? 15 : 16,
                           fontWeight: FontWeight.w700,
                           height: 1.3,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    if (compact && row.runName != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        row.dateLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.of(context).caption
+                            .copyWith(fontSize: 11),
+                      ),
+                    ],
+                    const SizedBox(width: 4),
                     Icon(
                       Icons.chevron_right_rounded,
-                      size: 20,
+                      size: compact ? 18 : 20,
                       color: palette.textSecondary,
                     ),
                   ],
                 ),
-                if (row.runName != null)
+                if (!compact && row.runName != null)
                   Text(row.dateLabel, style: AppTextStyles.of(context).caption),
-                const SizedBox(height: 6),
+                SizedBox(height: compact ? 4 : 6),
                 _Trio(
+                  compact: compact,
                   stats: [
                     (row.distance, AppStrings.statDistance),
                     (row.duration, AppStrings.statDuration),
@@ -260,12 +288,43 @@ class _RunRow extends StatelessWidget {
 /// Three left-aligned value/label pairs; stacked as "label  value" lines
 /// when a value would not fit (narrow phones, large text).
 class _Trio extends StatelessWidget {
-  const _Trio({required this.stats});
+  const _Trio({required this.stats, required this.compact});
 
   final List<(String, String)> stats;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      final valueStyle = AppTextStyles.of(context).statValue
+          .copyWith(fontSize: 16);
+      final labelStyle = AppTextStyles.of(context).caption
+          .copyWith(fontSize: 11);
+      return Row(
+        children: [
+          for (final (value, label) in stats)
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: valueStyle,
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: labelStyle,
+                  ),
+                ],
+              ),
+            ),
+        ],
+      );
+    }
     final TextScaler scaler = MediaQuery.textScalerOf(context);
     final TextStyle valueStyle = AppTextStyles.of(context).statValue
         .copyWith(fontSize: 18);

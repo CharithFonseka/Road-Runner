@@ -1,21 +1,30 @@
 # Route planning
 
-Home opens the walking route planner. Tap the map once for a start point and
-again for a finish point, request one route preview, name it, and save it to the
-local SQLite database. Map tiles come from OpenFreeMap; route geometry comes
-from OpenRouteService only when **Find walking route** is pressed. The saved
-geometry remains available offline.
+The **Routes** bottom tab opens a Routes home screen. It shows **Plan route**
+above the saved routes list. Selecting a saved route reopens it on the map;
+editing and tapping **Update route** saves changes to the same record. The
+planner also has a **Saved** shortcut in its app bar.
 
-An OpenRouteService API key is required for route lookup. For local development:
+The planner offers Walk, Run, and Cycle routes. Start and Destination each open
+a focused bottom picker with place search, **Use my location**, and **Pick on
+map**. A foreground location fix is requested only after the user taps that
+control; location permission is requested when needed. Walk and Run use
+pedestrian routing; Cycle uses bicycle routing. Without an OpenRouteService key
+the planner uses the public OSRM foot and bike services. The map uses OpenFreeMap
+tiles.
+
+Current weather appears for the selected start area when available. The user
+can name and save a planned route locally with its activity. **Save & start
+run** is offered for Run routes and begins GPS recording through the app's
+permission flow; the live map shows the planned path alongside the recorded
+path. **Start run** works before a route is planned. Walk and Cycle routes can
+be saved, while run tracking, streaks, and badges remain tied to running.
+
+An optional OpenRouteService key can be supplied for local development:
 
 ```sh
 flutter run --dart-define=ORS_API_KEY=your_key
 ```
 
-Keep the key out of source control. A key included in a client app can be
-extracted from its build, so a production release should use a server proxy or
-an appropriately restricted key. With no key, the planner still opens but
-route lookup is disabled.
-
-This screen saves planned routes. Selection and overlay during a run belong to
-the follow-route phase.
+Keep the key out of source control. A client app cannot keep an embedded key
+secret, so a production release should use a proxy or a restricted key.

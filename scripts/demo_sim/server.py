@@ -41,7 +41,7 @@ def fetch_osrm_random_route() -> list[list[float]] | None:
     waypoints.append(waypoints[0])  # close the loop
 
     url = (
-        "https://router.project-osrm.org/route/v1/foot/"
+        "https://routing.openstreetmap.de/routed-foot/route/v1/driving/"
         + ";".join(waypoints)
         + "?overview=full&geometries=geojson"
     )

@@ -46,6 +46,8 @@ Future<_Calls> _pump(
   Size size = const Size(360, 800),
   double textScale = 1.0,
   bool settle = true,
+  ThemeMode themeMode = ThemeMode.system,
+  ValueChanged<ThemeMode>? onThemeModeChanged,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
@@ -65,6 +67,8 @@ Future<_Calls> _pump(
           onOpenHome: () => c.home++,
           onOpenHistory: () => c.history++,
           onManagePermissions: () => c.manage++,
+          themeMode: themeMode,
+          onThemeModeChanged: onThemeModeChanged,
         ),
       ),
     ),
@@ -131,6 +135,26 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
+  testWidgets('appearance selector offers system, light and dark', (
+    tester,
+  ) async {
+    ThemeMode? chosen;
+    await _pump(
+      tester,
+      FakePermissionGateway(),
+      onThemeModeChanged: (mode) => chosen = mode,
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(SettingsScreen.appearanceKey),
+      300,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Auto'), findsOneWidget);
+    expect(find.text('Light'), findsOneWidget);
+    await tester.tap(find.text('Dark'));
+    expect(chosen, ThemeMode.dark);
+  });
+
   group('Theme', () {
     testWidgets('dark Settings uses night surfaces and permission colors', (
       tester,
@@ -433,55 +457,10 @@ void main() {
       expect((c.back, c.home), (1, 0));
     });
 
-    testWidgets('menu opens the drawer with Settings selected', (tester) async {
-      final SemanticsHandle handle = tester.ensureSemantics();
+    testWidgets('Settings has no navigation drawer', (tester) async {
       await _pump(tester, _Gateway());
-      await tester.tap(find.byKey(SettingsScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<AppNavigationDrawer>(find.byType(AppNavigationDrawer))
-            .selected,
-        AppDestination.settings,
-      );
-      expect(
-        tester.getSemantics(
-          find.byKey(
-            AppNavigationDrawer.destinationKey(AppDestination.settings),
-          ),
-        ),
-        containsSemantics(isSelected: true),
-      );
-      handle.dispose();
-    });
-
-    for (final AppDestination d in AppDestination.values) {
-      testWidgets('drawer ${d.name}', (tester) async {
-        final _Calls c = await _pump(tester, _Gateway());
-        await tester.tap(find.byKey(SettingsScreen.menuButtonKey));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(AppNavigationDrawer.destinationKey(d)));
-        await tester.pumpAndSettle();
-        expect(find.byType(AppNavigationDrawer), findsNothing);
-        expect(
-          (c.home, c.history, c.back),
-          switch (d) {
-            AppDestination.home => (1, 0, 0),
-            AppDestination.history => (0, 1, 0),
-            AppDestination.settings => (0, 0, 0),
-          },
-        );
-      });
-    }
-
-    testWidgets('system Back closes the drawer first', (tester) async {
-      await _pump(tester, _Gateway());
-      await tester.tap(find.byKey(SettingsScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
       expect(find.byType(AppNavigationDrawer), findsNothing);
-      expect(find.byType(SettingsScreen), findsOneWidget);
+      expect(tester.widget<Scaffold>(find.byType(Scaffold)).drawer, isNull);
     });
   });
 
@@ -599,7 +578,6 @@ void main() {
       );
       for (final Key k in [
         SettingsScreen.backButtonKey,
-        SettingsScreen.menuButtonKey,
         SettingsScreen.manageButtonKey,
         SettingsScreen.openAppSettingsKey,
       ]) {
@@ -648,7 +626,6 @@ void main() {
       );
       for (final (Key k, String tip) in [
         (SettingsScreen.backButtonKey, AppStrings.settingsBack),
-        (SettingsScreen.menuButtonKey, AppStrings.homeOpenMenu),
       ]) {
         expect(
           tester.getSemantics(find.byKey(k)),

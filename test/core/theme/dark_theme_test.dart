@@ -227,17 +227,18 @@ void main() {
   group('Light compatibility', () {
     final ThemeData light = AppTheme.light();
 
-    test('light theme keeps every pre-dark-mode value', () {
+    test('light theme keeps its palette and uses shared Gotham typography', () {
       expect(light.brightness, Brightness.light);
       expect(light.colorScheme, AppTheme.colorScheme);
       expect(light.scaffoldBackgroundColor, AppColors.sand);
       // ThemeData merges the supplied TextTheme onto its typography base, so
-      // compare against a plain ThemeData given the original text theme.
+      // compare against a plain ThemeData using the same font and text theme.
       expect(
         light.textTheme,
         ThemeData(
           useMaterial3: true,
           colorScheme: AppTheme.colorScheme,
+          fontFamily: AppTextStyles.fontFamily,
           textTheme: AppTextStyles.textTheme,
         ).textTheme,
       );

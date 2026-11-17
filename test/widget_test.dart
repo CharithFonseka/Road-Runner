@@ -9,6 +9,7 @@ import 'package:road_runner/bridge/tracking_bridge.dart';
 import 'package:road_runner/core/contract/contract.dart';
 import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
+import 'package:road_runner/core/theme/theme_preference.dart';
 import 'package:road_runner/data/run.dart';
 import 'package:road_runner/data/run_repository.dart';
 import 'package:road_runner/domain/stats/stats.dart';
@@ -19,13 +20,25 @@ import 'package:road_runner/features/home/widgets/recent_runs_card.dart';
 import 'package:road_runner/features/home/widgets/slide_to_start.dart';
 import 'package:road_runner/features/permissions/permission_gateway.dart';
 import 'package:road_runner/features/permissions/permissions_screen.dart';
+import 'package:road_runner/features/profile/profile_screen.dart';
 import 'package:road_runner/features/run/active_run_screen.dart';
+import 'package:road_runner/features/run/run_start_sheet.dart';
 import 'package:road_runner/features/run/widgets/stop_run_dialog.dart';
 import 'package:road_runner/features/settings/settings_screen.dart';
-import 'package:road_runner/features/shared/app_navigation_drawer.dart';
+import 'package:road_runner/features/shared/app_bottom_navigation.dart';
 import 'package:road_runner/features/splash/splash_screen.dart';
 import 'package:road_runner/features/summary/summary_screen.dart';
 import 'package:road_runner/main.dart';
+
+class _MemoryThemePreference extends ThemePreference {
+  ThemeMode stored = ThemeMode.system;
+
+  @override
+  Future<ThemeMode> load() async => stored;
+
+  @override
+  Future<void> save(ThemeMode mode) async => stored = mode;
+}
 
 class _StubTrackingBridge implements TrackingBridge {
   final StreamController<TrackingEvent> _controller =
@@ -78,6 +91,7 @@ class _StubRunRepository implements RunRepository {
   Completer<void>? listGate;
   int failListRemaining = 0;
   int failSaveRemaining = 0;
+  final bool awardFirstRun;
 
   _StubRunRepository({
     List<Run>? runs,
@@ -86,6 +100,7 @@ class _StubRunRepository implements RunRepository {
     this.listGate,
     this.failListRemaining = 0,
     this.failSaveRemaining = 0,
+    this.awardFirstRun = false,
   }) : runs = runs ?? [],
        pointsByRun = pointsByRun ?? {},
        pausesByRun = pausesByRun ?? {};
@@ -190,7 +205,10 @@ class _StubRunRepository implements RunRepository {
   }
 
   @override
-  Future<List<BadgeAward>> getBadgesForRun(String runId) async => [];
+  Future<List<BadgeAward>> getBadgesForRun(String runId) async =>
+      awardFirstRun && runs.any((run) => run.id == runId)
+      ? [BadgeAward(runId, BadgeType.firstRun)]
+      : [];
 
   @override
   Future<int> getCurrentStreak() async => 0;
@@ -229,7 +247,7 @@ void _usePhoneViewport(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
-Future<void> _slideToStart(WidgetTester tester) async {
+Future<void> _slideToStart(WidgetTester tester, {String? runName}) async {
   final double travel =
       tester.getRect(find.byKey(HomeScreen.startRunButtonKey)).width -
       SlideToStart.handleSize -
@@ -239,9 +257,81 @@ Future<void> _slideToStart(WidgetTester tester) async {
     Offset(travel * 0.8, 0),
   );
   await tester.pumpAndSettle();
+  expect(find.byType(RunStartSheet), findsOneWidget);
+  if (runName != null) {
+    await tester.enterText(find.byKey(RunStartSheet.nameFieldKey), runName);
+  }
+  await tester.tap(find.byKey(RunStartSheet.startKey));
+  await tester.pumpAndSettle();
 }
 
 void main() {
+  testWidgets('bottom bar opens profile and a deliberate Run start sheet', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final bridge = _StubTrackingBridge();
+    addTearDown(bridge.dispose);
+    await tester.pumpWidget(
+      RoadRunnerApp(
+        bridge: bridge,
+        repository: _StubRunRepository(),
+        permissionGateway: _StubPermissionGateway(),
+        themePreference: _MemoryThemePreference(),
+        checkStartupState: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(AppBottomNavigation.destinationKey(MainDestination.profile)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileScreen), findsOneWidget);
+    await tester.tap(
+      find.byKey(AppBottomNavigation.destinationKey(MainDestination.home)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(AppBottomNavigation.destinationKey(MainDestination.run)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Ready to run?'), findsOneWidget);
+    expect(find.byType(ActiveRunScreen), findsNothing);
+  });
+
+  testWidgets('home appearance button switches and saves both themes', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final preference = _MemoryThemePreference();
+    final bridge = _StubTrackingBridge();
+    addTearDown(bridge.dispose);
+    await tester.pumpWidget(
+      RoadRunnerApp(
+        bridge: bridge,
+        repository: _StubRunRepository(),
+        permissionGateway: _StubPermissionGateway(),
+        themePreference: preference,
+        checkStartupState: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(HomeScreen.themeButtonKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
+    expect(preference.stored, ThemeMode.dark);
+    await tester.tap(find.byKey(HomeScreen.themeButtonKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.light,
+    );
+    expect(preference.stored, ThemeMode.light);
+  });
+
   testWidgets('RoadRunnerApp shows SplashScreen until startup completes', (
     WidgetTester tester,
   ) async {
@@ -285,7 +375,7 @@ void main() {
   });
 
   testWidgets(
-    'Home shows full recent runs sorted newest-first and opens Summary with partial split',
+    'Home highlights the latest run and opens Summary with partial split',
     (WidgetTester tester) async {
       _usePhoneViewport(tester);
       final bridge = _StubTrackingBridge();
@@ -337,10 +427,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(RecentRunsCard.rowKey(0)), findsOneWidget);
-      expect(find.byKey(RecentRunsCard.rowKey(1)), findsOneWidget);
+      expect(find.byKey(RecentRunsCard.rowKey(0)), findsOneWidget);
       expect(find.text('1.50 km'), findsOneWidget);
       expect(find.text('5.00 km'), findsOneWidget);
 
+      await tester.ensureVisible(find.byKey(RecentRunsCard.rowKey(0)));
       await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
       await tester.pumpAndSettle();
 
@@ -401,6 +492,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.byKey(RecentRunsCard.rowKey(0)));
       await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
       await tester.pumpAndSettle();
 
@@ -414,7 +506,7 @@ void main() {
   );
 
   testWidgets(
-    'SettingsScreen is reachable from Home and History drawer without stacking',
+    'SettingsScreen is reachable from Home and History without stacking',
     (WidgetTester tester) async {
       _usePhoneViewport(tester);
       final bridge = _StubTrackingBridge();
@@ -439,20 +531,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(HomeScreen), findsOneWidget);
 
-      // From Home drawer -> History -> History drawer -> Settings.
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
+      // From Home bottom navigation -> History -> Settings gear.
       await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.history)),
+        find.byKey(AppBottomNavigation.destinationKey(MainDestination.history)),
       );
       await tester.pumpAndSettle();
       expect(find.byType(HistoryScreen), findsOneWidget);
 
-      await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.settings)),
-      );
+      await tester.tap(find.byKey(HistoryScreen.settingsButtonKey));
       await tester.pumpAndSettle();
       expect(find.byType(SettingsScreen), findsOneWidget);
       expect(find.byType(HistoryScreen), findsNothing);
@@ -517,10 +603,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.history)),
+        find.byKey(AppBottomNavigation.destinationKey(MainDestination.history)),
       );
       await tester.pumpAndSettle();
       expect(find.byType(HistoryScreen), findsOneWidget);
@@ -549,7 +633,9 @@ void main() {
       expect(find.byType(HistoryScreen), findsNothing);
 
       // Delete a run from Summary -> returns to History and refreshes list.
-      await tester.tap(find.byKey(RecentRunsCard.viewAllKey));
+      await tester.tap(
+        find.byKey(AppBottomNavigation.destinationKey(MainDestination.history)),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(HistoryScreen.runTileKey('run-42')));
       await tester.pumpAndSettle();
@@ -616,7 +702,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open History from Home
-      await tester.tap(find.byKey(RecentRunsCard.viewAllKey));
+      await tester.tap(
+        find.byKey(AppBottomNavigation.destinationKey(MainDestination.history)),
+      );
       await tester.pumpAndSettle();
       expect(find.byType(HistoryScreen), findsOneWidget);
 
@@ -764,10 +852,8 @@ void main() {
     expect(find.byKey(RecentRunsCard.retryKey), findsOneWidget);
 
     // Open History while failListRemaining is still 1 -> shows error + retry.
-    await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-    await tester.pumpAndSettle();
     await tester.tap(
-      find.byKey(AppNavigationDrawer.destinationKey(AppDestination.history)),
+      find.byKey(AppBottomNavigation.destinationKey(MainDestination.history)),
     );
     await tester.pumpAndSettle();
 
@@ -794,6 +880,35 @@ void main() {
 
     expect(find.byType(SummaryScreen), findsOneWidget);
     bridge.dispose();
+  });
+
+  testWidgets('a newly earned badge pops up after saving a run', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final bridge = _StubTrackingBridge();
+    addTearDown(bridge.dispose);
+    final repo = _StubRunRepository(awardFirstRun: true);
+    await tester.pumpWidget(
+      RoadRunnerApp(
+        bridge: bridge,
+        repository: repo,
+        permissionGateway: _StubPermissionGateway(),
+        checkStartupState: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _slideToStart(tester);
+    await tester.tap(find.byKey(ActiveRunScreen.stopButtonKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(StopRunDialog.finishButtonKey));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.byType(SummaryScreen), findsOneWidget);
+    expect(find.byKey(const Key('milestone.popup')), findsOneWidget);
+    expect(find.text('First Run unlocked!'), findsOneWidget);
   });
 
   testWidgets('Start Run routes to Permissions when location is denied', (
@@ -844,6 +959,34 @@ void main() {
     await _slideToStart(tester);
     expect(find.byType(ActiveRunScreen), findsOneWidget);
     bridge.dispose();
+  });
+
+  testWidgets('custom run name is shown live and saved with the run', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final bridge = _StubTrackingBridge();
+    addTearDown(bridge.dispose);
+    final repo = _StubRunRepository();
+    await tester.pumpWidget(
+      RoadRunnerApp(
+        bridge: bridge,
+        repository: repo,
+        permissionGateway: _StubPermissionGateway(),
+        checkStartupState: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _slideToStart(tester, runName: 'Park intervals');
+    expect(find.text('Park intervals'), findsOneWidget);
+    await tester.tap(find.byKey(ActiveRunScreen.stopButtonKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(StopRunDialog.finishButtonKey));
+    await tester.pumpAndSettle();
+
+    expect((await repo.get('run-1'))?.runName, 'Park intervals');
+    expect(find.byType(SummaryScreen), findsOneWidget);
   });
 
   testWidgets(

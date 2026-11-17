@@ -14,7 +14,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../app_strings.dart';
 import '../home/widgets/icon_tile.dart';
 import '../home/widgets/sky_header.dart';
-import '../shared/app_navigation_drawer.dart';
+import '../shared/app_bottom_navigation.dart';
 import '../shared/skeleton_shimmer.dart';
 import '../run/live_run_formatter.dart';
 import '../run/widgets/live_stat.dart' show measureStatWidth;
@@ -56,6 +56,10 @@ class HistoryScreen extends StatefulWidget {
     this.onStartRun,
     this.onOpenHome,
     this.onOpenSettings,
+    this.onOpenGoals,
+    this.onPlanRoute,
+    this.onOpenProfile,
+    this.onOpenRun,
   });
 
   /// Saved runs in any order; shown newest first.
@@ -89,9 +93,13 @@ class HistoryScreen extends StatefulWidget {
   final VoidCallback? onStartRun;
   final VoidCallback? onOpenHome;
   final VoidCallback? onOpenSettings;
+  final VoidCallback? onOpenGoals;
+  final VoidCallback? onPlanRoute;
+  final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenRun;
 
   static const Key backButtonKey = Key('history.back');
-  static const Key menuButtonKey = Key('history.menu');
+  static const Key settingsButtonKey = Key('history.settings');
   static const Key summaryCardKey = Key('history.monthlySummary');
   static const Key loadingStateKey = Key('history.loading');
   static Key runTileKey(String runId) => Key('history.run.$runId');
@@ -160,31 +168,36 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: AppNavigationDrawer(
-        selected: AppDestination.history,
-        onOpenHome: widget.onOpenHome ?? widget.onBackToHome,
-        onOpenHistory: _doNothing,
-        onOpenSettings: widget.onOpenSettings ?? _doNothing,
-      ),
+      bottomNavigationBar:
+          widget.onPlanRoute != null && widget.onOpenProfile != null
+          ? AppBottomNavigation(
+              selected: MainDestination.history,
+              onHome: widget.onOpenHome ?? widget.onBackToHome,
+              onRoutes: widget.onPlanRoute!,
+              onRun: widget.onOpenRun ?? widget.onStartRun ?? _doNothing,
+              onHistory: _doNothing,
+              onProfile: widget.onOpenProfile!,
+            )
+          : null,
       body: Column(
         children: [
-          Builder(
-            builder: (context) => CompactSkyHeader(
-              title: AppStrings.historyTitle,
-              subtitle: AppStrings.historyHeaderSubtitle,
-              leading: HeaderIconButton(
-                key: HistoryScreen.backButtonKey,
-                icon: Icons.arrow_back_rounded,
-                tooltip: AppStrings.backToHome,
-                onPressed: widget.onBackToHome,
-              ),
-              trailing: HeaderIconButton(
-                key: HistoryScreen.menuButtonKey,
-                icon: Icons.menu_rounded,
-                tooltip: AppStrings.homeOpenMenu,
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
+          CompactSkyHeader(
+            title: AppStrings.historyTitle,
+            subtitle: AppStrings.historyHeaderSubtitle,
+            leading: HeaderIconButton(
+              key: HistoryScreen.backButtonKey,
+              icon: Icons.arrow_back_rounded,
+              tooltip: AppStrings.backToHome,
+              onPressed: widget.onBackToHome,
             ),
+            trailing: widget.onOpenSettings == null
+                ? null
+                : HeaderIconButton(
+                    key: HistoryScreen.settingsButtonKey,
+                    icon: Icons.settings_outlined,
+                    tooltip: AppStrings.homeSettings,
+                    onPressed: widget.onOpenSettings,
+                  ),
           ),
           Expanded(
             child: LayoutBuilder(

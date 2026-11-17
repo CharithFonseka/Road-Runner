@@ -492,7 +492,7 @@ void main() {
         expect(_visibleRunIds(tester), ['oct-31']);
       });
 
-      testWidgets('run tap, back and drawer callbacks (${b.name})', (
+      testWidgets('run tap, back and Settings callbacks (${b.name})', (
         tester,
       ) async {
         final _Calls calls = await _pump(
@@ -504,35 +504,18 @@ void main() {
         await tester.tap(find.byKey(HistoryScreen.backButtonKey));
         expect(calls.back, 1);
 
-        await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
-        await tester.pumpAndSettle();
-        expect(find.byType(AppNavigationDrawer), findsOneWidget);
-        await tester.tap(
-          find.byKey(
-            AppNavigationDrawer.destinationKey(AppDestination.settings),
-          ),
-        );
-        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(HistoryScreen.settingsButtonKey));
         expect(calls.settings, 1);
-
-        await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find.byKey(AppNavigationDrawer.destinationKey(AppDestination.home)),
-        );
-        await tester.pumpAndSettle();
-        expect(calls.home, 1);
+        expect(find.byType(AppNavigationDrawer), findsNothing);
       });
     }
 
-    testWidgets('dark drawer uses the night surface and scrim', (tester) async {
+    testWidgets('dark History keeps the sky header without a drawer', (
+      tester,
+    ) async {
       await _pump(tester, theme: AppTheme.dark());
-      await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      final Drawer drawer = tester.widget<Drawer>(find.byType(Drawer));
-      expect(drawer.backgroundColor, night.surface);
-      final BuildContext ctx = tester.element(find.byType(HistoryScreen));
-      expect(Theme.of(ctx).drawerTheme.scrimColor, night.scrim);
+      expect(find.byType(AppNavigationDrawer), findsNothing);
+      expect(find.byKey(HistoryScreen.settingsButtonKey), findsOneWidget);
     });
   });
 

@@ -82,6 +82,12 @@ class SummaryScreen extends StatefulWidget {
 class _SummaryScreenState extends State<SummaryScreen> {
   bool _deletionPending = false;
 
+  bool get _hasDetails =>
+      widget.summary.placeName != null ||
+      (widget.summary.weatherCode != null &&
+          widget.summary.weatherTempC != null &&
+          widget.summary.weatherWindKmh != null);
+
   Future<void> _confirmDelete() async {
     final Future<void> Function(String runId)? deleteRun = widget.onDeleteRun;
     if (deleteRun == null || _deletionPending) return;
@@ -138,6 +144,35 @@ class _SummaryScreenState extends State<SummaryScreen> {
             startedAt: widget.summary.startedAt,
             onBack: widget.onBack ?? widget.onBackToHome,
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.medium,
+              8,
+              AppSpacing.medium,
+              8,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    key: SummaryScreen.homeButtonKey,
+                    onPressed: widget.onBackToHome,
+                    icon: const Icon(Icons.home_rounded, size: 19),
+                    label: const Text('Home'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.itemGap),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    key: SummaryScreen.historyButtonKey,
+                    onPressed: widget.onOpenHistory,
+                    icon: const Icon(Icons.history_rounded, size: 19),
+                    label: const Text('History'),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -181,9 +216,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
           if (widget.isLoading)
             const _LoadingBody(key: SummaryScreen.loadingKey)
           else ...[
+            _ResultHero(summary: widget.summary, formatter: widget.formatter),
+            const SizedBox(height: AppSpacing.itemGap),
             _StatsCard(summary: widget.summary, formatter: widget.formatter),
-            if (widget.summary.runName != null ||
-                widget.summary.weatherCode != null) ...[
+            if (_hasDetails) ...[
               const SizedBox(height: 10),
               _RunDetailsCard(summary: widget.summary),
             ],
@@ -196,40 +232,29 @@ class _SummaryScreenState extends State<SummaryScreen> {
             _SplitsCard(summary: widget.summary, formatter: widget.formatter),
           ],
           const SizedBox(height: AppSpacing.large),
-          FilledButton.icon(
-            key: SummaryScreen.homeButtonKey,
-            onPressed: widget.onBackToHome,
-            icon: const Icon(Icons.home_outlined),
-            label: const Text(AppStrings.backToHome),
-          ),
-          const SizedBox(height: AppSpacing.itemGap),
-          OutlinedButton.icon(
-            key: SummaryScreen.historyButtonKey,
-            onPressed: widget.onOpenHistory,
-            icon: const Icon(Icons.bar_chart),
-            label: const Text(AppStrings.viewHistory),
-          ),
           if (widget.onDeleteRun != null) ...[
             const SizedBox(height: AppSpacing.itemGap),
-            OutlinedButton.icon(
-              key: SummaryScreen.deleteButtonKey,
-              onPressed: _deletionPending ? null : _confirmDelete,
-              icon: _deletionPending
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.delete_outline_rounded),
-              label: Text(
-                _deletionPending
-                    ? AppStrings.summaryDeleting
-                    : AppStrings.summaryDeleteRun,
-              ),
-              style: OutlinedButton.styleFrom(
-                // Day #B3261E; night #FFB4AB (readable on navy).
-                foregroundColor: palette.error,
-                side: BorderSide(color: palette.error),
-                minimumSize: const Size.fromHeight(AppSpacing.minTouchTarget),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                key: SummaryScreen.deleteButtonKey,
+                onPressed: _deletionPending ? null : _confirmDelete,
+                icon: _deletionPending
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.delete_outline_rounded),
+                label: Text(
+                  _deletionPending
+                      ? AppStrings.summaryDeleting
+                      : AppStrings.summaryDeleteRun,
+                ),
+                style: OutlinedButton.styleFrom(
+                  // Day #B3261E; night #FFB4AB (readable on navy).
+                  foregroundColor: palette.error,
+                  side: BorderSide(color: palette.error),
+                ),
               ),
             ),
           ],
@@ -283,12 +308,16 @@ class _SummaryScreenState extends State<SummaryScreen> {
                     if (widget.isLoading)
                       const _LoadingBody(key: SummaryScreen.loadingKey)
                     else ...[
+                      _ResultHero(
+                        summary: widget.summary,
+                        formatter: widget.formatter,
+                      ),
+                      const SizedBox(height: AppSpacing.itemGap),
                       _StatsCard(
                         summary: widget.summary,
                         formatter: widget.formatter,
                       ),
-                      if (widget.summary.runName != null ||
-                          widget.summary.weatherCode != null) ...[
+                      if (_hasDetails) ...[
                         const SizedBox(height: 10),
                         _RunDetailsCard(summary: widget.summary),
                       ],
@@ -299,42 +328,29 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       ),
                     ],
                     const SizedBox(height: AppSpacing.large),
-                    FilledButton.icon(
-                      key: SummaryScreen.homeButtonKey,
-                      onPressed: widget.onBackToHome,
-                      icon: const Icon(Icons.home_outlined),
-                      label: const Text(AppStrings.backToHome),
-                    ),
-                    const SizedBox(height: AppSpacing.itemGap),
-                    OutlinedButton.icon(
-                      key: SummaryScreen.historyButtonKey,
-                      onPressed: widget.onOpenHistory,
-                      icon: const Icon(Icons.bar_chart),
-                      label: const Text(AppStrings.viewHistory),
-                    ),
                     if (widget.onDeleteRun != null) ...[
                       const SizedBox(height: AppSpacing.itemGap),
-                      OutlinedButton.icon(
-                        key: SummaryScreen.deleteButtonKey,
-                        onPressed: _deletionPending ? null : _confirmDelete,
-                        icon: _deletionPending
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.delete_outline_rounded),
-                        label: Text(
-                          _deletionPending
-                              ? AppStrings.summaryDeleting
-                              : AppStrings.summaryDeleteRun,
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: palette.error,
-                          side: BorderSide(color: palette.error),
-                          minimumSize: const Size.fromHeight(
-                            AppSpacing.minTouchTarget,
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: OutlinedButton.icon(
+                          key: SummaryScreen.deleteButtonKey,
+                          onPressed: _deletionPending ? null : _confirmDelete,
+                          icon: _deletionPending
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.delete_outline_rounded),
+                          label: Text(
+                            _deletionPending
+                                ? AppStrings.summaryDeleting
+                                : AppStrings.summaryDeleteRun,
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: palette.error,
+                            side: BorderSide(color: palette.error),
                           ),
                         ),
                       ),
@@ -343,6 +359,56 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResultHero extends StatelessWidget {
+  const _ResultHero({required this.summary, required this.formatter});
+
+  final RunSummary summary;
+  final LiveRunFormatter formatter;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette palette = context.palette;
+    final String distance = formatter.distanceKm(summary.distanceM);
+    return Card(
+      color: palette.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              header: true,
+              child: Text(
+                AppStrings.summaryComplete,
+                style: AppTextStyles.of(context).sectionHeading,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.small),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.end,
+              spacing: AppSpacing.small,
+              children: [
+                Text(
+                  distance,
+                  style: AppTextStyles.of(context).statValue
+                      .copyWith(fontSize: 40, color: palette.stat),
+                ),
+                Text(
+                  AppStrings.unitKm,
+                  style: AppTextStyles.of(context).body
+                      .copyWith(color: palette.textSecondary),
+                ),
+              ],
+            ),
+            if (summary.runName != null)
+              Text(summary.runName!, style: AppTextStyles.of(context).body),
           ],
         ),
       ),
@@ -915,10 +981,7 @@ class _RunDetailsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (summary.runName != null)
-              Text(summary.runName!, style: text.sectionHeading),
             if (hasWeather) ...[
-              const SizedBox(height: AppSpacing.small),
               Wrap(
                 spacing: AppSpacing.medium,
                 runSpacing: AppSpacing.small,
@@ -939,6 +1002,7 @@ class _RunDetailsCard extends StatelessWidget {
             ],
             if (summary.placeName != null) ...[
               const SizedBox(height: AppSpacing.small),
+              Text(summary.placeName!, style: text.body),
               Text(
                 'Place data © OpenStreetMap',
                 style: text.caption.copyWith(color: palette.textSecondary),

@@ -1,5 +1,9 @@
 # Run feature (Active Run, Paused Run and Stop Confirmation)
 
+Before a normal or planned run starts, the run setup sheet suggests a local
+time-of-day name. The runner can edit it. A custom name appears on the live run
+screen and stays with the saved run; place and weather enrichment preserve it.
+
 Owner: Tharushi
 
 ## Public API

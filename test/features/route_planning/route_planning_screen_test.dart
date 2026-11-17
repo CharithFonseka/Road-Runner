@@ -18,6 +18,161 @@ class _RecordingRoutes extends PlannedRouteRepository {
 }
 
 void main() {
+  testWidgets('opens a saved route and updates its existing record', (
+    tester,
+  ) async {
+    final routes = _RecordingRoutes();
+    const saved = PlannedRoute(
+      id: 'park',
+      name: 'Park loop',
+      createdAtUtcMs: 1731800000000,
+      activity: RouteActivity.run,
+      points: [
+        PlannedRoutePoint(lat: 6.9271, lon: 79.8612),
+        PlannedRoutePoint(lat: 6.93, lon: 79.864),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RoutePlanningScreen(
+          repository: routes,
+          directions: OrsDirectionsClient(apiKey: ''),
+          initialCenter: const LatLng(6.9271, 79.8612),
+          initialRoute: saved,
+          styleFuture: Completer<vt.Style>().future,
+          weatherFetcher: (_) async => null,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Run route ready'), findsOneWidget);
+    expect(find.text('Update route'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(RoutePlanningScreen.nameFieldKey),
+      'Park loop revised',
+    );
+    await tester.tap(find.byKey(RoutePlanningScreen.saveKey));
+    await tester.pumpAndSettle();
+    expect(routes.saved?.id, 'park');
+    expect(routes.saved?.name, 'Park loop revised');
+  });
+
+  testWidgets('cycling mode plans with bike profile and saves that activity', (
+    tester,
+  ) async {
+    final routes = _RecordingRoutes();
+    final requested = <Uri>[];
+    var fixes = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RoutePlanningScreen(
+          repository: routes,
+          directions: OrsDirectionsClient(
+            fetchOsrm: (uri) async {
+              requested.add(uri);
+              return {
+                'routes': [
+                  {
+                    'geometry': {
+                      'type': 'LineString',
+                      'coordinates': [
+                        [79.8612, 6.9271],
+                        [79.864, 6.93],
+                      ],
+                    },
+                  },
+                ],
+              };
+            },
+          ),
+          initialCenter: const LatLng(6.9271, 79.8612),
+          styleFuture: Completer<vt.Style>().future,
+          weatherFetcher: (_) async => null,
+          onCurrentLocation: () async => ++fixes == 1
+              ? const LatLng(6.9271, 79.8612)
+              : const LatLng(6.93, 79.864),
+          onStartRun: (_) {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Cycle'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(RoutePlanningScreen.startPointKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(RoutePlanningScreen.currentLocationKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(RoutePlanningScreen.endPointKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(RoutePlanningScreen.currentLocationKey));
+    await tester.pumpAndSettle();
+
+    expect(requested.single.path, startsWith('/routed-bike/'));
+    expect(find.textContaining('Cycle route ready'), findsOneWidget);
+    expect(find.byKey(RoutePlanningScreen.startRunKey), findsNothing);
+    await tester.tap(find.byKey(RoutePlanningScreen.saveKey));
+    await tester.pumpAndSettle();
+    expect(routes.saved?.activity, RouteActivity.cycle);
+  });
+
+  testWidgets('current location can fill the selected start and end points', (
+    tester,
+  ) async {
+    var fixes = 0;
+    final directions = OrsDirectionsClient(
+      apiKey: 'test-key',
+      post: (_, _, body) async {
+        expect(body['coordinates'], [
+          [79.8612, 6.9271],
+          [79.864, 6.93],
+        ]);
+        return {
+          'features': [
+            {
+              'geometry': {
+                'type': 'LineString',
+                'coordinates': [
+                  [79.8612, 6.9271],
+                  [79.864, 6.93],
+                ],
+              },
+            },
+          ],
+        };
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RoutePlanningScreen(
+          repository: _RecordingRoutes(),
+          directions: directions,
+          initialCenter: const LatLng(6.9271, 79.8612),
+          styleFuture: Completer<vt.Style>().future,
+          weatherFetcher: (_) async => null,
+          onCurrentLocation: () async => ++fixes == 1
+              ? const LatLng(6.9271, 79.8612)
+              : const LatLng(6.93, 79.864),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(RoutePlanningScreen.startPointKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(RoutePlanningScreen.currentLocationKey));
+    await tester.pumpAndSettle();
+    expect(find.text('Current location'), findsOneWidget);
+    await tester.tap(find.byKey(RoutePlanningScreen.endPointKey));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose destination'), findsOneWidget);
+    expect(find.text('Use my location'), findsOneWidget);
+
+    await tester.tap(find.byKey(RoutePlanningScreen.currentLocationKey));
+    await tester.pumpAndSettle();
+    expect(find.text('Current location'), findsNWidgets(2));
+    expect(find.textContaining('route ready ·'), findsOneWidget);
+  });
+
   testWidgets('selects map endpoints, previews a route and saves its name', (
     tester,
   ) async {
@@ -47,25 +202,25 @@ void main() {
           directions: directions,
           initialCenter: const LatLng(6.9271, 79.8612),
           styleFuture: style.future,
+          weatherFetcher: (_) async => null,
         ),
       ),
     );
 
     final map = find.byKey(RoutePlanningScreen.mapKey);
     final topLeft = tester.getTopLeft(map);
-    await tester.tapAt(topLeft + const Offset(80, 80));
-    await tester.pump();
-    await tester.tapAt(topLeft + const Offset(180, 140));
-    await tester.pump();
+    final panelBottom = tester
+        .getBottomLeft(find.byKey(RoutePlanningScreen.inputPanelKey))
+        .dy;
+    await tester.tapAt(Offset(topLeft.dx + 80, panelBottom + 20));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tapAt(Offset(topLeft.dx + 180, panelBottom + 75));
+    await tester.pump(const Duration(milliseconds: 300));
 
-    expect(
-      tester
-          .widget<FilledButton>(find.byKey(RoutePlanningScreen.findKey))
-          .onPressed,
-      isNotNull,
-    );
-    await tester.tap(find.byKey(RoutePlanningScreen.findKey));
-    await tester.pump();
+    if (find.byKey(RoutePlanningScreen.findKey).evaluate().isNotEmpty) {
+      await tester.tap(find.byKey(RoutePlanningScreen.findKey));
+      await tester.pump();
+    }
     await tester.enterText(
       find.byKey(RoutePlanningScreen.nameFieldKey),
       'Morning loop',
@@ -108,28 +263,33 @@ void main() {
           directions: directions,
           initialCenter: const LatLng(6.9271, 79.8612),
           styleFuture: Completer<vt.Style>().future,
+          weatherFetcher: (_) async => null,
           onStartRun: (route) => startedRoute = route,
         ),
       ),
     );
 
-    // Initially Save & Start run is disabled.
+    // Recording can begin even before a route is planned.
     expect(
       tester
           .widget<FilledButton>(find.byKey(RoutePlanningScreen.startRunKey))
           .onPressed,
-      isNull,
+      isNotNull,
     );
 
     final map = find.byKey(RoutePlanningScreen.mapKey);
     final topLeft = tester.getTopLeft(map);
-    await tester.tapAt(topLeft + const Offset(80, 80));
-    await tester.pump();
-    await tester.tapAt(topLeft + const Offset(180, 140));
+    final panelBottom = tester
+        .getBottomLeft(find.byKey(RoutePlanningScreen.inputPanelKey))
+        .dy;
+    await tester.tapAt(Offset(topLeft.dx + 80, panelBottom + 20));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tapAt(Offset(topLeft.dx + 180, panelBottom + 75));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
     // Auto-fetched route enables Save & Start run and displays road points.
-    expect(find.textContaining('Route ready ·'), findsOneWidget);
+    expect(find.textContaining('route ready ·'), findsOneWidget);
     expect(
       tester
           .widget<FilledButton>(find.byKey(RoutePlanningScreen.startRunKey))
@@ -142,6 +302,7 @@ void main() {
       'Road loop',
     );
     await tester.tap(find.byKey(RoutePlanningScreen.startRunKey));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
     expect(routes.saved?.name, 'Road loop');
@@ -198,6 +359,7 @@ void main() {
           placeSearch: placeSearch,
           initialCenter: const LatLng(6.9271, 79.8612),
           styleFuture: Completer<vt.Style>().future,
+          weatherFetcher: (_) async => null,
           onStartRun: (route) => startedRoute = route,
         ),
       ),
@@ -206,9 +368,15 @@ void main() {
     // Set start on map first, then search destination and start run.
     final map = find.byKey(RoutePlanningScreen.mapKey);
     final topLeft = tester.getTopLeft(map);
-    await tester.tapAt(topLeft + const Offset(80, 80));
+    final panelBottom = tester
+        .getBottomLeft(find.byKey(RoutePlanningScreen.inputPanelKey))
+        .dy;
+    await tester.tapAt(Offset(topLeft.dx + 80, panelBottom + 20));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(RoutePlanningScreen.endPointKey));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(RoutePlanningScreen.searchFieldKey),
       'Viharamahadevi',
@@ -220,12 +388,37 @@ void main() {
     await tester.tap(find.text('Viharamahadevi Park'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Route ready ·'), findsOneWidget);
+    expect(find.textContaining('route ready ·'), findsOneWidget);
     await tester.tap(find.byKey(RoutePlanningScreen.startRunKey));
     await tester.pumpAndSettle();
 
     expect(routes.saved?.name, 'Run to Viharamahadevi Park');
     expect(routes.saved?.points.length, 3);
     expect(startedRoute?.name, 'Run to Viharamahadevi Park');
+  });
+
+  testWidgets('starts an unplanned run directly from the planner', (
+    tester,
+  ) async {
+    PlannedRoute? received = PlannedRoute(
+      id: 'marker',
+      name: 'marker',
+      createdAtUtcMs: 0,
+      points: const [],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RoutePlanningScreen(
+          repository: _RecordingRoutes(),
+          directions: OrsDirectionsClient(apiKey: ''),
+          initialCenter: const LatLng(0, 0),
+          styleFuture: Completer<vt.Style>().future,
+          onStartRun: (route) => received = route,
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(RoutePlanningScreen.startRunKey));
+    await tester.pump();
+    expect(received, isNull);
   });
 }

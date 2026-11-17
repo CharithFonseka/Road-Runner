@@ -1,5 +1,12 @@
 package com.roadrunner.app
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.CurrentLocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.roadrunner.app.bridge.Contract
 import com.roadrunner.app.bridge.TrackingBridgePlugin
 import com.roadrunner.app.tracking.DebugRouteSimulator
@@ -28,6 +35,7 @@ class MainActivity : FlutterActivity() {
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var eventForwardJob: Job? = null
     private var debugSimChannel: MethodChannel? = null
+    private var locationChannel: MethodChannel? = null
 
     private sealed class ControlOutcome {
         data class Success(val payload: Map<String, Any?> = emptyMap()) : ControlOutcome()
@@ -38,6 +46,17 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         flutterEngine.plugins.add(TrackingBridgePlugin())
         TrackingBridgePlugin.serviceDelegate = buildServiceDelegate()
+        locationChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "roadrunner/location",
+        ).apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "getCurrentLocation" -> getCurrentLocation(result)
+                    else -> result.notImplemented()
+                }
+            }
+        }
         if (DebugRouteSimulator.isDebuggable(this)) {
             debugSimChannel = MethodChannel(
                 flutterEngine.dartExecutor.binaryMessenger,
@@ -59,6 +78,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        locationChannel?.setMethodCallHandler(null)
+        locationChannel = null
         debugSimChannel?.setMethodCallHandler(null)
         debugSimChannel = null
         eventForwardJob?.cancel()
@@ -73,6 +94,39 @@ class MainActivity : FlutterActivity() {
         TrackingBridgePlugin.serviceDelegate = null
         activityScope.cancel()
         super.onDestroy()
+    }
+
+    private fun getCurrentLocation(result: Result) {
+        val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) {
+            result.error("PERMISSION_DENIED", "Allow location to see nearby weather and plan routes", null)
+            return
+        }
+
+        val request = CurrentLocationRequest.Builder()
+            .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
+            .setMaxUpdateAgeMillis(30_000L)
+            .setDurationMillis(10_000L)
+            .build()
+        val cancellation = CancellationTokenSource()
+        try {
+            LocationServices.getFusedLocationProviderClient(this)
+                .getCurrentLocation(request, cancellation.token)
+                .addOnSuccessListener { location ->
+                    if (location == null) {
+                        result.success(null)
+                    } else {
+                        result.success(mapOf("latitude" to location.latitude, "longitude" to location.longitude))
+                    }
+                }
+                .addOnFailureListener { error ->
+                    result.error("LOCATION_UNAVAILABLE", error.message ?: "Current location unavailable", null)
+                }
+        } catch (error: SecurityException) {
+            cancellation.cancel()
+            result.error("PERMISSION_DENIED", "Allow location to use your current position", null)
+        }
     }
 
     private fun mapExceptionCode(error: Exception, message: String): String =

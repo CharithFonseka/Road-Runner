@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_spacing.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
+import 'package:road_runner/data/current_weather_client.dart';
+import 'package:road_runner/data/run_weather_client.dart';
 import 'package:road_runner/features/app_strings.dart';
 import 'package:road_runner/features/history/history_run.dart';
 import 'package:road_runner/features/home/home_screen.dart';
@@ -58,6 +60,7 @@ class _Calls {
   int permissions = 0;
   int settings = 0;
   int retry = 0;
+  int goals = 0;
   final List<String> selected = [];
 }
 
@@ -75,6 +78,10 @@ Future<_Calls> _pumpHome(
   ThemeData? theme,
   Size size = const Size(360, 800),
   double textScale = 1.0,
+  double? weeklyDistanceKm,
+  double? weeklyGoalKm,
+  bool withGoals = false,
+  LocalForecast? forecast,
 }) async {
   tester.view.devicePixelRatio = 3.0;
   tester.view.physicalSize = size * 3.0;
@@ -95,6 +102,11 @@ Future<_Calls> _pumpHome(
           lastRun: lastRun,
           recentRuns: runs,
           recentRunsStatus: status,
+          weeklyDistanceKm: weeklyDistanceKm,
+          weeklyGoalKm: weeklyGoalKm,
+          forecast: forecast,
+          onPlanRoute: forecast == null ? null : () {},
+          onOpenGoals: withGoals ? () => c.goals++ : null,
           onStartRun: () => c.start++,
           onOpenHistory: () => c.history++,
           onOpenPermissions: () => c.permissions++,
@@ -124,7 +136,12 @@ void main() {
     testWidgets('dark Home uses the palette for sky, runs and Slide to Start', (
       tester,
     ) async {
-      await _pumpHome(tester, theme: AppTheme.dark(), runs: _runs);
+      await _pumpHome(
+        tester,
+        theme: AppTheme.dark(),
+        runs: _runs,
+        size: const Size(412, 915),
+      );
       final AppPalette palette = AppPalette.dark;
 
       expect(
@@ -197,13 +214,11 @@ void main() {
   });
 
   group('Header', () {
-    testWidgets('shows the name, tagline, menu and Settings buttons', (
-      tester,
-    ) async {
+    testWidgets('shows the name, tagline and Settings button', (tester) async {
       await _pumpHome(tester);
       expect(find.text(AppStrings.appName), findsOneWidget);
       expect(find.text(AppStrings.homeTagline), findsOneWidget);
-      expect(find.byKey(HomeScreen.menuButtonKey), findsOneWidget);
+      expect(find.byIcon(Icons.menu_rounded), findsNothing);
       expect(find.byKey(HomeScreen.settingsButtonKey), findsOneWidget);
       expect(find.byType(Image), findsNothing); // no image assets
     });
@@ -225,103 +240,99 @@ void main() {
     });
   });
 
-  group('Navigation drawer', () {
-    testWidgets('menu opens the drawer with Home selected; close closes', (
-      tester,
-    ) async {
-      final SemanticsHandle handle = tester.ensureSemantics();
+  group('Navigation', () {
+    testWidgets('Home has no navigation drawer', (tester) async {
       await _pumpHome(tester);
       expect(find.byType(AppNavigationDrawer), findsNothing);
-
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      expect(find.byType(AppNavigationDrawer), findsOneWidget);
-      expect(
-        tester
-            .widget<AppNavigationDrawer>(find.byType(AppNavigationDrawer))
-            .selected,
-        AppDestination.home,
-      );
-      expect(
-        tester.getSemantics(
-          find.byKey(AppNavigationDrawer.destinationKey(AppDestination.home)),
-        ),
-        containsSemantics(isSelected: true),
-      );
-
-      await tester.tap(find.byKey(AppNavigationDrawer.closeButtonKey));
-      await tester.pumpAndSettle();
-      expect(find.byType(AppNavigationDrawer), findsNothing);
-      handle.dispose();
-    });
-
-    testWidgets('Home entry only closes the drawer', (tester) async {
-      final _Calls c = await _pumpHome(tester);
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.home)),
-      );
-      await tester.pumpAndSettle();
-      expect(find.byType(AppNavigationDrawer), findsNothing);
-      expect((c.history, c.settings, c.permissions, c.start), (0, 0, 0, 0));
-    });
-
-    for (final (AppDestination d, String name) in [
-      (AppDestination.history, 'History'),
-      (AppDestination.settings, 'Settings'),
-    ]) {
-      testWidgets('$name entry closes the drawer and navigates once', (
-        tester,
-      ) async {
-        final _Calls c = await _pumpHome(tester);
-        await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(AppNavigationDrawer.destinationKey(d)));
-        await tester.pumpAndSettle();
-        expect(find.byType(AppNavigationDrawer), findsNothing);
-        expect(
-          (c.history, c.settings),
-          switch (d) {
-            AppDestination.history => (1, 0),
-            _ => (0, 1),
-          },
-        );
-        expect(c.start, 0);
-      });
-    }
-
-    testWidgets('drawer Settings falls back to onOpenPermissions', (
-      tester,
-    ) async {
-      final _Calls c = await _pumpHome(tester, withSettings: false);
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.settings)),
-      );
-      await tester.pumpAndSettle();
-      expect(c.permissions, 1);
-    });
-
-    testWidgets('Back closes the open drawer first', (tester) async {
-      await _pumpHome(tester);
-      await tester.tap(find.byKey(HomeScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.byType(AppNavigationDrawer), findsNothing);
-      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(tester.widget<Scaffold>(find.byType(Scaffold)).drawer, isNull);
     });
   });
 
+  testWidgets('shows nearby hourly conditions and a visible weekly fill', (
+    tester,
+  ) async {
+    await _pumpHome(
+      tester,
+      weeklyDistanceKm: 8.5,
+      weeklyGoalKm: 15,
+      withGoals: true,
+      forecast: LocalForecast(
+        current: const RunWeather(28, 8, 2),
+        nextHours: [
+          HourlyWeather(
+            time: DateTime(2026, 11, 17, 10),
+            temperatureC: 29,
+            code: 61,
+            rainChancePercent: 40,
+          ),
+        ],
+      ),
+    );
+    expect(find.textContaining('Near you · Now 28°'), findsOneWidget);
+    expect(find.textContaining('29° · Rain'), findsOneWidget);
+    expect(find.text('57%'), findsOneWidget);
+    expect(find.byKey(HomeScreen.weeklyProgressBarKey), findsOneWidget);
+  });
+
+  testWidgets('nearby forecast fits a narrow phone with larger text', (
+    tester,
+  ) async {
+    await _pumpHome(
+      tester,
+      size: const Size(320, 568),
+      textScale: 1.3,
+      weeklyDistanceKm: 8.5,
+      weeklyGoalKm: 15,
+      withGoals: true,
+      forecast: LocalForecast(
+        current: const RunWeather(28, 8, 2),
+        nextHours: [
+          for (var hour = 10; hour < 13; hour++)
+            HourlyWeather(
+              time: DateTime(2026, 11, 17, hour),
+              temperatureC: 29,
+              code: 61,
+              rainChancePercent: 40,
+            ),
+        ],
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   group('Recent runs: loaded', () {
+    testWidgets('weekly goal progress opens Goals', (tester) async {
+      final _Calls c = await _pumpHome(
+        tester,
+        runs: _runs,
+        weeklyDistanceKm: 4.2,
+        weeklyGoalKm: 10,
+        withGoals: true,
+      );
+      expect(find.text('4.2 / 10 km'), findsOneWidget);
+      await tester.tap(find.byKey(HomeScreen.weeklyGoalKey));
+      await tester.pump();
+      expect(c.goals, 1);
+    });
+
+    testWidgets('Goals is available from the Home card', (tester) async {
+      final _Calls c = await _pumpHome(
+        tester,
+        withGoals: true,
+        weeklyDistanceKm: 4.2,
+        weeklyGoalKm: 10,
+      );
+      await tester.tap(find.byKey(HomeScreen.weeklyGoalKey));
+      await tester.pump();
+      expect(c.goals, 1);
+    });
+
     testWidgets('rows are newest first with formatted values', (tester) async {
       await _pumpHome(tester, runs: _runs);
       expect(find.text(AppStrings.recentRunsTitle), findsOneWidget);
       expect(_inRow(0, '14 Nov 2026'), findsOneWidget);
       expect(_inRow(1, '11 Nov 2026'), findsOneWidget);
-      expect(_inRow(2, '08 Nov 2026'), findsOneWidget);
+      expect(_inRow(2, '08 Nov 2026'), findsNothing);
       expect(_inRow(0, '5.02 km'), findsOneWidget);
       expect(_inRow(0, '32:15'), findsOneWidget);
       expect(_inRow(0, '6:25/km'), findsOneWidget);
@@ -331,9 +342,9 @@ void main() {
 
     testWidgets('tapping a row reports its run ID', (tester) async {
       final _Calls c = await _pumpHome(tester, runs: _runs);
-      await tester.tap(find.byKey(RecentRunsCard.rowKey(1)));
+      await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
       await tester.pump();
-      expect(c.selected, ['middle']);
+      expect(c.selected, ['newest']);
       expect((c.history, c.start), (0, 0));
     });
 
@@ -383,12 +394,23 @@ void main() {
         tester,
         runs: [HistoryRun(runId: 'x', startedAt: DateTime(2026, 11, 1))],
       );
-      expect(_inRow(0, '-.-- km'), findsOneWidget);
-      expect(_inRow(0, '--:--'), findsOneWidget);
-      expect(_inRow(0, '--:--/km'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(RecentRunsCard.rowKey(0)),
+          matching: find.text('-.-- km'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(RecentRunsCard.rowKey(0)),
+          matching: find.text('--:--'),
+        ),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('legacy lastRun input still shows as a row', (tester) async {
+    testWidgets('legacy lastRun input still opens History', (tester) async {
       final _Calls c = await _pumpHome(
         tester,
         lastRun: const LastRunSummary(
@@ -398,8 +420,20 @@ void main() {
           averagePace: '7:65/km',
         ),
       );
-      expect(_inRow(0, 'Test date'), findsOneWidget);
-      expect(_inRow(0, '7:65/km'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(RecentRunsCard.rowKey(0)),
+          matching: find.text('Test date'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(RecentRunsCard.rowKey(0)),
+          matching: find.textContaining('7:65/km'),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(RecentRunsCard.rowKey(0)));
       await tester.pump();
       expect(c.history, 1);
@@ -464,6 +498,7 @@ void main() {
         tester.getSemantics(find.text(AppStrings.recentRunsErrorTitle)),
         containsSemantics(isLiveRegion: true),
       );
+      await tester.ensureVisible(find.byKey(RecentRunsCard.retryKey));
       await tester.tap(find.byKey(RecentRunsCard.retryKey));
       await tester.pump();
       expect((c.retry, c.start, c.history), (1, 0, 0));
@@ -525,30 +560,18 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('stays fixed while the Recent runs list scrolls', (
+    testWidgets('stays fixed while two recent runs remain accessible', (
       tester,
     ) async {
       await _pumpHome(tester, runs: _manyRuns(30));
       final Rect sliderBefore = tester.getRect(_slider);
       final Rect headerBefore = tester.getRect(find.text(AppStrings.appName));
-      final Rect firstRow = tester.getRect(
-        find.byKey(RecentRunsCard.rowKey(0)),
-      );
-
-      await tester.drag(
-        find.byKey(RecentRunsCard.listKey),
-        const Offset(0, -400),
-      );
-      await tester.pumpAndSettle();
+      expect(find.byKey(RecentRunsCard.rowKey(0)), findsOneWidget);
+      expect(find.byKey(RecentRunsCard.rowKey(1)), findsOneWidget);
+      expect(find.byKey(RecentRunsCard.rowKey(2)), findsNothing);
 
       expect(tester.getRect(_slider), sliderBefore);
       expect(tester.getRect(find.text(AppStrings.appName)), headerBefore);
-      // The list itself moved.
-      final Finder row0 = find.byKey(RecentRunsCard.rowKey(0));
-      expect(
-        row0.evaluate().isEmpty || tester.getRect(row0).top < firstRow.top,
-        isTrue,
-      );
       // The list stays inside the card, above the slider.
       final Rect card = tester.getRect(find.byKey(HomeScreen.recentRunsKey));
       expect(card.bottom, lessThanOrEqualTo(sliderBefore.top));
@@ -603,17 +626,19 @@ void main() {
               expect(card.left, greaterThan(slider.right));
             } else {
               expect(slider.width, size.width - 2 * AppSpacing.medium);
-              expect(card.bottom, lessThanOrEqualTo(slider.top));
+              expect(find.byType(SingleChildScrollView), findsWidgets);
             }
           });
         }
       }
     }
 
-    testWidgets('A33 at 1x: the card gets most of the screen', (tester) async {
+    testWidgets('A33 at 1x: the dashboard keeps history compact', (
+      tester,
+    ) async {
       await _pumpHome(tester, runs: _runs, size: const Size(412, 915));
       final Rect card = tester.getRect(find.byKey(HomeScreen.recentRunsKey));
-      expect(card.height, greaterThan(915 * 0.5));
+      expect(card.height, 190);
     });
 
     testWidgets('respects the status bar and Android navigation bar', (
@@ -631,19 +656,18 @@ void main() {
       final Rect slider = tester.getRect(_slider);
       expect(slider.bottom, closeTo(800 - navBar - AppSpacing.medium, 0.5));
       expect(
-        tester.getRect(find.byKey(HomeScreen.menuButtonKey)).top,
+        tester.getRect(find.byKey(HomeScreen.settingsButtonKey)).top,
         greaterThanOrEqualTo(statusBar),
       );
     });
   });
 
   group('NFR-09 targets and screen readers', () {
-    testWidgets('menu, Settings, View all and rows are at least 48dp', (
+    testWidgets('Settings, View all and rows are at least 48dp', (
       tester,
     ) async {
       await _pumpHome(tester, runs: _runs);
       for (final Key key in [
-        HomeScreen.menuButtonKey,
         HomeScreen.settingsButtonKey,
         RecentRunsCard.viewAllKey,
         RecentRunsCard.rowKey(0),
@@ -688,7 +712,6 @@ void main() {
         containsSemantics(isHeader: true),
       );
       for (final (Key key, String name) in [
-        (HomeScreen.menuButtonKey, AppStrings.homeOpenMenu),
         (HomeScreen.settingsButtonKey, AppStrings.homeSettings),
       ]) {
         expect(

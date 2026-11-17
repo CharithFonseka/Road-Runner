@@ -770,5 +770,31 @@ void main() {
         reason: 'enrichRun must not change moving time',
       );
     });
+
+    test('10. enrichment keeps a runner-chosen name', () async {
+      const runId = 'run-custom-name-10';
+      final file = File('${tempDir.path}/$runId.jsonl')
+        ..writeAsStringSync(_makeRunJsonl(runId));
+      await repository.saveFromFile(runId, file.path);
+      await repository.updateDetails(runId, runName: 'Park intervals');
+
+      final mockClient = MockClient((req) async {
+        if (req.url.host.contains('open-meteo')) return _weatherResponse();
+        return _placeResponse();
+      });
+      await RunEnrichmentService(
+        repository: repository,
+        weatherClient: RunWeatherClient(mockClient),
+        placeClient: RunPlaceClient(
+          client: mockClient,
+          cache: PlaceCache(appDatabase),
+          contactEmail: 'test@test.com',
+        ),
+      ).enrichRun(runId);
+
+      final run = await repository.get(runId);
+      expect(run?.runName, 'Park intervals');
+      expect(run?.placeName, isNotNull);
+    });
   });
 }

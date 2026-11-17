@@ -12,6 +12,21 @@ import 'package:road_runner/core/theme/app_text_styles.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
 
 void main() {
+  test('Gotham is the text family in both themes', () {
+    for (final theme in [AppTheme.light(), AppTheme.dark()]) {
+      expect(theme.textTheme.bodyMedium?.fontFamily, AppTextStyles.fontFamily);
+      expect(theme.textTheme.titleLarge?.fontFamily, AppTextStyles.fontFamily);
+      expect(
+        theme.textTheme.displayLarge?.fontFamily,
+        AppTextStyles.fontFamily,
+      );
+      expect(
+        theme.appBarTheme.titleTextStyle?.fontFamily,
+        AppTextStyles.fontFamily,
+      );
+    }
+  });
+
   group('Brand palette (SRS §8.4) is unchanged', () {
     test('five brand colours keep their SRS values', () {
       expect(AppColors.sand, const Color(0xFFF4E4C8));

@@ -2,8 +2,7 @@
 // Owner: Tharushi
 // SRS reference: Section 8.4, FR-40, FR-41, NFR-09, NFR-14
 //
-// Shows the real state of the permissions Road Runner needs and a short
-// "About" section. It contains no preference switches: the app has none.
+// Shows permissions, account status, app information and appearance choice.
 //
 // Permission rules:
 //   * status is READ only (PermissionGateway.check). Settings never shows a
@@ -28,7 +27,7 @@ import '../app_strings.dart';
 import '../home/widgets/sky_header.dart';
 import '../permissions/permission_gateway.dart';
 import '../permissions/permissions_controller.dart';
-import '../shared/app_navigation_drawer.dart';
+import '../shared/app_navigation_drawer.dart' show DrawerLandscapePainter;
 import '../shared/permission_status_chip.dart';
 
 /// The three permission rows.
@@ -52,6 +51,9 @@ class SettingsScreen extends StatefulWidget {
     this.onSignInWithGoogle,
     this.onSignOut,
     this.onSyncAccount,
+    this.onOpenGoals,
+    this.themeMode = ThemeMode.system,
+    this.onThemeModeChanged,
   });
 
   /// Reads permission status and opens the app's system settings page.
@@ -61,7 +63,7 @@ class SettingsScreen extends StatefulWidget {
   /// Header Back button.
   final VoidCallback onBack;
 
-  /// Drawer destinations. Settings itself only closes the drawer.
+  /// Optional navigation callbacks retained for callers of this screen.
   final VoidCallback onOpenHome;
   final VoidCallback onOpenHistory;
 
@@ -85,9 +87,11 @@ class SettingsScreen extends StatefulWidget {
   final VoidCallback? onSignInWithGoogle;
   final VoidCallback? onSignOut;
   final VoidCallback? onSyncAccount;
+  final VoidCallback? onOpenGoals;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode>? onThemeModeChanged;
 
   static const Key backButtonKey = Key('settings.back');
-  static const Key menuButtonKey = Key('settings.menu');
   static const Key manageButtonKey = Key('settings.manage');
   static const Key openAppSettingsKey = Key('settings.openAppSettings');
   static const Key retryButtonKey = Key('settings.retry');
@@ -98,6 +102,7 @@ class SettingsScreen extends StatefulWidget {
   static const Key signOutButtonKey = Key('settings.account.signOut');
   static const Key syncAccountButtonKey = Key('settings.account.sync');
   static const Key accountErrorKey = Key('settings.account.error');
+  static const Key appearanceKey = Key('settings.appearance');
   static Key rowKey(SettingsPermissionRow row) => Key('settings.${row.name}');
 
   @override
@@ -164,12 +169,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final double bottomInset = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
       backgroundColor: palette.background,
-      drawer: AppNavigationDrawer(
-        selected: AppDestination.settings,
-        onOpenHome: widget.onOpenHome,
-        onOpenHistory: widget.onOpenHistory,
-        onOpenSettings: () {}, // current page: the drawer only closes
-      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final bool isLandscape =
@@ -204,12 +203,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               tooltip: AppStrings.settingsBack,
               onPressed: widget.onBack,
             ),
-            trailing: HeaderIconButton(
-              key: SettingsScreen.menuButtonKey,
-              icon: Icons.menu_rounded,
-              tooltip: AppStrings.homeOpenMenu,
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
           ),
         ),
         Expanded(
@@ -231,6 +224,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _permissionsCard(),
                 const _SectionHeading(AppStrings.settingsAboutSection),
                 _AboutCard(version: widget.appVersion),
+                const _SectionHeading('Appearance'),
+                _appearanceCard(),
                 if (widget.onDebugSimulationChanged != null) ...[
                   const _SectionHeading('Demo & Testing (Debug)'),
                   Card(
@@ -275,12 +270,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               tooltip: AppStrings.settingsBack,
               onPressed: widget.onBack,
             ),
-            trailing: HeaderIconButton(
-              key: SettingsScreen.menuButtonKey,
-              icon: Icons.menu_rounded,
-              tooltip: AppStrings.homeOpenMenu,
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
           ),
         ),
         Expanded(
@@ -318,6 +307,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            const _SectionHeading('Appearance'),
+                            _appearanceCard(),
                             if (widget.onSignInWithGoogle != null) ...[
                               const _SectionHeading('Account & Cloud Sync'),
                               _accountCard(context),
@@ -355,6 +346,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ],
     );
   }
+
+  Widget _appearanceCard() => Card(
+    key: SettingsScreen.appearanceKey,
+    margin: EdgeInsets.zero,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Choose your display',
+            style: AppTextStyles.of(context).sectionHeading,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Use your phone setting or choose a mode for outdoor visibility.',
+            style: AppTextStyles.of(context).caption,
+          ),
+          const SizedBox(height: 12),
+          SegmentedButton<ThemeMode>(
+            showSelectedIcon: false,
+            selected: {widget.themeMode},
+            onSelectionChanged: widget.onThemeModeChanged == null
+                ? null
+                : (modes) => widget.onThemeModeChanged!(modes.first),
+            segments: const [
+              ButtonSegment(
+                value: ThemeMode.system,
+                label: Text('Auto'),
+                icon: Icon(Icons.brightness_auto_outlined),
+              ),
+              ButtonSegment(
+                value: ThemeMode.light,
+                label: Text('Light'),
+                icon: Icon(Icons.light_mode_outlined),
+              ),
+              ButtonSegment(
+                value: ThemeMode.dark,
+                label: Text('Dark'),
+                icon: Icon(Icons.dark_mode_outlined),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _accountCard(BuildContext context) {
     final AccountUser? user = widget.accountUser;

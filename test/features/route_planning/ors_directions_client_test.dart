@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:road_runner/data/planned_route.dart';
 import 'package:road_runner/features/route_planning/ors_directions_client.dart';
 
 void main() {
@@ -48,8 +49,11 @@ void main() {
       apiKey: '',
       post: (_, _, _) => throw StateError('ORS should not be called'),
       fetchOsrm: (uri) async {
-        expect(uri.host, 'router.project-osrm.org');
-        expect(uri.path, '/route/v1/foot/79.8612,6.9271;79.864,6.93');
+        expect(uri.host, 'routing.openstreetmap.de');
+        expect(
+          uri.path,
+          '/routed-foot/route/v1/driving/79.8612,6.9271;79.864,6.93',
+        );
         expect(uri.queryParameters['overview'], 'full');
         expect(uri.queryParameters['geometries'], 'geojson');
         return {
@@ -77,6 +81,41 @@ void main() {
     expect(points[1].lat, 6.9282);
     expect(points[1].lon, 79.8625);
   });
+
+  test(
+    'cycling uses the bicycle profile, while running uses pedestrian paths',
+    () async {
+      final requested = <Uri>[];
+      final client = OrsDirectionsClient(
+        fetchOsrm: (uri) async {
+          requested.add(uri);
+          return {
+            'routes': [
+              {
+                'geometry': {
+                  'type': 'LineString',
+                  'coordinates': [
+                    [79.8612, 6.9271],
+                    [79.864, 6.93],
+                  ],
+                },
+              },
+            ],
+          };
+        },
+      );
+      const start = LatLng(6.9271, 79.8612);
+      const end = LatLng(6.93, 79.864);
+      await client.route(start, end, activity: RouteActivity.run);
+      await client.route(start, end, activity: RouteActivity.cycle);
+      expect(requested[0].path, startsWith('/routed-foot/'));
+      expect(requested[1].path, startsWith('/routed-bike/'));
+      expect(
+        OrsDirectionsClient.endpointFor(RouteActivity.cycle).path,
+        contains('/cycling-regular/geojson'),
+      );
+    },
+  );
 
   test('rejects malformed and degenerate route geometry', () async {
     final client = OrsDirectionsClient(

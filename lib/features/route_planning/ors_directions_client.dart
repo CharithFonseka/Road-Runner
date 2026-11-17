@@ -13,10 +13,10 @@ typedef RoutePoster = Future<Map<String, dynamic>> Function(
 
 typedef OsrmFetcher = Future<Map<String, dynamic>> Function(Uri uri);
 
-/// Requests one walking/foot route along roads and paths.
+/// Requests a pedestrian or bicycle route along suitable roads and paths.
 ///
 /// Uses OpenRouteService when [apiKey] is provided; otherwise uses the free
-/// public OSRM foot-routing service (no API key required).
+/// public OSRM foot/bike routing services (no API key required).
 class OrsDirectionsClient {
   OrsDirectionsClient({
     this.apiKey = '',
@@ -36,23 +36,39 @@ class OrsDirectionsClient {
     'directions/foot-walking/geojson',
   );
 
-  static Uri osrmEndpoint(LatLng start, LatLng finish) => Uri.parse(
-    'https://router.project-osrm.org/route/v1/foot/'
+  static final Uri cyclingEndpoint = Uri.parse(
+    'https://api.heigit.org/openrouteservice/v2/'
+    'directions/cycling-regular/geojson',
+  );
+
+  static Uri endpointFor(RouteActivity activity) =>
+      activity == RouteActivity.cycle ? cyclingEndpoint : endpoint;
+
+  static Uri osrmEndpoint(
+    LatLng start,
+    LatLng finish, {
+    RouteActivity activity = RouteActivity.walk,
+  }) => Uri.parse(
+    'https://routing.openstreetmap.de/routed-${activity == RouteActivity.cycle ? 'bike' : 'foot'}/route/v1/driving/'
     '${start.longitude},${start.latitude};'
     '${finish.longitude},${finish.latitude}'
     '?overview=full&geometries=geojson',
   );
 
-  Future<List<PlannedRoutePoint>> walkingRoute(
+  Future<List<PlannedRoutePoint>> walkingRoute(LatLng start, LatLng finish) =>
+      route(start, finish, activity: RouteActivity.walk);
+
+  Future<List<PlannedRoutePoint>> route(
     LatLng start,
-    LatLng finish,
-  ) async {
+    LatLng finish, {
+    required RouteActivity activity,
+  }) async {
     if (!_valid(start) || !_valid(finish) || start == finish) {
       throw ArgumentError('Select two distinct valid map positions.');
     }
 
     if (usesOpenRouteService) {
-      final response = await _post(endpoint, apiKey, {
+      final response = await _post(endpointFor(activity), apiKey, {
         // ORS and GeoJSON coordinates are longitude, latitude.
         'coordinates': [
           [start.longitude, start.latitude],
@@ -62,7 +78,7 @@ class OrsDirectionsClient {
 
       final features = response['features'];
       if (features is! List || features.isEmpty) {
-        throw const FormatException('No walking route was returned.');
+        throw const FormatException('No route was returned.');
       }
       final feature = features.first;
       if (feature is! Map) {
@@ -71,10 +87,12 @@ class OrsDirectionsClient {
       return _parseLineString(feature['geometry']);
     }
 
-    final response = await _fetchOsrm(osrmEndpoint(start, finish));
+    final response = await _fetchOsrm(
+      osrmEndpoint(start, finish, activity: activity),
+    );
     final routes = response['routes'];
     if (routes is! List || routes.isEmpty) {
-      throw const FormatException('No walking route was returned.');
+      throw const FormatException('No route was returned.');
     }
     final route = routes.first;
     if (route is! Map) {

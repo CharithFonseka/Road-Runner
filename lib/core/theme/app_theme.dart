@@ -172,6 +172,7 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      fontFamily: AppTextStyles.fontFamily,
       brightness: scheme.brightness,
       colorScheme: scheme,
       scaffoldBackgroundColor: palette.background,

@@ -37,6 +37,7 @@ class AppNavigationDrawer extends StatefulWidget {
     required this.onOpenHome,
     required this.onOpenHistory,
     required this.onOpenSettings,
+    this.onOpenGoals,
   });
 
   /// The screen this drawer is attached to. Highlighted, and tapping it
@@ -46,11 +47,13 @@ class AppNavigationDrawer extends StatefulWidget {
   final VoidCallback onOpenHome;
   final VoidCallback onOpenHistory;
   final VoidCallback onOpenSettings;
+  final VoidCallback? onOpenGoals;
 
   /// Drawer width from the UI kit.
   static const double width = 300;
 
   static const Key closeButtonKey = Key('drawer.close');
+  static const Key goalsButtonKey = Key('drawer.goals');
   static Key destinationKey(AppDestination d) => Key('drawer.${d.name}');
 
   @override
@@ -88,6 +91,13 @@ class _AppNavigationDrawerState extends State<AppNavigationDrawer> {
       case AppDestination.settings:
         widget.onOpenSettings();
     }
+  }
+
+  void _onGoals() {
+    _close();
+    if (_navigated || widget.onOpenGoals == null) return;
+    _navigated = true;
+    widget.onOpenGoals!();
   }
 
   @override
@@ -128,6 +138,17 @@ class _AppNavigationDrawerState extends State<AppNavigationDrawer> {
                       ),
                       SizedBox(height: isShort ? 2 : 4),
                     ],
+                    if (widget.onOpenGoals != null)
+                      ListTile(
+                        key: AppNavigationDrawer.goalsButtonKey,
+                        leading: const Icon(Icons.emoji_events_outlined),
+                        title: const Text(AppStrings.navGoals),
+                        onTap: _onGoals,
+                        shape: const StadiumBorder(),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                        ),
+                      ),
                   ],
                 ),
               ),
