@@ -29,18 +29,29 @@ abstract class AccountGateway {
 /// Production [AccountGateway] backed by Firebase Auth, Google Sign-In v7,
 /// and Cloud Firestore (free-tier only).
 class FirebaseAccountGateway implements AccountGateway {
+  static const String _webServerClientId =
+      '827523252477-3dq2ru4dja3gbda3edq1ge25297m890l.apps.googleusercontent.com';
+
   FirebaseAccountGateway({
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
+    String? serverClientId,
   })  : _auth = auth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance;
+        _firestore = firestore ?? FirebaseFirestore.instance,
+        _serverClientId = serverClientId ?? _webServerClientId;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
+  final String _serverClientId;
   Future<void>? _googleInitFuture;
 
   Future<void> _ensureGoogleInitialized() {
-    return _googleInitFuture ??= GoogleSignIn.instance.initialize();
+    return _googleInitFuture ??= GoogleSignIn.instance
+        .initialize(serverClientId: _serverClientId)
+        .catchError((Object error) {
+      _googleInitFuture = null;
+      throw error;
+    });
   }
 
   static AccountUser? _mapUser(User? user) {
@@ -89,11 +100,16 @@ class FirebaseAccountGateway implements AccountGateway {
       throw StateError('Firebase sign-in returned no user.');
     }
 
-    // Ensure a profile document exists in Firestore without overwriting existing stats.
-    final CloudUserProfile? existing = await loadProfile(accountUser.uid);
-    final CloudUserProfile profile = existing ??
-        CloudUserProfile(updatedAtMs: DateTime.now().millisecondsSinceEpoch);
-    await saveProfile(accountUser, profile);
+    // Best-effort profile bootstrap; authStateChanges / _syncAccount will retry
+    // if Firestore is temporarily unreachable or not yet enabled.
+    try {
+      final CloudUserProfile? existing = await loadProfile(accountUser.uid);
+      final CloudUserProfile profile = existing ??
+          CloudUserProfile(updatedAtMs: DateTime.now().millisecondsSinceEpoch);
+      await saveProfile(accountUser, profile);
+    } catch (_) {
+      // Do not fail Google Sign-In when Firestore profile bootstrap fails.
+    }
     return accountUser;
   }
 
