@@ -23,6 +23,7 @@
 //   )
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_colors.dart';
 import 'app_palette.dart';
@@ -125,6 +126,36 @@ class AppTheme {
   static ThemeData forBrightness(Brightness brightness) =>
       brightness == Brightness.dark ? dark() : light();
 
+  /// The [SystemUiOverlayStyle] for the active [palette].
+  ///
+  /// In both themes, the status bar is transparent because custom sky headers
+  /// extend under the status bar.
+  ///
+  /// Status bar icons:
+  /// - Light mode: [Brightness.dark] (dark icons against the light sky / sand).
+  /// - Dark mode: [Brightness.light] (light icons against the dark navy sky / background).
+  ///
+  /// Navigation bar:
+  /// - Light mode: [palette.surface] (sandLight) with [Brightness.dark] icons.
+  /// - Dark mode: [palette.background] (night navy #171D2B) with [Brightness.light] icons
+  ///   and [palette.hairline] divider.
+  static SystemUiOverlayStyle systemUiOverlayStyleFor(AppPalette palette) {
+    final bool isDark = palette.isDark;
+    return SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: isDark ? palette.background : palette.surface,
+      systemNavigationBarDividerColor: isDark
+          ? palette.hairline
+          : Colors.transparent,
+      systemNavigationBarIconBrightness: isDark
+          ? Brightness.light
+          : Brightness.dark,
+      systemNavigationBarContrastEnforced: false,
+    );
+  }
+
   static ThemeData _build({
     required ColorScheme scheme,
     required AppPalette palette,
@@ -141,6 +172,7 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      fontFamily: AppTextStyles.fontFamily,
       brightness: scheme.brightness,
       colorScheme: scheme,
       scaffoldBackgroundColor: palette.background,
@@ -155,6 +187,11 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         titleTextStyle: textTheme.titleLarge,
+        systemOverlayStyle: systemUiOverlayStyleFor(palette),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: rounded(AppSpacing.radiusCard),
       ),
       cardTheme: CardThemeData(
         color: palette.surface,
@@ -229,6 +266,28 @@ class AppTheme {
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(minimumSize: _minButtonSize),
       ),
+    );
+  }
+}
+
+/// Reusable widget wrapping [child] with an [AnnotatedRegion] configured with
+/// [AppTheme.systemUiOverlayStyleFor] using the current [context.palette].
+///
+/// Because Road Runner uses custom sky headers instead of Material AppBars,
+/// this widget (or [AppTheme.systemUiOverlayStyleFor] in [MaterialApp.builder])
+/// ensures Android status and navigation bars remain readable in both light
+/// and dark modes.
+class AppSystemUiOverlay extends StatelessWidget {
+  const AppSystemUiOverlay({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette palette = AppPalette.of(context);
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: AppTheme.systemUiOverlayStyleFor(palette),
+      child: child,
     );
   }
 }

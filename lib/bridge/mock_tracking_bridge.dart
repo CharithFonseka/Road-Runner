@@ -4,7 +4,9 @@
 
 import 'dart:async';
 import 'dart:math';
+
 import 'package:road_runner/core/contract/contract.dart';
+
 import 'tracking_bridge.dart';
 
 /// Mock implementation of [TrackingBridge] that simulates a realistic 5-minute run
@@ -30,6 +32,9 @@ class MockTrackingBridge implements TrackingBridge {
   double _currentSpeedMps = 0.0;
   double? _paceSecPerKm;
   String _gpsQuality = kGpsSearching;
+  int _pointSeq = -1;
+  double? _lat;
+  double? _lon;
 
   final Random _random = Random(42);
 
@@ -53,11 +58,13 @@ class MockTrackingBridge implements TrackingBridge {
     _currentSpeedMps = 0.0;
     _paceSecPerKm = null;
     _gpsQuality = kGpsSearching;
+    _pointSeq = -1;
+    _lat = null;
+    _lon = null;
 
-    _eventController.add(TrackingStateEvent(
-      state: kStateRunning,
-      runId: _currentRunId,
-    ));
+    _eventController.add(
+      TrackingStateEvent(state: kStateRunning, runId: _currentRunId),
+    );
 
     _eventController.add(TrackingGpsEvent(quality: _gpsQuality));
 
@@ -87,16 +94,14 @@ class MockTrackingBridge implements TrackingBridge {
     if (autoSimulatePause) {
       if (_tickCount == 120 && _state == kStateRunning) {
         _state = kStatePaused;
-        _eventController.add(TrackingStateEvent(
-          state: kStatePaused,
-          runId: _currentRunId,
-        ));
+        _eventController.add(
+          TrackingStateEvent(state: kStatePaused, runId: _currentRunId),
+        );
       } else if (_tickCount == 140 && _state == kStatePaused) {
         _state = kStateRunning;
-        _eventController.add(TrackingStateEvent(
-          state: kStateRunning,
-          runId: _currentRunId,
-        ));
+        _eventController.add(
+          TrackingStateEvent(state: kStateRunning, runId: _currentRunId),
+        );
       }
     }
 
@@ -107,6 +112,16 @@ class MockTrackingBridge implements TrackingBridge {
       final speedJitter = (_random.nextDouble() - 0.5) * 0.3;
       _currentSpeedMps = max(2.5, min(3.1, 2.78 + speedJitter));
       _distanceM += _currentSpeedMps * 1.0;
+      if (_gpsQuality == kGpsGood) {
+        _pointSeq++;
+        _lat = -33.8688;
+        _lon = 151.2093 + _distanceM / 93000;
+        _eventController.add(
+          TrackingPointEvent(
+            point: TrackingPoint(seq: _pointSeq, lat: _lat!, lon: _lon!),
+          ),
+        );
+      }
 
       if (_distanceM >= CalcConfig.minDistanceForPaceM && _movingMs > 0) {
         // pace = seconds per km
@@ -125,6 +140,9 @@ class MockTrackingBridge implements TrackingBridge {
       distanceM: _distanceM,
       speedMps: _currentSpeedMps,
       paceSecPerKm: _paceSecPerKm,
+      lat: _lat,
+      lon: _lon,
+      seq: _pointSeq < 0 ? null : _pointSeq,
     );
 
     _eventController.add(TrackingSnapshotEvent(snapshot: snapshot));
@@ -140,10 +158,9 @@ class MockTrackingBridge implements TrackingBridge {
     if (_state == kStateRunning) {
       _state = kStatePaused;
       _currentSpeedMps = 0.0;
-      _eventController.add(TrackingStateEvent(
-        state: kStatePaused,
-        runId: _currentRunId,
-      ));
+      _eventController.add(
+        TrackingStateEvent(state: kStatePaused, runId: _currentRunId),
+      );
     }
   }
 
@@ -151,10 +168,9 @@ class MockTrackingBridge implements TrackingBridge {
   Future<void> resumeRun() async {
     if (_state == kStatePaused) {
       _state = kStateRunning;
-      _eventController.add(TrackingStateEvent(
-        state: kStateRunning,
-        runId: _currentRunId,
-      ));
+      _eventController.add(
+        TrackingStateEvent(state: kStateRunning, runId: _currentRunId),
+      );
     }
   }
 
@@ -166,10 +182,9 @@ class MockTrackingBridge implements TrackingBridge {
     final filePath = '/data/user/0/com.roadrunner.app/files/runs/$runId.jsonl';
     _state = kStateStopped;
 
-    _eventController.add(TrackingStateEvent(
-      state: kStateStopped,
-      runId: runId,
-    ));
+    _eventController.add(
+      TrackingStateEvent(state: kStateStopped, runId: runId),
+    );
 
     return RunResult(runId: runId, filePath: filePath);
   }
@@ -184,6 +199,9 @@ class MockTrackingBridge implements TrackingBridge {
         distanceM: _distanceM,
         speedMps: _currentSpeedMps,
         paceSecPerKm: _paceSecPerKm,
+        lat: _lat,
+        lon: _lon,
+        seq: _pointSeq < 0 ? null : _pointSeq,
       );
     }
 

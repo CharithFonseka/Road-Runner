@@ -5,7 +5,7 @@ publish_to: 'none'
 version: 0.1.0+1
 
 environment:
-  sdk: ^3.13.7
+  sdk: ">=3.13.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -23,14 +23,44 @@ dependencies:
   # Permissions UI (SRS §3.1)
   permission_handler: ^11.3.1
 
+  # Live street map (OpenFreeMap serves vector tiles).
+  flutter_map: ^8.3.2
+  flutter_map_vector_tiles: ^2.11.0
+  latlong2: ^0.9.1
+
   cupertino_icons: ^1.0.8
+  http: ^1.6.0
+  firebase_core: ^5.2.0
+  firebase_auth: ^7.1.0
+  google_sign_in: ^7.2.0
+  cloud_firestore: ^7.2.0
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  sqflite_common_ffi: ^2.3.4
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: Gotham
+      fonts:
+        - asset: assets/fonts/Gotham-Book.otf
+          weight: 400
+        - asset: assets/fonts/Gotham-BookItalic.otf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/Gotham-Medium.otf
+          weight: 500
+        - asset: assets/fonts/Gotham-MediumItalic.otf
+          weight: 500
+          style: italic
+        - asset: assets/fonts/Gotham-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Gotham-BoldItalic.otf
+          weight: 700
+          style: italic
   assets:
     - assets/illustrations/

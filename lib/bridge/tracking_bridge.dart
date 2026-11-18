@@ -3,6 +3,7 @@
 // SRS reference: Section 4.5, 8.3
 
 import 'dart:async';
+
 import 'package:road_runner/core/contract/contract.dart';
 
 int _parseInt(dynamic value, [int defaultValue = 0]) {
@@ -30,6 +31,9 @@ class TrackingSnapshot {
   final double distanceM;
   final double speedMps;
   final double? paceSecPerKm;
+  final double? lat;
+  final double? lon;
+  final int? seq;
 
   const TrackingSnapshot({
     required this.elapsedMs,
@@ -37,6 +41,9 @@ class TrackingSnapshot {
     required this.distanceM,
     required this.speedMps,
     this.paceSecPerKm,
+    this.lat,
+    this.lon,
+    this.seq,
   });
 
   factory TrackingSnapshot.fromMap(Map<dynamic, dynamic> map) {
@@ -46,16 +53,22 @@ class TrackingSnapshot {
       distanceM: _parseDouble(map[kKeyDistanceM]),
       speedMps: _parseDouble(map[kKeySpeedMps]),
       paceSecPerKm: _parseNullableDouble(map[kKeyPaceSecPerKm]),
+      lat: _parseNullableDouble(map[kKeyLat]),
+      lon: _parseNullableDouble(map[kKeyLon]),
+      seq: map[kKeySeq] == null ? null : _parseInt(map[kKeySeq]),
     );
   }
 
   Map<String, dynamic> toMap() => {
-        kKeyElapsedMs: elapsedMs,
-        kKeyMovingMs: movingMs,
-        kKeyDistanceM: distanceM,
-        kKeySpeedMps: speedMps,
-        kKeyPaceSecPerKm: paceSecPerKm,
-      };
+    kKeyElapsedMs: elapsedMs,
+    kKeyMovingMs: movingMs,
+    kKeyDistanceM: distanceM,
+    kKeySpeedMps: speedMps,
+    kKeyPaceSecPerKm: paceSecPerKm,
+    kKeyLat: lat,
+    kKeyLon: lon,
+    kKeySeq: seq,
+  };
 
   @override
   String toString() =>
@@ -70,16 +83,55 @@ class TrackingSnapshot {
           movingMs == other.movingMs &&
           distanceM == other.distanceM &&
           speedMps == other.speedMps &&
-          paceSecPerKm == other.paceSecPerKm;
+          paceSecPerKm == other.paceSecPerKm &&
+          lat == other.lat &&
+          lon == other.lon &&
+          seq == other.seq;
 
   @override
   int get hashCode => Object.hash(
-        elapsedMs,
-        movingMs,
-        distanceM,
-        speedMps,
-        paceSecPerKm,
-      );
+    elapsedMs,
+    movingMs,
+    distanceM,
+    speedMps,
+    paceSecPerKm,
+    lat,
+    lon,
+    seq,
+  );
+}
+
+/// One accepted GPS point. Sequence is the run-file sequence number.
+class TrackingPoint {
+  const TrackingPoint({
+    required this.seq,
+    required this.lat,
+    required this.lon,
+  });
+
+  final int seq;
+  final double lat;
+  final double lon;
+
+  static TrackingPoint? fromMap(Map<dynamic, dynamic> map) {
+    final lat = _parseNullableDouble(map[kKeyLat]);
+    final lon = _parseNullableDouble(map[kKeyLon]);
+    final rawSeq = map[kKeySeq];
+    final seq = rawSeq is int ? rawSeq : int.tryParse('$rawSeq');
+    if (lat == null ||
+        lon == null ||
+        seq == null ||
+        seq < 0 ||
+        !lat.isFinite ||
+        !lon.isFinite ||
+        lat < -90 ||
+        lat > 90 ||
+        lon < -180 ||
+        lon > 180) {
+      return null;
+    }
+    return TrackingPoint(seq: seq, lat: lat, lon: lon);
+  }
 }
 
 /// Current status of the native tracking service.
@@ -109,11 +161,11 @@ class TrackingStatus {
   }
 
   Map<String, dynamic> toMap() => {
-        kKeyState: state,
-        if (runId != null) kKeyRunId: runId,
-        if (snapshot != null) kKeySnapshot: snapshot!.toMap(),
-        if (filePath != null) kKeyFilePath: filePath,
-      };
+    kKeyState: state,
+    if (runId != null) kKeyRunId: runId,
+    if (snapshot != null) kKeySnapshot: snapshot!.toMap(),
+    if (filePath != null) kKeyFilePath: filePath,
+  };
 
   @override
   String toString() =>
@@ -125,10 +177,7 @@ class RunResult {
   final String runId;
   final String filePath;
 
-  const RunResult({
-    required this.runId,
-    required this.filePath,
-  });
+  const RunResult({required this.runId, required this.filePath});
 
   factory RunResult.fromMap(Map<dynamic, dynamic> map) {
     return RunResult(
@@ -137,10 +186,7 @@ class RunResult {
     );
   }
 
-  Map<String, dynamic> toMap() => {
-        kKeyRunId: runId,
-        kKeyFilePath: filePath,
-      };
+  Map<String, dynamic> toMap() => {kKeyRunId: runId, kKeyFilePath: filePath};
 
   @override
   String toString() => 'RunResult(runId: $runId, filePath: $filePath)';
@@ -177,6 +223,10 @@ sealed class TrackingEvent {
         case kEventTypeSnapshot:
           return TrackingSnapshotEvent(snapshot: TrackingSnapshot.fromMap(map));
 
+        case kEventTypePoint:
+          final point = TrackingPoint.fromMap(map);
+          return point == null ? null : TrackingPointEvent(point: point);
+
         case kEventTypeError:
           final code = map[kKeyCode]?.toString() ?? kErrorServiceFailed;
           final message = map[kKeyMessage]?.toString() ?? '';
@@ -197,10 +247,7 @@ class TrackingStateEvent extends TrackingEvent {
   final String state;
   final String? runId;
 
-  const TrackingStateEvent({
-    required this.state,
-    this.runId,
-  });
+  const TrackingStateEvent({required this.state, this.runId});
 
   @override
   String toString() => 'TrackingStateEvent(state: $state, runId: $runId)';
@@ -221,9 +268,7 @@ class TrackingStateEvent extends TrackingEvent {
 class TrackingGpsEvent extends TrackingEvent {
   final String quality;
 
-  const TrackingGpsEvent({
-    required this.quality,
-  });
+  const TrackingGpsEvent({required this.quality});
 
   @override
   String toString() => 'TrackingGpsEvent(quality: $quality)';
@@ -243,9 +288,7 @@ class TrackingGpsEvent extends TrackingEvent {
 class TrackingSnapshotEvent extends TrackingEvent {
   final TrackingSnapshot snapshot;
 
-  const TrackingSnapshotEvent({
-    required this.snapshot,
-  });
+  const TrackingSnapshotEvent({required this.snapshot});
 
   @override
   String toString() => 'TrackingSnapshotEvent(snapshot: $snapshot)';
@@ -261,15 +304,18 @@ class TrackingSnapshotEvent extends TrackingEvent {
   int get hashCode => snapshot.hashCode;
 }
 
+class TrackingPointEvent extends TrackingEvent {
+  const TrackingPointEvent({required this.point});
+
+  final TrackingPoint point;
+}
+
 /// Error event from native service (SRS §4.5).
 class TrackingErrorEvent extends TrackingEvent {
   final String code;
   final String message;
 
-  const TrackingErrorEvent({
-    required this.code,
-    required this.message,
-  });
+  const TrackingErrorEvent({required this.code, required this.message});
 
   @override
   String toString() => 'TrackingErrorEvent(code: $code, message: $message)';

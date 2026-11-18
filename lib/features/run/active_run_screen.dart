@@ -27,9 +27,11 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../data/planned_route.dart';
 import '../app_strings.dart';
 import 'active_run_controller.dart';
 import 'live_run_formatter.dart';
+import 'live_run_map.dart';
 import 'widgets/live_stat.dart';
 import 'widgets/run_control_button.dart';
 import 'widgets/status_chips.dart';
@@ -42,6 +44,8 @@ class ActiveRunScreen extends StatefulWidget {
     required this.onRunFinished,
     required this.onExit,
     this.formatter = const LiveRunFormatter(),
+    this.plannedRoute,
+    this.runName,
   });
 
   /// Owned by the parent. Read once in initState; this screen never
@@ -56,6 +60,10 @@ class ActiveRunScreen extends StatefulWidget {
 
   /// Display formatter. Replace with the domain formatters when merged.
   final LiveRunFormatter formatter;
+
+  /// Optional planned route to display as a guide on the live map.
+  final PlannedRoute? plannedRoute;
+  final String? runName;
 
   static const Key pauseResumeButtonKey = Key('activeRun.pauseResume');
   static const Key stopButtonKey = Key('activeRun.stop');
@@ -206,10 +214,28 @@ class _ActiveRunScreenState extends State<ActiveRunScreen> {
   Widget _buildLive(ActiveRunState state) {
     final bool paused = state.phase == RunPhase.paused;
     final RunIssue? issue = state.issue;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isLandscape =
+            constraints.maxWidth > constraints.maxHeight &&
+            constraints.maxWidth >= 500;
+        if (isLandscape) {
+          return _buildLiveLandscape(state, paused, issue);
+        }
+        return _buildLivePortrait(state, paused, issue);
+      },
+    );
+  }
+
+  Widget _buildLivePortrait(
+    ActiveRunState state,
+    bool paused,
+    RunIssue? issue,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Header(state: state),
+        _Header(state: state, title: widget.runName),
         const SizedBox(height: AppSpacing.itemGap),
         if (issue != null) ...[
           _IssueBanner(
@@ -226,10 +252,25 @@ class _ActiveRunScreenState extends State<ActiveRunScreen> {
               LayoutId(
                 id: _BodySlot.stats,
                 child: SingleChildScrollView(
-                  child: _StatsCard(
-                    snapshot: state.snapshot,
-                    paused: paused,
-                    formatter: widget.formatter,
+                  child: Column(
+                    children: [
+                      _StatsCard(
+                        snapshot: state.snapshot,
+                        paused: paused,
+                        formatter: widget.formatter,
+                      ),
+                      if (widget.plannedRoute != null ||
+                          state.route.isNotEmpty ||
+                          (state.snapshot?.lat != null &&
+                              state.snapshot?.lon != null)) ...[
+                        const SizedBox(height: AppSpacing.itemGap),
+                        LiveRunMap(
+                          route: state.route,
+                          snapshot: state.snapshot,
+                          plannedRoute: widget.plannedRoute,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
@@ -241,6 +282,64 @@ class _ActiveRunScreenState extends State<ActiveRunScreen> {
                   onResume: _controller.resume,
                   onStop: () => unawaited(_confirmStop()),
                 ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLiveLandscape(
+    ActiveRunState state,
+    bool paused,
+    RunIssue? issue,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          flex: 11,
+          child: LiveRunMap(
+            route: state.route,
+            snapshot: state.snapshot,
+            plannedRoute: widget.plannedRoute,
+            height: null,
+            showSearchingPlaceholder: true,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.medium),
+        Expanded(
+          flex: 9,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Header(state: state, title: widget.runName),
+              const SizedBox(height: AppSpacing.small),
+              if (issue != null) ...[
+                _IssueBanner(
+                  message: _issueMessage(issue.kind),
+                  onRetry: _retryFor(issue.kind, state),
+                  onDismiss: _controller.clearIssue,
+                ),
+                const SizedBox(height: AppSpacing.small),
+              ],
+              Expanded(
+                child: SingleChildScrollView(
+                  child: _StatsCard(
+                    snapshot: state.snapshot,
+                    paused: paused,
+                    formatter: widget.formatter,
+                    isLandscape: true,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.small),
+              _LandscapeControls(
+                state: state,
+                onPause: _controller.pause,
+                onResume: _controller.resume,
+                onStop: () => unawaited(_confirmStop()),
               ),
             ],
           ),
@@ -332,9 +431,10 @@ class _StatsAndControlsLayout extends MultiChildLayoutDelegate {
 // ─── Header ─────────────────────────────────────────────────────────────────
 
 class _Header extends StatelessWidget {
-  const _Header({required this.state});
+  const _Header({required this.state, this.title});
 
   final ActiveRunState state;
+  final String? title;
 
   @override
   Widget build(BuildContext context) {
@@ -348,7 +448,7 @@ class _Header extends StatelessWidget {
         Semantics(
           header: true,
           child: Text(
-            AppStrings.runTitle,
+            title ?? AppStrings.runTitle,
             style: AppTextStyles.of(context).heading,
           ),
         ),
@@ -372,17 +472,91 @@ class _StatsCard extends StatelessWidget {
     required this.snapshot,
     required this.paused,
     required this.formatter,
+    this.isLandscape = false,
   });
 
   final TrackingSnapshot? snapshot;
   final bool paused;
   final LiveRunFormatter formatter;
+  final bool isLandscape;
 
   @override
   Widget build(BuildContext context) {
     final TrackingSnapshot? s = snapshot;
     final AppPalette palette = context.palette;
     final AppThemedTextStyles textStyles = AppTextStyles.of(context);
+
+    if (isLandscape) {
+      final TextStyle liveStatStyle = palette.isDark
+          ? AppTextStyles.statMedium.copyWith(color: palette.statLive)
+          : AppTextStyles.statMedium;
+      return Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: LiveStat(
+                      label: AppStrings.statMovingTime,
+                      value: formatter.elapsed(s?.movingMs),
+                      template: '0:00:00',
+                      valueKey: ActiveRunScreen.movingTimeValueKey,
+                      style: textStyles.liveTimer.copyWith(
+                        fontSize: 32,
+                        color: paused ? palette.textSecondary : null,
+                      ),
+                      labelTrailing: paused ? const _PausedBadge() : null,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.small),
+                  Expanded(
+                    child: LiveStat(
+                      label: AppStrings.statCurrentPace,
+                      value: formatter.pace(s?.paceSecPerKm),
+                      unit: AppStrings.unitPerKm,
+                      template: '00:00',
+                      valueKey: ActiveRunScreen.paceValueKey,
+                      style: textStyles.livePace.copyWith(fontSize: 32),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 14),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: LiveStat(
+                      label: AppStrings.statDistance,
+                      value: formatter.distanceKm(s?.distanceM),
+                      unit: AppStrings.unitKm,
+                      valueKey: ActiveRunScreen.distanceValueKey,
+                      style: liveStatStyle,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.small),
+                  Expanded(
+                    child: LiveStat(
+                      label: AppStrings.statSpeed,
+                      value: formatter.speedKmh(s?.speedMps),
+                      unit: AppStrings.unitKmPerHour,
+                      valueKey: ActiveRunScreen.speedValueKey,
+                      style: liveStatStyle,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -569,6 +743,52 @@ class _Controls extends StatelessWidget {
   }
 }
 
+class _LandscapeControls extends StatelessWidget {
+  const _LandscapeControls({
+    required this.state,
+    required this.onPause,
+    required this.onResume,
+    required this.onStop,
+  });
+
+  final ActiveRunState state;
+  final VoidCallback onPause;
+  final VoidCallback onResume;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool paused = state.phase == RunPhase.paused;
+    return SizedBox(
+      height: 52,
+      child: Row(
+        children: [
+          Expanded(
+            child: RunControlButton(
+              key: ActiveRunScreen.pauseResumeButtonKey,
+              icon: paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+              label: paused ? AppStrings.resumeRun : AppStrings.pauseRun,
+              onPressed: paused
+                  ? (state.canResume ? onResume : null)
+                  : (state.canPause ? onPause : null),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.small),
+          Expanded(
+            child: RunControlButton(
+              key: ActiveRunScreen.stopButtonKey,
+              icon: Icons.stop_rounded,
+              label: AppStrings.stopRun,
+              filled: true,
+              onPressed: state.canStop ? onStop : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ─── Messages ───────────────────────────────────────────────────────────────
 
 class _IssueBanner extends StatelessWidget {
@@ -671,46 +891,49 @@ class _MessagePanel extends StatelessWidget {
     final AppThemedTextStyles textStyles = AppTextStyles.of(context);
     return Center(
       child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ExcludeSemantics(
-              child: Icon(icon, size: 56, color: palette.accent),
-            ),
-            const SizedBox(height: AppSpacing.medium),
-            Semantics(
-              header: true,
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                style: textStyles.heading,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ExcludeSemantics(
+                child: Icon(icon, size: 56, color: palette.accent),
               ),
-            ),
-            const SizedBox(height: AppSpacing.small),
-            Semantics(
-              liveRegion: true,
-              child: Text(
-                message,
-                textAlign: TextAlign.center,
-                style: textStyles.body,
+              const SizedBox(height: AppSpacing.medium),
+              Semantics(
+                header: true,
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: textStyles.heading,
+                ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.large),
-            FilledButton(
-              key: primaryKey,
-              onPressed: onPrimary,
-              child: Text(primaryLabel),
-            ),
-            if (secondary != null) ...[
-              const SizedBox(height: AppSpacing.itemGap),
-              OutlinedButton(
-                key: ActiveRunScreen.exitButtonKey,
-                onPressed: onSecondary,
-                child: Text(secondary),
+              const SizedBox(height: AppSpacing.small),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: textStyles.body,
+                ),
               ),
+              const SizedBox(height: AppSpacing.large),
+              FilledButton(
+                key: primaryKey,
+                onPressed: onPrimary,
+                child: Text(primaryLabel),
+              ),
+              if (secondary != null) ...[
+                const SizedBox(height: AppSpacing.itemGap),
+                OutlinedButton(
+                  key: ActiveRunScreen.exitButtonKey,
+                  onPressed: onSecondary,
+                  child: Text(secondary),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

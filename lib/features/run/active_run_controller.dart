@@ -22,6 +22,7 @@ import 'package:flutter/services.dart';
 
 import '../../bridge/tracking_bridge.dart';
 import '../../core/contract/contract.dart';
+import 'live_route_reader.dart';
 
 /// Where the run is, as far as this screen knows.
 enum RunPhase {
@@ -81,6 +82,7 @@ class ActiveRunState {
     this.phase = RunPhase.starting,
     this.runId,
     this.snapshot,
+    this.route = const [],
     this.gpsQuality,
     this.busy = false,
     this.issue,
@@ -92,6 +94,7 @@ class ActiveRunState {
   /// Latest snapshot from the bridge. Null until the first one arrives —
   /// the screen shows placeholders, never invented values.
   final TrackingSnapshot? snapshot;
+  final List<TrackingPoint> route;
 
   /// One of kGpsSearching / kGpsWeak / kGpsGood, or null if not reported yet.
   final String? gpsQuality;
@@ -111,6 +114,7 @@ class ActiveRunState {
     RunPhase? phase,
     String? runId,
     TrackingSnapshot? snapshot,
+    List<TrackingPoint>? route,
     String? gpsQuality,
     bool? busy,
     RunIssue? issue,
@@ -120,6 +124,7 @@ class ActiveRunState {
       phase: phase ?? this.phase,
       runId: runId ?? this.runId,
       snapshot: snapshot ?? this.snapshot,
+      route: route ?? this.route,
       gpsQuality: gpsQuality ?? this.gpsQuality,
       busy: busy ?? this.busy,
       issue: clearIssue ? null : (issue ?? this.issue),
@@ -129,10 +134,15 @@ class ActiveRunState {
 
 /// Drives the Active Run screen from [TrackingBridge] events and calls.
 class ActiveRunController extends ChangeNotifier {
-  ActiveRunController({required this.bridge, required this.onRunFinished});
+  ActiveRunController({
+    required this.bridge,
+    required this.onRunFinished,
+    this.routeReader = const LiveRouteReader(),
+  });
 
   /// Owned by the parent. Never disposed or stopped here on teardown.
   final TrackingBridge bridge;
+  final LiveRouteReader routeReader;
 
   /// Receives the real [RunResult] exactly once.
   final ValueChanged<RunResult> onRunFinished;
@@ -144,6 +154,31 @@ class ActiveRunController extends ChangeNotifier {
   bool _disposed = false;
   bool _resultDelivered = false;
   int _issueCounter = 0;
+  final Map<int, TrackingPoint> _routeBySeq = {};
+
+  void _addPoint(TrackingPoint point) {
+    if (_routeBySeq.containsKey(point.seq)) return;
+    _routeBySeq[point.seq] = point;
+    final ordered = _routeBySeq.values.toList()
+      ..sort((a, b) => a.seq.compareTo(b.seq));
+    _set(_state.copyWith(route: List.unmodifiable(ordered)));
+  }
+
+  Future<void> _restoreRoute(String runId, String? filePath) async {
+    if (filePath == null || filePath.isEmpty) return;
+    try {
+      final restored = await routeReader.read(filePath);
+      if (_disposed || _state.runId != runId) return;
+      for (final point in restored) {
+        _routeBySeq[point.seq] = point;
+      }
+      final ordered = _routeBySeq.values.toList()
+        ..sort((a, b) => a.seq.compareTo(b.seq));
+      _set(_state.copyWith(route: List.unmodifiable(ordered)));
+    } catch (_) {
+      // The map still receives new point events if the file is unavailable.
+    }
+  }
 
   bool get isDisposed => _disposed;
 
@@ -204,6 +239,9 @@ class ActiveRunController extends ChangeNotifier {
             busy: false,
           ),
         );
+        if (status.runId != null) {
+          await _restoreRoute(status.runId!, status.filePath);
+        }
         return;
       }
 
@@ -337,6 +375,12 @@ class ActiveRunController extends ChangeNotifier {
           return;
         }
         _set(_state.copyWith(snapshot: snapshot));
+      case TrackingPointEvent(:final TrackingPoint point):
+        if (_state.phase == RunPhase.running ||
+            _state.phase == RunPhase.paused ||
+            _state.phase == RunPhase.starting) {
+          _addPoint(point);
+        }
       case TrackingGpsEvent(:final String quality):
         _set(_state.copyWith(gpsQuality: quality));
       case TrackingStateEvent(:final String state, :final String? runId):

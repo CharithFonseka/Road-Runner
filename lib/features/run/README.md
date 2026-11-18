@@ -1,5 +1,9 @@
 # Run feature (Active Run, Paused Run and Stop Confirmation)
 
+Before a normal or planned run starts, the run setup sheet suggests a local
+time-of-day name. The runner can edit it. A custom name appears on the live run
+screen and stays with the saved run; place and weather enrichment preserve it.
+
 Owner: Tharushi
 
 ## Public API
@@ -20,6 +24,13 @@ ActiveRunScreen(
 - Removing the screen cancels its event subscription only. It does not stop the run.
 
 ## What the screen shows
+
+The live street map appears after the first accepted GPS fix. It draws each
+accepted point from the bridge, follows the current position until the user
+moves the map, and offers a recenter button. When the screen reattaches to an
+active run, it restores the full accepted route from the app-private run file.
+The route stays visible if online map tiles are unavailable. OpenMapTiles and
+OpenStreetMap credit stays on the map.
 
 | Stat | Bridge field | Label | Notes |
 |---|---|---|---|

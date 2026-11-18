@@ -3,13 +3,30 @@
 // SRS reference: Section 8.4, FR-70, NFR-09
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:road_runner/core/theme/app_colors.dart';
+import 'package:road_runner/core/theme/app_palette.dart';
 import 'package:road_runner/core/theme/app_spacing.dart';
 import 'package:road_runner/core/theme/app_text_styles.dart';
 import 'package:road_runner/core/theme/app_theme.dart';
 
 void main() {
+  test('Gotham is the text family in both themes', () {
+    for (final theme in [AppTheme.light(), AppTheme.dark()]) {
+      expect(theme.textTheme.bodyMedium?.fontFamily, AppTextStyles.fontFamily);
+      expect(theme.textTheme.titleLarge?.fontFamily, AppTextStyles.fontFamily);
+      expect(
+        theme.textTheme.displayLarge?.fontFamily,
+        AppTextStyles.fontFamily,
+      );
+      expect(
+        theme.appBarTheme.titleTextStyle?.fontFamily,
+        AppTextStyles.fontFamily,
+      );
+    }
+  });
+
   group('Brand palette (SRS §8.4) is unchanged', () {
     test('five brand colours keep their SRS values', () {
       expect(AppColors.sand, const Color(0xFFF4E4C8));
@@ -94,6 +111,15 @@ void main() {
       expect(theme.dialogTheme.backgroundColor, AppColors.sandLight);
     });
 
+    test('snack bars are floating with 20dp corners', () {
+      expect(theme.snackBarTheme.behavior, SnackBarBehavior.floating);
+      final shape = theme.snackBarTheme.shape! as RoundedRectangleBorder;
+      expect(
+        shape.borderRadius,
+        const BorderRadius.all(Radius.circular(AppSpacing.radiusCard)),
+      );
+    });
+
     test('filled and outlined buttons are pills', () {
       expect(
         theme.filledButtonTheme.style!.shape!.resolve(<WidgetState>{}),
@@ -150,6 +176,19 @@ void main() {
     test('keeps padded tap targets', () {
       expect(theme.materialTapTargetSize, MaterialTapTargetSize.padded);
     });
+
+    test(
+      'systemUiOverlayStyleFor produces readable status and nav bars (light)',
+      () {
+        final SystemUiOverlayStyle overlay = AppTheme.systemUiOverlayStyleFor(
+          AppPalette.light,
+        );
+        expect(overlay.statusBarColor, Colors.transparent);
+        expect(overlay.statusBarIconBrightness, Brightness.dark);
+        expect(overlay.systemNavigationBarColor, AppColors.sandLight);
+        expect(overlay.systemNavigationBarIconBrightness, Brightness.dark);
+      },
+    );
   });
 
   group('NFR-09: tap targets 48dp or larger (rendered size)', () {

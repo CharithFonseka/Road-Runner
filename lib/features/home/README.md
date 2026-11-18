@@ -1,5 +1,14 @@
 # Home feature (UI kit Revision 5)
 
+The current phone dashboard shows a nearby three-hour forecast from the device's
+current location, weekly goal with a visible animated fill and streak, earned
+badge preview and the two newest runs. The bottom bar opens Routes, a deliberate
+Run start sheet, History and Profile. The header keeps visible Settings and
+light/dark buttons. Recent runs fit both entries without taking over Home.
+Motion is short and disabled when the device requests reduced motion. Home
+offers **Use location** when nearby weather is unavailable; it never labels
+a previous run's location as the runner's current position.
+
 Owner: Tharushi
 SRS reference: Section 8.4, FR-01 (trigger), FR-61, FR-71, NFR-09, NFR-14
 
@@ -9,7 +18,7 @@ SRS reference: Section 8.4, FR-01 (trigger), FR-61, FR-71, NFR-09, NFR-14
 HomeScreen(
   // Unchanged, required:
   onStartRun: ...,          // called once per completed Slide to Start
-  onOpenHistory: ...,       // View all, drawer History, and rows if onRunSelected is null
+  onOpenHistory: ...,       // View all, bottom navigation, and rows if onRunSelected is null
   onOpenPermissions: ...,   // kept; now the fallback for Settings (see below)
 
   // New, optional:
@@ -17,7 +26,7 @@ HomeScreen(
   recentRunsStatus: RecentRunsStatus.ready,   // loading | ready | error
   onRetry: ...,                               // "Try again" in the error state
   onRunSelected: (runId) => ...,              // open Summary for that run
-  onOpenSettings: ...,                        // header gear + drawer Settings
+  onOpenSettings: ...,                        // visible header gear
   isStartingRun: false,                       // parent's "starting" flag
   startRunEnabled: true,                      // false disables the slider
 
@@ -29,9 +38,9 @@ HomeScreen(
 | Change | Notes |
 |---|---|
 | `lastRun` | Deprecated. Still compiles and still shows (one row, tapping opens History). Use `recentRuns`. `LastRunSummary` is unchanged. |
-| `onOpenPermissions` | Still required. Home has no Permissions row any more; it is used for the Settings shortcut and the drawer Settings entry until `onOpenSettings` is supplied. |
+| `onOpenPermissions` | Still required. Home has no Permissions row any more; it is used for the Settings shortcut until `onOpenSettings` is supplied. |
 | `startRunButtonKey` | Same key, now on the Slide to Start control. |
-| New keys | `menuButtonKey`, `settingsButtonKey`, `recentRunsKey`; `RecentRunsCard.viewAllKey`, `retryKey`, `rowKey(i)`, state keys; `SlideToStart.handleKey`. |
+| New keys | `settingsButtonKey`, `recentRunsKey`; `RecentRunsCard.viewAllKey`, `retryKey`, `rowKey(i)`, state keys; `SlideToStart.handleKey`. |
 | `AppSpacing.heroButtonHeight` | 64 → 72 (Revision 5 slider height). Only Home used it. |
 
 Home never reads the repository or TrackingBridge. The shell loads runs and passes them in. Its loading skeleton uses a 1.4-second horizontal shimmer, disabled when reduced motion is enabled; static placeholders remain visible. Show `RecentRunsStatus.loading` only while a read is really in progress; never add a delay.
@@ -54,6 +63,7 @@ read or its result to show a skeleton.
   - Home becomes visible again after another route covered it (for example, back from Run or Permissions).
 - There is no confirmation screen. With permissions already granted, a run starts in two actions: open the app, then slide.
 
-## Drawer
+## Navigation
 
-Home's `Scaffold` uses `AppNavigationDrawer(selected: AppDestination.home)`. The header menu button opens it. Back closes it first. Choosing Home only closes it.
+Home has no navigation drawer. The bottom bar exposes the main destinations,
+and the header gear opens Settings.

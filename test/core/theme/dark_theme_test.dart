@@ -8,6 +8,7 @@
 // at the theme layer, and shared components rendering under both themes.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:road_runner/core/theme/app_colors.dart';
 import 'package:road_runner/core/theme/app_palette.dart';
@@ -117,6 +118,49 @@ void main() {
       expect(dialog.side.color, AppDarkColors.cardBorder);
     });
 
+    test('snack bars are floating and carry card radius with faint border', () {
+      expect(theme.snackBarTheme.behavior, SnackBarBehavior.floating);
+      final shape = theme.snackBarTheme.shape! as RoundedRectangleBorder;
+      expect(
+        shape.borderRadius,
+        const BorderRadius.all(Radius.circular(AppSpacing.radiusCard)),
+      );
+      expect(shape.side.color, AppDarkColors.cardBorder);
+    });
+
+    test(
+      'systemUiOverlayStyleFor produces readable status and nav bars (dark)',
+      () {
+        final SystemUiOverlayStyle overlay = AppTheme.systemUiOverlayStyleFor(
+          AppPalette.dark,
+        );
+        expect(overlay.statusBarColor, Colors.transparent);
+        expect(overlay.statusBarIconBrightness, Brightness.light);
+        expect(overlay.systemNavigationBarColor, AppDarkColors.background);
+        expect(overlay.systemNavigationBarIconBrightness, Brightness.light);
+        expect(overlay.systemNavigationBarDividerColor, AppDarkColors.hairline);
+      },
+    );
+
+    testWidgets('AppSystemUiOverlay wraps child with theme overlay', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark(),
+          home: const AppSystemUiOverlay(
+            child: Scaffold(body: Text('Running')),
+          ),
+        ),
+      );
+      final AnnotatedRegion<SystemUiOverlayStyle> region = tester
+          .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+            find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+          );
+      expect(region.value.statusBarIconBrightness, Brightness.light);
+      expect(region.value.systemNavigationBarColor, AppDarkColors.background);
+    });
+
     test('drawer and dialog scrims use the kit night scrim', () {
       expect(theme.drawerTheme.scrimColor, AppDarkColors.scrim);
       expect(theme.dialogTheme.barrierColor, AppDarkColors.scrim);
@@ -183,17 +227,18 @@ void main() {
   group('Light compatibility', () {
     final ThemeData light = AppTheme.light();
 
-    test('light theme keeps every pre-dark-mode value', () {
+    test('light theme keeps its palette and uses shared Gotham typography', () {
       expect(light.brightness, Brightness.light);
       expect(light.colorScheme, AppTheme.colorScheme);
       expect(light.scaffoldBackgroundColor, AppColors.sand);
       // ThemeData merges the supplied TextTheme onto its typography base, so
-      // compare against a plain ThemeData given the original text theme.
+      // compare against a plain ThemeData using the same font and text theme.
       expect(
         light.textTheme,
         ThemeData(
           useMaterial3: true,
           colorScheme: AppTheme.colorScheme,
+          fontFamily: AppTextStyles.fontFamily,
           textTheme: AppTextStyles.textTheme,
         ).textTheme,
       );

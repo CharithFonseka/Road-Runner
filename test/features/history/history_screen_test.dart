@@ -501,48 +501,24 @@ void main() {
       expect(calls.selected, isEmpty);
     });
 
-    testWidgets('drawer marks History selected and does not open it twice', (
-      tester,
-    ) async {
+    testWidgets('History has no navigation drawer', (tester) async {
       final _Calls calls = await _pump(tester, [_newest]);
-      await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<AppNavigationDrawer>(find.byType(AppNavigationDrawer))
-            .selected,
-        AppDestination.history,
-      );
-      await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.history)),
-      );
-      await tester.pumpAndSettle();
       expect(find.byType(AppNavigationDrawer), findsNothing);
+      expect(tester.widget<Scaffold>(find.byType(Scaffold)).drawer, isNull);
       expect(calls.back, 0);
       expect(calls.home, 0);
       expect(calls.settings, 0);
     });
 
-    testWidgets('drawer Home uses onOpenHome', (tester) async {
+    testWidgets('Back returns Home', (tester) async {
       final _Calls calls = await _pump(tester, [_newest]);
-      await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.home)),
-      );
-      await tester.pumpAndSettle();
-      expect(calls.home, 1);
-      expect(calls.back, 0);
+      await tester.tap(find.byKey(HistoryScreen.backButtonKey));
+      expect(calls.back, 1);
     });
 
-    testWidgets('drawer Settings uses onOpenSettings', (tester) async {
+    testWidgets('Settings gear uses onOpenSettings', (tester) async {
       final _Calls calls = await _pump(tester, [_newest]);
-      await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(AppNavigationDrawer.destinationKey(AppDestination.settings)),
-      );
-      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(HistoryScreen.settingsButtonKey));
       expect(calls.settings, 1);
       expect(calls.home, 0);
     });

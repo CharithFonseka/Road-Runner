@@ -2,7 +2,7 @@
 // Owner: Tharushi
 // SRS reference: Section 8.4, NFR-09
 //
-// Uses the platform default font (Roboto on Android) — no extra packages.
+// Uses the bundled Gotham family across light and dark themes.
 // Sizes are in sp, so they grow when the user increases system font size.
 
 import 'package:flutter/material.dart';
@@ -14,11 +14,14 @@ import 'app_palette.dart';
 class AppTextStyles {
   AppTextStyles._();
 
+  static const String fontFamily = 'Gotham';
+
   /// Smallest size allowed for main running statistics (NFR-09).
   static const double minStatFontSize = 32.0;
 
   /// Screen titles, e.g. "History".
   static const TextStyle heading = TextStyle(
+    fontFamily: fontFamily,
     fontSize: 28,
     fontWeight: FontWeight.w700,
     height: 1.25,
@@ -27,6 +30,7 @@ class AppTextStyles {
 
   /// Section and card titles, e.g. "Splits", "Last Run" (UI kit: 20 bold).
   static const TextStyle sectionHeading = TextStyle(
+    fontFamily: fontFamily,
     fontSize: 20,
     fontWeight: FontWeight.w700,
     height: 1.3,
@@ -35,6 +39,7 @@ class AppTextStyles {
 
   /// Normal paragraph and list text.
   static const TextStyle body = TextStyle(
+    fontFamily: fontFamily,
     fontSize: 16,
     fontWeight: FontWeight.w400,
     height: 1.5,
@@ -43,6 +48,7 @@ class AppTextStyles {
 
   /// Small helper text, e.g. stat labels and dates.
   static const TextStyle caption = TextStyle(
+    fontFamily: fontFamily,
     fontSize: 13,
     fontWeight: FontWeight.w500,
     height: 1.4,
@@ -51,6 +57,7 @@ class AppTextStyles {
 
   /// Button labels — larger and bold for outdoor reading (UI kit: 18 bold).
   static const TextStyle button = TextStyle(
+    fontFamily: fontFamily,
     fontSize: 18,
     fontWeight: FontWeight.w700,
     letterSpacing: 0.2,
@@ -61,6 +68,7 @@ class AppTextStyles {
   /// Tabular figures give every digit the same width, so the number does
   /// not shift left and right as it changes every second.
   static const TextStyle statLarge = TextStyle(
+    fontFamily: fontFamily,
     fontSize: 48,
     fontWeight: FontWeight.w700,
     height: 1.1,
@@ -70,6 +78,7 @@ class AppTextStyles {
 
   /// Other live numbers (distance, speed, pace). Exactly the NFR-09 minimum.
   static const TextStyle statMedium = TextStyle(
+    fontFamily: fontFamily,
     fontSize: minStatFontSize,
     fontWeight: FontWeight.w700,
     height: 1.1,
@@ -90,6 +99,7 @@ class AppTextStyles {
 
   /// Elapsed time on the Run screen — the biggest live number (UI kit: 62).
   static const TextStyle liveTimer = TextStyle(
+    fontFamily: fontFamily,
     fontSize: 62,
     fontWeight: FontWeight.w700,
     height: 1.0,
@@ -100,6 +110,7 @@ class AppTextStyles {
 
   /// Current pace on the Run screen. Exactly the NFR-09 minimum.
   static const TextStyle livePace = TextStyle(
+    fontFamily: fontFamily,
     fontSize: minStatFontSize,
     fontWeight: FontWeight.w700,
     height: 1.0,
@@ -110,6 +121,7 @@ class AppTextStyles {
   /// Saved-run numbers on cards (Home "Last Run", History list, Summary).
   /// Not a live running statistic, so NFR-09's 32sp rule does not apply.
   static const TextStyle statValue = TextStyle(
+    fontFamily: fontFamily,
     fontSize: 20,
     fontWeight: FontWeight.w700,
     height: 1.2,

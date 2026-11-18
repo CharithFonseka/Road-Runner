@@ -27,6 +27,7 @@ class AppStrings {
   static const String navHome = 'Home';
   static const String navHistory = 'History';
   static const String navSettings = 'Settings';
+  static const String navGoals = 'Goals & Badges';
   static const String navCloseMenu = 'Close menu';
   static const String navRunNote = 'Not available while a run is recording.';
 
@@ -54,6 +55,28 @@ class AppStrings {
   static const String homeOpenMenu = 'Open navigation menu';
   static const String homeSettings = 'Settings';
   static const String recentRunsTitle = 'Recent runs';
+  static const String planRoute = 'Plan a route';
+  static const String routeChooseStart = 'Tap the map to choose a start';
+  static const String routeChooseFinish = 'Tap the map to choose a finish';
+  static const String routePreviewPrompt = 'Preview your walking route';
+  static const String routeSavePrompt = 'Name and save your route';
+  static const String routeStartSelected = 'Start selected · Finish needed';
+  static const String routeBothSelected = 'Start and finish selected';
+  static const String routeServiceUnavailable =
+      'Walking route service is not configured.';
+  static const String routeName = 'Route name';
+  static const String routeClear = 'Clear';
+  static const String routeFind = 'Find walking route';
+  static const String routeSave = 'Save route';
+  static const String routeFindFailed =
+      'Could not find a walking route. Check your connection and try again.';
+  static const String routeSaveFailed =
+      'Could not save this route. Please try again.';
+  static const String routeStreetMapLoading = 'Loading street map…';
+  static const String summaryComplete = 'Run complete';
+  static const String weeklyGoalTitle = 'This week';
+  static String weeklyGoalProgress(double distanceKm, double goalKm) =>
+      '${distanceKm.toStringAsFixed(1)} of ${goalKm.toStringAsFixed(0)} km goal';
   static const String viewAll = 'View all';
   static const String statPace = 'Pace';
   static const String recentRunsLoading = 'Loading recent runs';

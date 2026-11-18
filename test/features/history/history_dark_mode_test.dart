@@ -285,6 +285,77 @@ void main() {
       expect(colourOf(AppStrings.historyTotalTime), night.textSecondary);
     });
 
+    testWidgets(
+      'monthly summary card average pace caption contrast in both themes',
+      (tester) async {
+        const HistoryMonthlySummary summaryWithPace = HistoryMonthlySummary(
+          monthLabel: 'Nov 2026',
+          totalRuns: 2,
+          totalDistanceM: 8500,
+          totalMovingMs: (53 * 60 + 20) * 1000,
+          averagePaceSecPerKm: 376, // 6:16/km
+        );
+        final String paceText = '${AppStrings.statAveragePace} 6:16/km';
+
+        // 1. Dark theme: caption must use textSecondary with >= 4.5:1 contrast
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.dark(),
+            home: Scaffold(
+              body: HistoryScreen(
+                runs: _runs,
+                onRunSelected: (_) {},
+                onBackToHome: () {},
+                referenceDate: _today,
+                initialFilter: HistoryRunFilter.thisMonth,
+                thisMonthSummary: summaryWithPace,
+              ),
+            ),
+          ),
+        );
+
+        final Finder darkCard = find.byKey(HistoryScreen.summaryCardKey);
+        final Text darkPaceText = tester.widget<Text>(
+          find.descendant(of: darkCard, matching: find.text(paceText)),
+        );
+        expect(darkPaceText.style!.color, night.textSecondary);
+        expect(
+          _contrast(darkPaceText.style!.color!, night.surface),
+          greaterThanOrEqualTo(4.5),
+        );
+
+        // 2. Light theme: caption must use textSecondary with >= 4.5:1 contrast
+        final AppPalette day = AppPalette.light;
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const Key('light-app'),
+            theme: AppTheme.light(),
+            home: Scaffold(
+              body: HistoryScreen(
+                runs: _runs,
+                onRunSelected: (_) {},
+                onBackToHome: () {},
+                referenceDate: _today,
+                initialFilter: HistoryRunFilter.thisMonth,
+                thisMonthSummary: summaryWithPace,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final Finder lightCard = find.byKey(HistoryScreen.summaryCardKey);
+        final Text lightPaceText = tester.widget<Text>(
+          find.descendant(of: lightCard, matching: find.text(paceText)),
+        );
+        expect(lightPaceText.style!.color, day.textSecondary);
+        expect(
+          _contrast(lightPaceText.style!.color!, day.surface),
+          greaterThanOrEqualTo(4.5),
+        );
+      },
+    );
+
     testWidgets('loading skeletons use the night skeleton fill', (
       tester,
     ) async {
@@ -421,7 +492,7 @@ void main() {
         expect(_visibleRunIds(tester), ['oct-31']);
       });
 
-      testWidgets('run tap, back and drawer callbacks (${b.name})', (
+      testWidgets('run tap, back and Settings callbacks (${b.name})', (
         tester,
       ) async {
         final _Calls calls = await _pump(
@@ -433,35 +504,18 @@ void main() {
         await tester.tap(find.byKey(HistoryScreen.backButtonKey));
         expect(calls.back, 1);
 
-        await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
-        await tester.pumpAndSettle();
-        expect(find.byType(AppNavigationDrawer), findsOneWidget);
-        await tester.tap(
-          find.byKey(
-            AppNavigationDrawer.destinationKey(AppDestination.settings),
-          ),
-        );
-        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(HistoryScreen.settingsButtonKey));
         expect(calls.settings, 1);
-
-        await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find.byKey(AppNavigationDrawer.destinationKey(AppDestination.home)),
-        );
-        await tester.pumpAndSettle();
-        expect(calls.home, 1);
+        expect(find.byType(AppNavigationDrawer), findsNothing);
       });
     }
 
-    testWidgets('dark drawer uses the night surface and scrim', (tester) async {
+    testWidgets('dark History keeps the sky header without a drawer', (
+      tester,
+    ) async {
       await _pump(tester, theme: AppTheme.dark());
-      await tester.tap(find.byKey(HistoryScreen.menuButtonKey));
-      await tester.pumpAndSettle();
-      final Drawer drawer = tester.widget<Drawer>(find.byType(Drawer));
-      expect(drawer.backgroundColor, night.surface);
-      final BuildContext ctx = tester.element(find.byType(HistoryScreen));
-      expect(Theme.of(ctx).drawerTheme.scrimColor, night.scrim);
+      expect(find.byType(AppNavigationDrawer), findsNothing);
+      expect(find.byKey(HistoryScreen.settingsButtonKey), findsOneWidget);
     });
   });
 
